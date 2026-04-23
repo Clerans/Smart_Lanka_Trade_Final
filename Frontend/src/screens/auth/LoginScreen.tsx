@@ -1,16 +1,40 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, KeyboardAvoidingView, Platform, Dimensions } from 'react-native';
+import * as React from 'react';
+const { useState } = React;
+import { View, Text, StyleSheet, TouchableOpacity, KeyboardAvoidingView, Platform, Dimensions, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
 import { colors, typography, layout } from '../../theme';
 import { InputField, PrimaryButton } from '../../components';
+import { authService } from '../../services/apiService';
 
 const { height } = Dimensions.get('window');
 const isSmallDevice = height < 700;
 
 export const LoginScreen = () => {
   const navigation = useNavigation<any>();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const handleLogin = async () => {
+    if (!email || !password) {
+      Alert.alert('Error', 'Please enter both email and password');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const response = await authService.login(email, password);
+      if (response.token) {
+        navigation.replace('MainApp');
+      }
+    } catch (error: any) {
+      Alert.alert('Login Failed', error.error || 'Invalid credentials or connection error');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -42,6 +66,8 @@ export const LoginScreen = () => {
               placeholder="yourname@example.com"
               keyboardType="email-address"
               autoCapitalize="none"
+              value={email}
+              onChangeText={setEmail}
               iconLeft={<MaterialIcons name="mail-outline" size={20} color={colors.accent} />}
             />
 
@@ -55,6 +81,8 @@ export const LoginScreen = () => {
             <InputField
               placeholder="••••••••••••"
               secureTextEntry
+              value={password}
+              onChangeText={setPassword}
               iconLeft={<MaterialIcons name="lock-outline" size={20} color={colors.accent} />}
               iconRight={<MaterialIcons name="visibility-off" size={20} color={colors.textSecondary} />}
             />
@@ -66,11 +94,15 @@ export const LoginScreen = () => {
             </TouchableOpacity>
 
             {/* Primary CTA */}
-            <PrimaryButton
-              title="Login to Dashboard"
-              onPress={() => navigation.navigate('MainApp')}
-              style={styles.loginBtn}
-            />
+            {loading ? (
+              <ActivityIndicator color={colors.accent} size="large" style={{ marginVertical: 20 }} />
+            ) : (
+              <PrimaryButton
+                title="Login to Dashboard"
+                onPress={handleLogin}
+                style={styles.loginBtn}
+              />
+            )}
           </View>
 
           <View style={styles.smallSpacer} />

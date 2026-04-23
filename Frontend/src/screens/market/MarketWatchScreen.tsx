@@ -1,22 +1,68 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput } from 'react-native';
+import * as React from 'react';
+const { useState, useEffect } = React;
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
 import { colors, typography, layout } from '../../theme';
+import { marketService } from '../../services/apiService';
 
 const filters = ['All Assets', 'Crypto', 'Stocks', 'Indices'];
 
-const mockAssets = [
-  { id: 1, name: 'Bitcoin', ticker: 'BTC', price: '18,450,200', change: '+2.41%', isPositive: true, color: '#F7931A', icon: 'bitcoin' },
-  { id: 2, name: 'Ethereum', ticker: 'ETH', price: '824,150', change: '+1.80%', isPositive: true, color: '#627EEA', icon: 'ethereum' },
-  { id: 3, name: 'Hayleys PLC', ticker: 'HAYL', price: '84.50', change: '+0.45%', isPositive: true, color: '#888', icon: 'chart-line' },
-  { id: 4, name: 'LOLC Holdings', ticker: 'LOLC', price: '425.00', change: '-1.45%', isPositive: false, color: '#888', icon: 'chart-line' },
-  { id: 5, name: 'Dialog Axiata', ticker: 'DIAL', price: '10.50', change: '-2.15%', isPositive: false, color: '#888', icon: 'chart-line' },
-  { id: 6, name: 'Sampath Bank', ticker: 'SAMP', price: '68.20', change: '+3.82%', isPositive: true, color: '#888', icon: 'chart-line' },
-];
+const assetMeta: any = {
+  'BTCUSDT': { name: 'Bitcoin', icon: 'bitcoin', color: '#F7931A' },
+  'ETHUSDT': { name: 'Ethereum', icon: 'ethereum', color: '#627EEA' },
+  'BNBUSDT': { name: 'Binance Coin', icon: 'coins', color: '#F3BA2F' },
+  'SOLUSDT': { name: 'Solana', icon: 'sun', color: '#14F195' },
+  'ADAUSDT': { name: 'Cardano', icon: 'layer-group', color: '#0033AD' },
+  'XRPUSDT': { name: 'XRP', icon: 'bolt', color: '#23292F' },
+  'DOGEUSDT': { name: 'Dogecoin', icon: 'dog', color: '#C2A633' },
+  'DOTUSDT': { name: 'Polkadot', icon: 'circle', color: '#E6007A' },
+  'TRXUSDT': { name: 'TRON', icon: 'play-circle', color: '#FF0013' },
+  'MATICUSDT': { name: 'Polygon', icon: 'vector-square', color: '#8247E5' },
+};
+
+import { useNavigation } from '@react-navigation/native';
 
 export const MarketWatchScreen = () => {
+  const navigation = useNavigation<any>();
   const [activeFilter, setActiveFilter] = useState('All Assets');
+  const [assets, setAssets] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const filteredAssets = assets.filter(asset =>
+    asset.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    asset.ticker.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  useEffect(() => {
+    const fetchMarketData = async () => {
+      try {
+        const response = await marketService.getAllPricesLKR();
+        if (response.success) {
+          const formatted = response.data.prices.map((p: any, index: number) => ({
+            id: index,
+            name: assetMeta[p.symbol]?.name || p.symbol.replace('USDT', ''),
+            ticker: p.symbol.replace('USDT', ''),
+            price: p.priceLKR.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+            change: `${p.changePercent >= 0 ? '+' : ''}${p.changePercent.toFixed(2)}%`,
+            isPositive: p.changePercent >= 0,
+            color: assetMeta[p.symbol]?.color || '#888',
+            icon: assetMeta[p.symbol]?.icon || 'chart-line',
+          }));
+          setAssets(formatted);
+        }
+      } catch (error) {
+        console.error('Failed to fetch market data:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchMarketData();
+    const interval = setInterval(fetchMarketData, 30000);
+    return () => clearInterval(interval);
+  }, []);
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -36,6 +82,8 @@ export const MarketWatchScreen = () => {
           style={styles.searchInput}
           placeholder="Search BTC, LOLC, etc."
           placeholderTextColor={colors.textSecondary}
+          value={searchQuery}
+          onChangeText={setSearchQuery}
         />
       </View>
 
@@ -60,37 +108,49 @@ export const MarketWatchScreen = () => {
       </View>
 
       {/* Asset List */}
-      <ScrollView contentContainerStyle={styles.listContainer}>
-        {mockAssets.map((asset) => (
-          <View key={asset.id}>
-            <TouchableOpacity style={styles.assetRow}>
+      {loading ? (
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+          <ActivityIndicator size="large" color={colors.accent} />
+        </View>
+      ) : (
+        <ScrollView contentContainerStyle={styles.listContainer}>
+          {filteredAssets.map((asset) => (
+            <View key={asset.id}>
+                <TouchableOpacity 
+                  style={styles.assetRow}
+                  onPress={() => navigation.navigate('Market', { 
+                    screen: 'TradingTerminal', 
+                    params: { symbol: assets.find(a => a.id === asset.id)?.ticker + 'USDT' } 
+                  })}
+                >
 
-              <View style={styles.assetRowLeft}>
-                <View style={[styles.assetIcon, { backgroundColor: asset.color + '22' }]}>
-                  <FontAwesome5 name={asset.icon} size={20} color={asset.color} />
+                <View style={styles.assetRowLeft}>
+                  <View style={[styles.assetIcon, { backgroundColor: asset.color + '22' }]}>
+                    <FontAwesome5 name={asset.icon} size={20} color={asset.color} />
+                  </View>
+                  <View>
+                    <Text style={styles.assetName}>{asset.name}</Text>
+                    <Text style={styles.assetTicker}>{asset.ticker}</Text>
+                  </View>
                 </View>
-                <View>
-                  <Text style={styles.assetName}>{asset.name}</Text>
-                  <Text style={styles.assetTicker}>{asset.ticker}</Text>
-                </View>
-              </View>
 
-              <View style={styles.assetRowRight}>
-                <Text style={styles.assetPrice}>Rs {asset.price}</Text>
-                <View style={[styles.changePill, asset.isPositive ? styles.changePositiveBg : styles.changeNegativeBg]}>
-                  <Text style={[styles.assetChange, asset.isPositive ? styles.changePositiveTxt : styles.changeNegativeTxt]}>
-                    {asset.change}
-                  </Text>
+                <View style={styles.assetRowRight}>
+                  <Text style={styles.assetPrice}>Rs {asset.price}</Text>
+                  <View style={[styles.changePill, asset.isPositive ? styles.changePositiveBg : styles.changeNegativeBg]}>
+                    <Text style={[styles.assetChange, asset.isPositive ? styles.changePositiveTxt : styles.changeNegativeTxt]}>
+                      {asset.change}
+                    </Text>
+                  </View>
                 </View>
-              </View>
 
-            </TouchableOpacity>
-            <View style={styles.divider} />
-          </View>
-        ))}
-        {/* Fill bottom space corresponding to tab bar */}
-        <View style={{ height: 80 }} />
-      </ScrollView>
+              </TouchableOpacity>
+              <View style={styles.divider} />
+            </View>
+          ))}
+          {/* Fill bottom space corresponding to tab bar */}
+          <View style={{ height: 80 }} />
+        </ScrollView>
+      )}
 
     </SafeAreaView>
   );

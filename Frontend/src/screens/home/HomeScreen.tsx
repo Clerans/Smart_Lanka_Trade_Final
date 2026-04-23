@@ -1,14 +1,80 @@
-import React from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import * as React from 'react';
+const { useEffect, useState } = React;
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { MaterialIcons } from '@expo/vector-icons';
 import Svg, { Path } from 'react-native-svg';
 import { colors, typography, layout } from '../../theme';
 import { Card } from '../../components';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { marketService, walletService } from '../../services/apiService';
+
+// Helper to generate SVG path for sparklines
+const generateSparklinePath = (data: number[], width: number, height: number) => {
+  if (!data || data.length < 2) return "";
+  const min = Math.min(...data);
+  const max = Math.max(...data);
+  const range = max - min || 1;
+  const stepX = width / (data.length - 1);
+  
+  return data.map((val, i) => {
+    const x = i * stepX;
+    const y = height - ((val - min) / range) * height;
+    return `${i === 0 ? 'M' : 'L'} ${x} ${y}`;
+  }).join(' ');
+};
 
 export const HomeScreen = () => {
   const navigation = useNavigation<any>();
+  const [watchlist, setWatchlist] = useState<any[]>([]);
+  const [lkrPriceData, setLkrPriceData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [balance, setBalance] = useState<number | null>(null);
+  const [user, setUser] = useState<{ name: string } | null>(null);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        // Load user info
+        const userData = await AsyncStorage.getItem('userData');
+        if (userData) {
+          setUser(JSON.parse(userData));
+        }
+
+        // Fetch watchlist prices with sparkline data
+        const marketResponse = await marketService.getMultiplePricesLKR(['BTCUSDT', 'ETHUSDT'], true);
+        
+        // Fetch real wallet balance
+        const walletResponse = await walletService.getBalance();
+        
+        if (marketResponse.success) {
+          const formatted = marketResponse.data.prices.map((p: any) => ({
+            pair: `${p.symbol.replace('USDT', '')}/LKR`,
+            change: `${p.changePercent >= 0 ? '+' : ''}${p.changePercent.toFixed(2)}%`,
+            price: p.priceLKR.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 }),
+            color: p.changePercent >= 0 ? colors.accent : colors.red,
+            path: generateSparklinePath(p.sparkline, 100, 40)
+          }));
+          setWatchlist(formatted);
+          setLkrPriceData(marketResponse.data);
+        }
+
+        if (walletResponse.success) {
+          setBalance(walletResponse.data.balance);
+        }
+
+      } catch (error) {
+        console.error('Failed to fetch home data:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+    const interval = setInterval(fetchData, 30000);
+    return () => clearInterval(interval);
+  }, []);
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -22,7 +88,7 @@ export const HomeScreen = () => {
             </View>
             <View style={styles.headerTextContainer}>
               <Text style={styles.greetingText}>Ayubowan,</Text>
-              <Text style={styles.userName}>Alex</Text>
+              <Text style={styles.userName}>{user?.name || 'Friend'}</Text>
             </View>
           </View>
           <View style={styles.headerIcons}>
@@ -38,7 +104,9 @@ export const HomeScreen = () => {
         {/* Balance Card */}
         <Card style={styles.balanceCard}>
           <Text style={styles.balanceLabel}>Est. Total Value</Text>
-          <Text style={styles.balanceValue}>LKR 245,320.50</Text>
+          <Text style={styles.balanceValue}>
+            LKR {balance ? (balance + 195000).toLocaleString(undefined, { minimumFractionDigits: 2 }) : '245,320.50'}
+          </Text>
           <View style={styles.pnlPill}>
             <MaterialIcons name="trending-up" size={14} color={colors.accent} />
             <Text style={styles.pnlText}>+1.24% Today's PNL</Text>
@@ -51,17 +119,34 @@ export const HomeScreen = () => {
           />
         </Card>
 
+        {lkrPriceData && (
+          <View style={{ marginHorizontal: 24, marginBottom: 16 }}>
+            <Text style={{ color: colors.textSecondary, fontSize: 12, textAlign: 'right' }}>
+              Live Rate: 1 USDT = <Text style={{ color: colors.accent, fontWeight: '700' }}>Rs {lkrPriceData.usdToLkr.toFixed(2)}</Text>
+            </Text>
+          </View>
+        )}
+
         {/* Quick Actions */}
         <View style={styles.quickActionsRow}>
-          <TouchableOpacity style={[styles.actionCard, styles.actionCardActive]}>
+          <TouchableOpacity 
+            style={[styles.actionCard, styles.actionCardActive]}
+            onPress={() => navigation.navigate('Wallet', { screen: 'CurrencyConversion' })}
+          >
             <MaterialIcons name="shopping-cart" size={24} color="#000" />
             <Text style={styles.actionCardActiveText}>Buy</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.actionCard}>
+          <TouchableOpacity 
+            style={styles.actionCard}
+            onPress={() => navigation.navigate('Wallet', { screen: 'WalletOverview' })}
+          >
             <MaterialIcons name="pie-chart-outline" size={24} color={colors.accent} />
             <Text style={styles.actionCardText}>Portfolio</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.actionCard}>
+          <TouchableOpacity 
+            style={styles.actionCard}
+            onPress={() => { /* Navigation for History */ }}
+          >
             <MaterialIcons name="history" size={24} color={colors.accent} />
             <Text style={styles.actionCardText}>History</Text>
           </TouchableOpacity>
@@ -76,7 +161,11 @@ export const HomeScreen = () => {
             </View>
             <View style={styles.rateInfoRow}>
               <Text style={styles.ratePairTitle}>USDT/LKR</Text>
-              <Text style={styles.rateValue}>Rs 312.25</Text>
+              {loading ? (
+                <ActivityIndicator size="small" color={colors.accent} />
+              ) : (
+                <Text style={styles.rateValue}>Rs {lkrPriceData?.usdToLkr?.toFixed(2) || '---'}</Text>
+              )}
             </View>
           </View>
           <TouchableOpacity style={styles.alertBtn}>
@@ -88,25 +177,26 @@ export const HomeScreen = () => {
         {/* Watchlist */}
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Watchlist</Text>
-          <TouchableOpacity>
+          <TouchableOpacity onPress={() => navigation.navigate('Market')}>
             <Text style={styles.seeAllText}>See All {'>'}</Text>
           </TouchableOpacity>
         </View>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.watchlistScroll}>
-          {[
-            { pair: 'BTC/LKR', change: '+2.4%', price: '18,450,200', color: colors.accent, data: "M0 30 Q 10 20, 20 25 T 40 10 T 60 40 T 80 5 T 100 20" },
-            { pair: 'ETH/LKR', change: '+1.8%', price: '824,150', color: colors.accent, data: "M0 40 Q 15 35, 30 20 T 60 50 T 80 10 T 100 30" }
-          ].map((item, index) => (
-            <Card key={index} style={styles.watchlistCard}>
-              <Text style={styles.watchPair}>{item.pair} <Text style={{ color: item.color }}>{item.change}</Text></Text>
-              <Text style={styles.watchPrice}>{item.price}</Text>
-              <View style={styles.sparklineContainer}>
-                <Svg height="50" width="100" viewBox="0 0 100 50">
-                  <Path d={item.data} fill="none" stroke={item.color} strokeWidth="2" />
-                </Svg>
-              </View>
-            </Card>
-          ))}
+          {loading ? (
+            <ActivityIndicator size="small" color={colors.accent} style={{ marginLeft: 24 }} />
+          ) : (
+            watchlist.map((item: any, index: number) => (
+              <Card key={index} style={styles.watchlistCard}>
+                <Text style={styles.watchPair}>{item.pair} <Text style={{ color: item.color }}>{item.change}</Text></Text>
+                <Text style={styles.watchPrice}>{item.price}</Text>
+                <View style={styles.sparklineContainer}>
+                  <Svg height="50" width="100" viewBox="0 0 100 50">
+                    <Path d={item.path} fill="none" stroke={item.color} strokeWidth="2" />
+                  </Svg>
+                </View>
+              </Card>
+            ))
+          )}
           <View style={{ width: 24 }} />
         </ScrollView>
 
@@ -133,7 +223,7 @@ export const HomeScreen = () => {
           <View style={styles.candlestickPlaceholder}>
             {/* Fake Candlesticks using Views for demonstration */}
             {[50, 60, 40, 70, 80, 50, 90, 110, 100, 130].map((h, i) => (
-              <View key={i} style={styles.candleContainer}>
+              <View key={`candle-${i}`} style={styles.candleContainer}>
                 <View style={[styles.candleWick, { height: h + 20 }]} />
                 <View style={[styles.candleBody, { height: h, backgroundColor: i % 3 === 0 ? colors.textMuted : colors.textPrimary }]} />
               </View>

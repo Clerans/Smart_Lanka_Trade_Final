@@ -1,14 +1,20 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, KeyboardAvoidingView, Platform, Dimensions } from 'react-native';
+import * as React from 'react';
+const { useState } = React;
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, KeyboardAvoidingView, Platform, Dimensions, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { colors, typography, layout } from '../../theme';
 import { InputField, PrimaryButton } from '../../components';
+import { authService } from '../../services/apiService';
 
 export const RegisterScreen = () => {
   const navigation = useNavigation<any>();
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [loading, setLoading] = useState(false);
 
   const { height } = Dimensions.get('window');
   const isSmallDevice = height < 700;
@@ -22,6 +28,29 @@ export const RegisterScreen = () => {
   };
 
   const strength = getStrengthLevel();
+
+  const handleRegister = async () => {
+    if (!name || !email || !password) {
+      Alert.alert('Error', 'Please fill all fields');
+      return;
+    }
+    if (password !== confirmPassword) {
+      Alert.alert('Error', 'Passwords do not match');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const response = await authService.register(name, email, password);
+      Alert.alert('Success', 'Registration successful! Please check your email for verification.', [
+        { text: 'OK', onPress: () => navigation.navigate('Login') }
+      ]);
+    } catch (error: any) {
+      Alert.alert('Registration Failed', error.error || 'Connection error');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -52,6 +81,8 @@ export const RegisterScreen = () => {
             <Text style={styles.sectionLabel}>FULL NAME</Text>
             <InputField
               placeholder="John Doe"
+              value={name}
+              onChangeText={setName}
               iconLeft={<MaterialIcons name="person-outline" size={20} color={colors.textSecondary} />}
             />
 
@@ -60,14 +91,9 @@ export const RegisterScreen = () => {
               placeholder="john@example.com"
               keyboardType="email-address"
               autoCapitalize="none"
+              value={email}
+              onChangeText={setEmail}
               iconLeft={<MaterialIcons name="mail-outline" size={20} color={colors.textSecondary} />}
-            />
-
-            <Text style={styles.sectionLabel}>PHONE NUMBER</Text>
-            <InputField
-              placeholder="+94 7X XXX XXXX"
-              keyboardType="phone-pad"
-              iconLeft={<MaterialIcons name="phone" size={20} color={colors.textSecondary} />}
             />
 
             <Text style={styles.sectionLabel}>PASSWORD</Text>
@@ -98,6 +124,8 @@ export const RegisterScreen = () => {
             <InputField
               placeholder="••••••••"
               secureTextEntry
+              value={confirmPassword}
+              onChangeText={setConfirmPassword}
               iconLeft={<MaterialIcons name="loop" size={20} color={colors.textSecondary} />}
             />
 
@@ -108,11 +136,15 @@ export const RegisterScreen = () => {
               </Text>
             </View>
 
-            <PrimaryButton
-              title="CREATE ACCOUNT >"
-              onPress={() => navigation.navigate('OTPVerification')}
-              style={styles.createBtn}
-            />
+            {loading ? (
+              <ActivityIndicator color={colors.accent} size="large" style={{ marginVertical: 20 }} />
+            ) : (
+              <PrimaryButton
+                title="CREATE ACCOUNT >"
+                onPress={handleRegister}
+                style={styles.createBtn}
+              />
+            )}
           </View>
 
           {/* Footer */}

@@ -1,15 +1,74 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
+import * as React from 'react';
+const { useState, useEffect } = React;
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, KeyboardAvoidingView, Platform, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { colors, typography, layout } from '../../theme';
 import { PrimaryButton, Card } from '../../components';
+import { marketService } from '../../services/apiService';
+
+const tradeableSymbols = ['BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'SOLUSDT', 'ADAUSDT', 'XRPUSDT', 'DOGEUSDT'];
+
 
 export const TradingTerminalScreen = () => {
   const navigation = useNavigation<any>();
+  const route = useRoute<any>();
   const [isDemoMode, setIsDemoMode] = useState(false);
   const [tradeType, setTradeType] = useState<'BUY' | 'SELL'>('BUY');
+  const [selectedSymbol, setSelectedSymbol] = useState(route.params?.symbol || 'BTCUSDT');
+  const [lkrPriceData, setLkrPriceData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [quantity, setQuantity] = useState('0.0025');
+  const [limitPrice, setLimitPrice] = useState('0');
+  const [showPicker, setShowPicker] = useState(false);
+  const [allCoins, setAllCoins] = useState<any[]>([]);
+  const [pickerSearchQuery, setPickerSearchQuery] = useState('');
+
+  useEffect(() => {
+    const fetchInitialData = async () => {
+      try {
+        const response = await marketService.getAllPricesLKR();
+        if (response.success) {
+          setAllCoins(response.data.prices);
+        }
+      } catch (error) {
+        console.error('Failed to fetch all coins:', error);
+      }
+    };
+    fetchInitialData();
+  }, []);
+
+  useEffect(() => {
+    const fetchPrice = async () => {
+      try {
+        const response = await marketService.getPriceLKR(selectedSymbol);
+        if (response.success) {
+          setLkrPriceData(response.data);
+          const price = response.data.priceLKR;
+          // Use more precision for cheap coins so they don't show as "0"
+          const formattedPrice = price < 10 
+            ? price.toFixed(4) 
+            : Math.round(price).toString();
+          setLimitPrice(formattedPrice);
+        }
+      } catch (error) {
+        console.error('Failed to fetch price:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchPrice();
+    const interval = setInterval(fetchPrice, 30000);
+    return () => clearInterval(interval);
+  }, [selectedSymbol]);
+
+  const filteredPickerCoins = allCoins.filter(coin => 
+    coin.symbol.toLowerCase().includes(pickerSearchQuery.toLowerCase())
+  ).slice(0, 50); // Limit to 50 for performance
+
+  const total = parseFloat(quantity) * parseFloat(limitPrice);
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -55,10 +114,62 @@ export const TradingTerminalScreen = () => {
           </View>
 
           {/* Asset Selector */}
-          <Card style={styles.assetSelector}>
-            <Text style={styles.assetSelectorText}>BTC / LKR</Text>
-            <MaterialIcons name="keyboard-arrow-down" size={24} color={colors.textPrimary} />
-          </Card>
+          <TouchableOpacity onPress={() => setShowPicker(!showPicker)}>
+            <Card style={styles.assetSelector}>
+              <Text style={styles.assetSelectorText}>{selectedSymbol.replace('USDT', '')} / LKR</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                {loading && <ActivityIndicator size="small" color={colors.accent} style={{ marginRight: 8 }} />}
+                <MaterialIcons name={showPicker ? "keyboard-arrow-up" : "keyboard-arrow-down"} size={24} color={colors.textPrimary} />
+              </View>
+            </Card>
+          </TouchableOpacity>
+
+          {/* Coin Picker Dropdown */}
+          {showPicker && (
+            <View style={styles.pickerDropdown}>
+              <View style={styles.pickerSearchContainer}>
+                <MaterialIcons name="search" size={20} color={colors.textSecondary} />
+                <TextInput
+                  style={styles.pickerSearchInput}
+                  placeholder="Search coins (e.g. BTC, ETH, PEPE)..."
+                  placeholderTextColor={colors.textSecondary}
+                  value={pickerSearchQuery}
+                  onChangeText={setPickerSearchQuery}
+                  autoFocus
+                />
+              </View>
+              <ScrollView style={{ maxHeight: 300 }}>
+                {filteredPickerCoins.length > 0 ? (
+                  filteredPickerCoins.map((coin) => (
+                    <TouchableOpacity 
+                      key={coin.symbol} 
+                      style={styles.pickerItem} 
+                      onPress={() => {
+                        setSelectedSymbol(coin.symbol);
+                        setShowPicker(false);
+                        setLoading(true);
+                        setPickerSearchQuery('');
+                      }}
+                    >
+                      <Text style={[styles.pickerItemText, selectedSymbol === coin.symbol && { color: colors.accent }]}>
+                        {coin.symbol.replace('USDT', '')} / LKR
+                      </Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                        <Text style={styles.pickerItemPrice}>
+                          Rs {coin.priceLKR < 1 ? coin.priceLKR.toFixed(4) : coin.priceLKR.toLocaleString()}
+                        </Text>
+                        {selectedSymbol === coin.symbol && <MaterialIcons name="check" size={20} color={colors.accent} style={{ marginLeft: 8 }} />}
+                      </View>
+                    </TouchableOpacity>
+                  ))
+                ) : (
+                  <View style={{ padding: 20, alignItems: 'center' }}>
+                    <Text style={{ color: colors.textSecondary }}>No coins found</Text>
+                  </View>
+                )}
+              </ScrollView>
+            </View>
+          )}
 
           {/* Trade Form */}
           <View style={styles.tradeTabs}>
@@ -79,10 +190,11 @@ export const TradingTerminalScreen = () => {
           <View style={styles.orderForm}>
             <View style={styles.inputRow}>
               <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>QUANTITY (BTC)</Text>
+                <Text style={styles.inputLabel}>QUANTITY ({selectedSymbol.replace('USDT', '')})</Text>
                 <TextInput
                   style={styles.input}
-                  defaultValue="0.0025"
+                  value={quantity}
+                  onChangeText={setQuantity}
                   keyboardType="numeric"
                   placeholderTextColor={colors.textSecondary}
                 />
@@ -90,19 +202,30 @@ export const TradingTerminalScreen = () => {
               <View style={{ width: 16 }} />
               <View style={styles.inputGroup}>
                 <Text style={styles.inputLabel}>LIMIT PRICE (LKR)</Text>
-                <TextInput
-                  style={styles.input}
-                  defaultValue="18450000"
-                  keyboardType="numeric"
-                  placeholderTextColor={colors.textSecondary}
-                />
+                <View style={styles.inputWrapper}>
+                  <TextInput
+                    style={[styles.input, { flex: 1 }]}
+                    value={limitPrice}
+                    onChangeText={setLimitPrice}
+                    keyboardType="numeric"
+                    placeholderTextColor={colors.textSecondary}
+                  />
+                  <TouchableOpacity 
+                    style={styles.syncBtn} 
+                    onPress={() => {
+                      if (lkrPriceData) setLimitPrice(Math.round(lkrPriceData.priceLKR).toString());
+                    }}
+                  >
+                    <MaterialIcons name="sync" size={20} color={colors.accent} />
+                  </TouchableOpacity>
+                </View>
               </View>
             </View>
 
             <Card style={styles.totalCard}>
               <View>
                 <Text style={styles.totalLabel}>Estimated Total</Text>
-                <Text style={styles.totalValue}>46,125.00 LKR</Text>
+                <Text style={styles.totalValue}>{isNaN(total) ? '0.00' : total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} LKR</Text>
               </View>
               <TouchableOpacity style={styles.calcIcon}>
                 <MaterialIcons name="calculate" size={24} color={colors.textSecondary} />
@@ -389,4 +512,56 @@ const styles = StyleSheet.create({
   },
   statusTextCompleted: { color: colors.accent },
   statusTextPending: { color: colors.yellow },
+  pickerDropdown: {
+    marginHorizontal: 24,
+    backgroundColor: colors.bgCard,
+    borderRadius: 16,
+    padding: 8,
+    marginBottom: 24,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  pickerItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  pickerItemText: {
+    ...typography.body,
+    fontWeight: '600',
+    color: colors.textPrimary,
+  },
+  pickerItemPrice: {
+    ...typography.label,
+    color: colors.textSecondary,
+    fontSize: 10,
+  },
+  pickerSearchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.bgInput,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    margin: 8,
+    height: 40,
+  },
+  pickerSearchInput: {
+    ...typography.bodySmall,
+    flex: 1,
+    marginLeft: 8,
+    color: colors.textPrimary,
+  },
+  inputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.bgInput,
+    borderRadius: layout.borderRadiusSmall,
+    paddingRight: 8,
+  },
+  syncBtn: {
+    padding: 8,
+  },
 });
