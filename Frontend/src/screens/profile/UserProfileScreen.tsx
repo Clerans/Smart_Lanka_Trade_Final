@@ -1,9 +1,13 @@
-import React from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch } from 'react-native';
+import * as React from 'react';
+const { useEffect, useState } = React;
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { colors, typography, layout } from '../../theme';
 import { Card } from '../../components';
+import { authService } from '../../services/apiService';
 
 const menuItems = [
   { id: '1', title: 'Security & Privacy', icon: 'security' },
@@ -15,6 +19,35 @@ const menuItems = [
 ];
 
 export const UserProfileScreen = () => {
+  const navigation = useNavigation<any>();
+  const [user, setUser] = useState<{ name: string; email: string } | null>(null);
+
+  useEffect(() => {
+    const loadUser = async () => {
+      const userData = await AsyncStorage.getItem('userData');
+      if (userData) {
+        setUser(JSON.parse(userData));
+      }
+    };
+    loadUser();
+  }, []);
+
+  const handleLogout = () => {
+    Alert.alert('Logout', 'Are you sure you want to log out?', [
+      { text: 'Cancel', style: 'cancel' },
+      { 
+        text: 'Logout', 
+        style: 'destructive',
+        onPress: async () => {
+          await authService.logout();
+          navigation.reset({
+            index: 0,
+            routes: [{ name: 'Auth' }],
+          });
+        }
+      }
+    ]);
+  };
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView contentContainerStyle={styles.container}>
@@ -34,8 +67,8 @@ export const UserProfileScreen = () => {
               <MaterialIcons name="person" size={40} color={colors.accent} />
             </View>
             <View style={styles.userDetails}>
-              <Text style={styles.userName}>Alex Fernando</Text>
-              <Text style={styles.userEmail}>alex.f@email.com</Text>
+              <Text style={styles.userName}>{user?.name || 'Loading...'}</Text>
+              <Text style={styles.userEmail}>{user?.email || '---'}</Text>
               <View style={styles.tierBadge}>
                 <MaterialIcons name="verified" size={14} color={colors.accent} />
                 <Text style={styles.tierText}>Tier 2 Verified</Text>
@@ -94,7 +127,7 @@ export const UserProfileScreen = () => {
         </View>
 
         {/* Log Out Button */}
-        <TouchableOpacity style={styles.logoutBtn}>
+        <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
           <MaterialIcons name="logout" size={20} color={colors.red} style={styles.logoutIcon} />
           <Text style={styles.logoutText}>Log Out</Text>
         </TouchableOpacity>

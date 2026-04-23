@@ -1,13 +1,59 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
+import * as React from 'react';
+const { useState, useEffect } = React;
+import { View, Text, StyleSheet, TouchableOpacity, TextInput, KeyboardAvoidingView, Platform, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { colors, typography, layout } from '../../theme';
 import { PrimaryButton, Card } from '../../components';
+import { marketService } from '../../services/apiService';
 
 export const CurrencyConversionScreen = () => {
   const navigation = useNavigation<any>();
+  const [fromAmount, setFromAmount] = useState('150000');
+  const [toAmount, setToAmount] = useState('0');
+  const [rate, setRate] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [isLkrToUsd, setIsLkrToUsd] = useState(true);
+
+  useEffect(() => {
+    const fetchRate = async () => {
+      try {
+        const response = await marketService.getPriceLKR('BTCUSDT'); // We just need the usdToLkr rate
+        if (response.success) {
+          setRate(response.data.usdToLkr);
+          // Initial calculation
+          const initialTo = (150000 / response.data.usdToLkr).toFixed(2);
+          setToAmount(initialTo);
+        }
+      } catch (error) {
+        console.error('Failed to fetch rate:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchRate();
+  }, []);
+
+  const handleFromChange = (value: string) => {
+    setFromAmount(value);
+    const num = parseFloat(value);
+    if (!isNaN(num) && rate > 0) {
+      if (isLkrToUsd) {
+        setToAmount((num / rate).toFixed(2));
+      } else {
+        setToAmount((num * rate).toFixed(2));
+      }
+    } else {
+      setToAmount('0');
+    }
+  };
+
+  const toggleDirection = () => {
+    setIsLkrToUsd(!isLkrToUsd);
+    setFromAmount(toAmount);
+    setToAmount(fromAmount);
+  };
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -27,67 +73,73 @@ export const CurrencyConversionScreen = () => {
           </TouchableOpacity>
         </View>
 
-        <View style={styles.content}>
+        {loading ? (
+          <View style={{ flex: 1, justifyContent: 'center' }}><ActivityIndicator color={colors.accent} /></View>
+        ) : (
+          <View style={styles.content}>
 
-          {/* Converter Cards Container */}
-          <View style={styles.converterContainer}>
+            {/* Converter Cards Container */}
+            <View style={styles.converterContainer}>
 
-            {/* FROM Card */}
-            <View style={styles.fromCard}>
-              <View style={styles.cardTopRow}>
-                <Text style={styles.label}>FROM</Text>
-                <View style={styles.currencyPill}>
-                  <View style={[styles.flagCircle, { backgroundColor: '#1A5BFF' }]} />
-                  <Text style={styles.currencyCode}>LKR</Text>
-                  <MaterialIcons name="arrow-drop-down" size={20} color="#FFF" />
+              {/* FROM Card */}
+              <View style={styles.fromCard}>
+                <View style={styles.cardTopRow}>
+                  <Text style={styles.label}>FROM</Text>
+                  <View style={styles.currencyPill}>
+                    <View style={[styles.flagCircle, { backgroundColor: isLkrToUsd ? '#1A5BFF' : '#26A17B' }]} />
+                    <Text style={styles.currencyCode}>{isLkrToUsd ? 'LKR' : 'USD'}</Text>
+                    <MaterialIcons name="arrow-drop-down" size={20} color="#FFF" />
+                  </View>
                 </View>
+                <TextInput
+                  style={styles.amountInput}
+                  value={fromAmount}
+                  onChangeText={handleFromChange}
+                  keyboardType="numeric"
+                />
+                <Text style={styles.balanceText}>Balance: {isLkrToUsd ? '245,000.00 LKR' : '1,250.00 USD'}</Text>
               </View>
-              <TextInput
-                style={styles.amountInput}
-                defaultValue="150000"
-                keyboardType="numeric"
-              />
-              <Text style={styles.balanceText}>Balance: 245,000.00 LKR</Text>
-            </View>
 
-            {/* Swap Button Wrapper */}
-            <View style={styles.swapButtonWrapper}>
-              <TouchableOpacity style={styles.swapButton}>
-                <MaterialIcons name="swap-vert" size={28} color="#000" />
-              </TouchableOpacity>
-            </View>
+              {/* Swap Button Wrapper */}
+              <View style={styles.swapButtonWrapper}>
+                <TouchableOpacity style={styles.swapButton} onPress={toggleDirection}>
+                  <MaterialIcons name="swap-vert" size={28} color="#000" />
+                </TouchableOpacity>
+              </View>
 
-            {/* TO Card */}
-            <View style={styles.toCard}>
-              <View style={styles.cardTopRow}>
-                <Text style={styles.label}>TO</Text>
-                <View style={styles.currencyPill}>
-                  <View style={[styles.flagCircle, { backgroundColor: '#26A17B' }]} />
-                  <Text style={styles.currencyCode}>USD</Text>
-                  <MaterialIcons name="arrow-drop-down" size={20} color="#FFF" />
+              {/* TO Card */}
+              <View style={styles.toCard}>
+                <View style={styles.cardTopRow}>
+                  <Text style={styles.label}>TO</Text>
+                  <View style={styles.currencyPill}>
+                    <View style={[styles.flagCircle, { backgroundColor: isLkrToUsd ? '#26A17B' : '#1A5BFF' }]} />
+                    <Text style={styles.currencyCode}>{isLkrToUsd ? 'USD' : 'LKR'}</Text>
+                    <MaterialIcons name="arrow-drop-down" size={20} color="#FFF" />
+                  </View>
                 </View>
+                <TextInput
+                  style={[styles.amountInput, styles.amountInputGreen]}
+                  value={toAmount}
+                  editable={false}
+                />
+                <Text style={styles.balanceText}>
+                  1 {isLkrToUsd ? 'LKR' : 'USD'} ≈ {isLkrToUsd ? (1 / rate).toFixed(6) : rate.toFixed(2)} {isLkrToUsd ? 'USD' : 'LKR'}
+                </Text>
               </View>
-              <TextInput
-                style={[styles.amountInput, styles.amountInputGreen]}
-                defaultValue="465.84"
-                editable={false}
-              />
-              <Text style={styles.balanceText}>1 LKR ≈ 0.0031056 USD</Text>
             </View>
-          </View>
 
-          {/* Rate Pill */}
-          <View style={styles.ratePillContainer}>
-            <View style={styles.ratePill}>
-              <MaterialIcons name="trending-up" size={16} color={colors.textSecondary} />
-              <Text style={styles.ratePillText}>LIVE EXCHANGE RATE</Text>
+            {/* Rate Pill */}
+            <View style={styles.ratePillContainer}>
+              <View style={styles.ratePill}>
+                <MaterialIcons name="trending-up" size={16} color={colors.textSecondary} />
+                <Text style={styles.ratePillText}>LIVE RATE: 1 USD = Rs {rate.toFixed(2)}</Text>
+              </View>
             </View>
+
+            <View style={styles.fakeChartArea} />
+
           </View>
-
-          {/* Decorator Background area */}
-          <View style={styles.fakeChartArea} />
-
-        </View>
+        )}
 
         {/* Bottom Section */}
         <View style={styles.bottomSection}>
@@ -97,7 +149,7 @@ export const CurrencyConversionScreen = () => {
               <Text style={styles.confirmTitle}>Conversion Ready</Text>
             </View>
             <Text style={styles.confirmDesc}>
-              Transfer 150,000 LKR to your USD wallet. No hidden fees for your first transaction today.
+              Convert {parseFloat(fromAmount).toLocaleString()} {isLkrToUsd ? 'LKR' : 'USD'} to your {isLkrToUsd ? 'USD' : 'LKR'} wallet instantly.
             </Text>
           </Card>
 
