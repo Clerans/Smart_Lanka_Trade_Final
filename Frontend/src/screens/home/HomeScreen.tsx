@@ -9,6 +9,7 @@ import { colors, typography, layout } from '../../theme';
 import { Card } from '../../components';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { marketService, walletService } from '../../services/apiService';
+import { SetAlertModal } from '../../components/SetAlertModal';
 
 // Helper to generate SVG path for sparklines
 const generateSparklinePath = (data: number[], width: number, height: number) => {
@@ -32,6 +33,7 @@ export const HomeScreen = () => {
   const [loading, setLoading] = useState(true);
   const [balance, setBalance] = useState<number | null>(null);
   const [user, setUser] = useState<{ name: string } | null>(null);
+  const [isAlertModalVisible, setIsAlertModalVisible] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -168,7 +170,10 @@ export const HomeScreen = () => {
               )}
             </View>
           </View>
-          <TouchableOpacity style={styles.alertBtn}>
+          <TouchableOpacity 
+            style={styles.alertBtn}
+            onPress={() => setIsAlertModalVisible(true)}
+          >
             <MaterialIcons name="notifications-active" size={14} color={colors.accent} />
             <Text style={styles.alertBtnText}>Set Alert</Text>
           </TouchableOpacity>
@@ -232,6 +237,14 @@ export const HomeScreen = () => {
         </Card>
 
       </ScrollView>
+      {lkrPriceData && (
+        <SetAlertModal
+          visible={isAlertModalVisible}
+          onClose={() => setIsAlertModalVisible(false)}
+          symbol="USDTUSDT" // We are setting alert for USDT in LKR
+          currentPrice={lkrPriceData.usdToLkr}
+        />
+      )}
     </SafeAreaView>
   );
 };

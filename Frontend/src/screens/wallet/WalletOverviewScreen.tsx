@@ -4,7 +4,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions, Activ
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
 import { colors, typography, layout } from '../../theme';
-import { Card } from '../../components';
+import { Card, DepositModal } from '../../components';
 import Svg, { Circle } from 'react-native-svg';
 import { walletService } from '../../services/apiService';
 
@@ -13,20 +13,26 @@ const { width } = Dimensions.get('window');
 export const WalletOverviewScreen = () => {
   const [balance, setBalance] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [isDepositVisible, setIsDepositVisible] = useState(false);
+  const [transactions, setTransactions] = useState<any[]>([]);
+
+  const fetchWalletData = async () => {
+    try {
+      const [balanceRes, txRes] = await Promise.all([
+        walletService.getBalance(),
+        walletService.getTransactions()
+      ]);
+      
+      if (balanceRes.success) setBalance(balanceRes.data);
+      if (txRes.success) setTransactions(txRes.data);
+    } catch (error) {
+      console.error('Failed to fetch wallet data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchWalletData = async () => {
-      try {
-        const response = await walletService.getBalance();
-        if (response.success) {
-          setBalance(response.data);
-        }
-      } catch (error) {
-        console.error('Failed to fetch wallet data:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
     fetchWalletData();
   }, []);
 
@@ -64,7 +70,7 @@ export const WalletOverviewScreen = () => {
 
           {/* Action Row */}
           <View style={styles.actionRow}>
-            <TouchableOpacity style={styles.actionBtn}>
+            <TouchableOpacity style={styles.actionBtn} onPress={() => setIsDepositVisible(true)}>
               <View style={styles.actionIconBgDark}>
                 <MaterialIcons name="arrow-downward" size={24} color={colors.accent} />
               </View>
@@ -134,42 +140,49 @@ export const WalletOverviewScreen = () => {
               <TouchableOpacity><Text style={styles.seeAllText}>View All</Text></TouchableOpacity>
             </View>
 
-            {[
-              { id: 1, type: 'Deposit', pair: 'LKR Fiat', amount: balance ? `+LKR ${balance.balance.toLocaleString()}` : '+LKR 50,000', status: 'Completed', isBuy: true },
-              { id: 2, type: 'Buy', pair: 'BTC', amount: '+0.0015 BTC', status: 'Completed', isBuy: true },
-              { id: 3, type: 'Withdraw', pair: 'LKR Fiat', amount: '-LKR 12,000', status: 'Pending', isBuy: false },
-            ].map((tx) => (
-              <View key={tx.id} style={styles.txRow}>
-                <View style={styles.txLeft}>
-                  <View style={[styles.txIconContainer, tx.isBuy ? styles.txBgGreen : styles.txBgRed]}>
-                    <MaterialIcons
-                      name={tx.isBuy ? 'arrow-downward' : 'arrow-upward'}
-                      size={20}
-                      color={tx.isBuy ? colors.accent : colors.red}
-                    />
+            {transactions.length > 0 ? (
+              transactions.map((tx) => (
+                <View key={tx.ID} style={styles.txRow}>
+                  <View style={styles.txLeft}>
+                    <View style={[styles.txIconContainer, tx.TYPE === 'DEPOSIT' || tx.TYPE === 'BUY' ? styles.txBgGreen : styles.txBgRed]}>
+                      <MaterialIcons
+                        name={tx.TYPE === 'DEPOSIT' || tx.TYPE === 'BUY' ? 'arrow-downward' : 'arrow-upward'}
+                        size={20}
+                        color={tx.TYPE === 'DEPOSIT' || tx.TYPE === 'BUY' ? colors.accent : colors.red}
+                      />
+                    </View>
+                    <View>
+                      <Text style={styles.txPair}>{tx.TYPE}</Text>
+                      <Text style={styles.txTime}>LKR Fiat</Text>
+                    </View>
                   </View>
-                  <View>
-                    <Text style={styles.txPair}>{tx.type}</Text>
-                    <Text style={styles.txTime}>{tx.pair}</Text>
-                  </View>
-                </View>
-                <View style={styles.txRight}>
-                  <Text style={[styles.txAmount, tx.isBuy ? styles.txAmountGreen : styles.txAmountRed]}>
-                    {tx.amount}
-                  </Text>
-                  <View style={[styles.statusBadge, tx.status === 'Completed' ? styles.statusCompleted : styles.statusPending]}>
-                    <Text style={[styles.statusText, tx.status === 'Completed' ? styles.statusTextCompleted : styles.statusTextPending]}>
-                      {tx.status}
+                  <View style={styles.txRight}>
+                    <Text style={[styles.txAmount, tx.TYPE === 'DEPOSIT' || tx.TYPE === 'BUY' ? styles.txAmountGreen : styles.txAmountRed]}>
+                      {tx.TYPE === 'DEPOSIT' || tx.TYPE === 'BUY' ? '+' : '-'}LKR {tx.AMOUNT.toLocaleString()}
                     </Text>
+                    <View style={[styles.statusBadge, tx.STATUS === 'COMPLETED' ? styles.statusCompleted : styles.statusPending]}>
+                      <Text style={[styles.statusText, tx.STATUS === 'COMPLETED' ? styles.statusTextCompleted : styles.statusTextPending]}>
+                        {tx.STATUS}
+                      </Text>
+                    </View>
                   </View>
                 </View>
+              ))
+            ) : (
+              <View style={styles.emptyTxContainer}>
+                <Text style={styles.emptyTxText}>No recent transactions</Text>
               </View>
-            ))}
+            )}
             <View style={{ height: 80 }} />
           </View>
 
         </ScrollView>
       )}
+      <DepositModal 
+        isVisible={isDepositVisible} 
+        onClose={() => setIsDepositVisible(false)} 
+        onSuccess={fetchWalletData} 
+      />
     </SafeAreaView>
   );
 };
@@ -384,4 +397,12 @@ const styles = StyleSheet.create({
   },
   statusTextCompleted: { color: colors.accent },
   statusTextPending: { color: colors.yellow },
+  emptyTxContainer: {
+    paddingVertical: 32,
+    alignItems: 'center',
+  },
+  emptyTxText: {
+    ...typography.bodySmall,
+    color: colors.textSecondary,
+  },
 });

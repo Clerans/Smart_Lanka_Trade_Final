@@ -16,7 +16,12 @@ app.use(express.json());
 app.use('/api/auth', require('./routes/authRoutes'));
 app.use('/api/wallet', require('./routes/walletRoutes'));
 app.use('/api/market', require('./routes/marketRoutes'));
+app.use('/api/alerts', require('./routes/alertRoutes'));
 app.get('/api/test-market', (req, res) => res.json({ message: "Market route test works" }));
+
+// Start Price Monitor
+const { startPriceMonitor } = require('./services/priceMonitor');
+startPriceMonitor();
 
 // Health Check
 app.get('/', (req, res) => res.send('SmartLanka Backend API Running...'));

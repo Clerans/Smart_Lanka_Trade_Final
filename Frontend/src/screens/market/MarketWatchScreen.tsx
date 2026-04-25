@@ -30,10 +30,21 @@ export const MarketWatchScreen = () => {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
 
-  const filteredAssets = assets.filter(asset =>
-    asset.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    asset.ticker.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredAssets = assets.filter(asset => {
+    // Search query filter
+    const matchesSearch = asset.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      asset.ticker.toLowerCase().includes(searchQuery.toLowerCase());
+
+    // Category filter
+    let matchesCategory = true;
+    if (activeFilter === 'Crypto') {
+      matchesCategory = true;
+    } else if (activeFilter === 'Stocks' || activeFilter === 'Indices') {
+      matchesCategory = false;
+    }
+
+    return matchesSearch && matchesCategory;
+  });
 
   useEffect(() => {
     const fetchMarketData = async () => {
@@ -114,39 +125,46 @@ export const MarketWatchScreen = () => {
         </View>
       ) : (
         <ScrollView contentContainerStyle={styles.listContainer}>
-          {filteredAssets.map((asset) => (
-            <View key={asset.id}>
-                <TouchableOpacity 
+          {filteredAssets.length > 0 ? (
+            filteredAssets.map((asset) => (
+              <View key={asset.id}>
+                <TouchableOpacity
                   style={styles.assetRow}
-                  onPress={() => navigation.navigate('Market', { 
-                    screen: 'TradingTerminal', 
-                    params: { symbol: assets.find(a => a.id === asset.id)?.ticker + 'USDT' } 
+                  onPress={() => navigation.navigate('Market', {
+                    screen: 'TradingTerminal',
+                    params: { symbol: assets.find(a => a.id === asset.id)?.ticker + 'USDT' }
                   })}
                 >
 
-                <View style={styles.assetRowLeft}>
-                  <View style={[styles.assetIcon, { backgroundColor: asset.color + '22' }]}>
-                    <FontAwesome5 name={asset.icon} size={20} color={asset.color} />
+                  <View style={styles.assetRowLeft}>
+                    <View style={[styles.assetIcon, { backgroundColor: asset.color + '22' }]}>
+                      <FontAwesome5 name={asset.icon} size={20} color={asset.color} />
+                    </View>
+                    <View>
+                      <Text style={styles.assetName}>{asset.name}</Text>
+                      <Text style={styles.assetTicker}>{asset.ticker}</Text>
+                    </View>
                   </View>
-                  <View>
-                    <Text style={styles.assetName}>{asset.name}</Text>
-                    <Text style={styles.assetTicker}>{asset.ticker}</Text>
-                  </View>
-                </View>
 
-                <View style={styles.assetRowRight}>
-                  <Text style={styles.assetPrice}>Rs {asset.price}</Text>
-                  <View style={[styles.changePill, asset.isPositive ? styles.changePositiveBg : styles.changeNegativeBg]}>
-                    <Text style={[styles.assetChange, asset.isPositive ? styles.changePositiveTxt : styles.changeNegativeTxt]}>
-                      {asset.change}
-                    </Text>
+                  <View style={styles.assetRowRight}>
+                    <Text style={styles.assetPrice}>Rs {asset.price}</Text>
+                    <View style={[styles.changePill, asset.isPositive ? styles.changePositiveBg : styles.changeNegativeBg]}>
+                      <Text style={[styles.assetChange, asset.isPositive ? styles.changePositiveTxt : styles.changeNegativeTxt]}>
+                        {asset.change}
+                      </Text>
+                    </View>
                   </View>
-                </View>
 
-              </TouchableOpacity>
-              <View style={styles.divider} />
+                </TouchableOpacity>
+                <View style={styles.divider} />
+              </View>
+            ))
+          ) : (
+            <View style={styles.emptyContainer}>
+              <MaterialIcons name="search-off" size={64} color={colors.textMuted} />
+              <Text style={styles.emptyText}>No assets found in this category.</Text>
             </View>
-          ))}
+          )}
           {/* Fill bottom space corresponding to tab bar */}
           <View style={{ height: 80 }} />
         </ScrollView>
@@ -289,5 +307,16 @@ const styles = StyleSheet.create({
   divider: {
     height: 1,
     backgroundColor: colors.border,
+  },
+  emptyContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingTop: 100,
+  },
+  emptyText: {
+    ...typography.body,
+    color: colors.textMuted,
+    marginTop: 16,
+    textAlign: 'center',
   },
 });
