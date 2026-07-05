@@ -16,6 +16,7 @@ export const LoginScreen = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleLogin = async () => {
     if (!email || !password) {
@@ -80,11 +81,15 @@ export const LoginScreen = () => {
 
             <InputField
               placeholder="••••••••••••"
-              secureTextEntry
+              secureTextEntry={!showPassword}
               value={password}
               onChangeText={setPassword}
               iconLeft={<MaterialIcons name="lock-outline" size={20} color={colors.accent} />}
-              iconRight={<MaterialIcons name="visibility-off" size={20} color={colors.textSecondary} />}
+              iconRight={
+                <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
+                  <MaterialIcons name={showPassword ? "visibility" : "visibility-off"} size={20} color={colors.textSecondary} />
+                </TouchableOpacity>
+              }
             />
 
             {/* Biometrics Button */}

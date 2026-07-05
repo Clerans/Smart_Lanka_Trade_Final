@@ -15,6 +15,9 @@ export const RegisterScreen = () => {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [agree, setAgree] = useState(false);
 
   const { height } = Dimensions.get('window');
   const isSmallDevice = height < 700;
@@ -36,6 +39,10 @@ export const RegisterScreen = () => {
     }
     if (password !== confirmPassword) {
       Alert.alert('Error', 'Passwords do not match');
+      return;
+    }
+    if (!agree) {
+      Alert.alert('Error', 'You must agree to the Terms of Service and Privacy Policy');
       return;
     }
 
@@ -99,11 +106,15 @@ export const RegisterScreen = () => {
             <Text style={styles.sectionLabel}>PASSWORD</Text>
             <InputField
               placeholder="••••••••"
-              secureTextEntry
+              secureTextEntry={!showPassword}
               value={password}
               onChangeText={setPassword}
               iconLeft={<MaterialIcons name="lock-outline" size={20} color={colors.textSecondary} />}
-              iconRight={<MaterialIcons name="visibility-off" size={20} color={colors.textSecondary} />}
+              iconRight={
+                <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
+                  <MaterialIcons name={showPassword ? "visibility" : "visibility-off"} size={20} color={colors.textSecondary} />
+                </TouchableOpacity>
+              }
             />
 
             {/* Password Strength UI */}
@@ -123,18 +134,31 @@ export const RegisterScreen = () => {
             <Text style={styles.sectionLabel}>CONFIRM PASSWORD</Text>
             <InputField
               placeholder="••••••••"
-              secureTextEntry
+              secureTextEntry={!showConfirmPassword}
               value={confirmPassword}
               onChangeText={setConfirmPassword}
               iconLeft={<MaterialIcons name="loop" size={20} color={colors.textSecondary} />}
+              iconRight={
+                <TouchableOpacity onPress={() => setShowConfirmPassword(!showConfirmPassword)}>
+                  <MaterialIcons name={showConfirmPassword ? "visibility" : "visibility-off"} size={20} color={colors.textSecondary} />
+                </TouchableOpacity>
+              }
             />
 
-            <View style={styles.termsContainer}>
-              <MaterialIcons name="radio-button-unchecked" size={24} color={colors.textSecondary} />
+            <TouchableOpacity 
+              style={styles.termsContainer} 
+              activeOpacity={0.8}
+              onPress={() => setAgree(!agree)}
+            >
+              <MaterialIcons 
+                name={agree ? "radio-button-checked" : "radio-button-unchecked"} 
+                size={24} 
+                color={agree ? colors.accent : colors.textSecondary} 
+              />
               <Text style={styles.termsText}>
                 By creating an account, I agree to the <Text style={styles.greenLink}>Terms of Service</Text> and <Text style={styles.greenLink}>Privacy Policy</Text>.
               </Text>
-            </View>
+            </TouchableOpacity>
 
             {loading ? (
               <ActivityIndicator color={colors.accent} size="large" style={{ marginVertical: 20 }} />
