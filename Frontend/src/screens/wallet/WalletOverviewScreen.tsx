@@ -6,25 +6,28 @@ import { MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
 import { colors, typography, layout } from '../../theme';
 import { Card, DepositModal } from '../../components';
 import Svg, { Circle } from 'react-native-svg';
-import { walletService } from '../../services/apiService';
+import { walletService, portfolioService } from '../../services/apiService';
 
 const { width } = Dimensions.get('window');
 
 export const WalletOverviewScreen = () => {
-  const [balance, setBalance] = useState<any>(null);
+  const [walletDetails, setWalletDetails] = useState<any>(null);
+  const [holdings, setHoldings] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [isDepositVisible, setIsDepositVisible] = useState(false);
   const [transactions, setTransactions] = useState<any[]>([]);
 
   const fetchWalletData = async () => {
     try {
-      const [balanceRes, txRes] = await Promise.all([
-        walletService.getBalance(),
-        walletService.getTransactions()
+      const [walletRes, txRes, portfolioRes] = await Promise.all([
+        walletService.getWalletDetails(),
+        walletService.getTransactions(),
+        portfolioService.getPortfolio()
       ]);
       
-      if (balanceRes.success) setBalance(balanceRes.data);
+      if (walletRes.success) setWalletDetails(walletRes);
       if (txRes.success) setTransactions(txRes.data);
+      if (portfolioRes.success) setHoldings(portfolioRes.data.holdings);
     } catch (error) {
       console.error('Failed to fetch wallet data:', error);
     } finally {
@@ -36,12 +39,46 @@ export const WalletOverviewScreen = () => {
     fetchWalletData();
   }, []);
 
-  const allocData = [
-    { id: 1, name: 'Bitcoin (BTC)', percent: '45%', color: '#F7931A' },
-    { id: 2, name: 'Ethereum (ETH)', percent: '30%', color: '#627EEA' },
-    { id: 3, name: 'Solana (SOL)', percent: '15%', color: '#14F195' },
-    { id: 4, name: 'LKR Fiat', percent: balance ? `${((balance.balance / 245000) * 10).toFixed(1)}%` : '10%', color: '#1A5BFF' },
-  ];
+  // Coin color mapping
+  const getCoinColor = (coin: string) => {
+    switch (coin.toUpperCase()) {
+      case 'BTC': return '#F7931A';
+      case 'ETH': return '#627EEA';
+      case 'SOL': return '#14F195';
+      case 'BNB': return '#F3BA2F';
+      case 'XRP': return '#23292F';
+      case 'ADA': return '#0033AD';
+      case 'DOGE': return '#C2A633';
+      default: return '#888888';
+    }
+  };
+
+  // Build allocation legend dynamically
+  const allocData: any[] = [];
+  if (walletDetails) {
+    const totalVal = walletDetails.balanceLKR || 1.0; // avoid division by zero
+    
+    // Add active holdings
+    holdings.forEach((h, idx) => {
+      const pct = ((h.currentValue / totalVal) * 100).toFixed(1);
+      allocData.push({
+        id: idx + 1,
+        name: `${h.coin} Holding`,
+        percent: `${pct}%`,
+        color: getCoinColor(h.coin)
+      });
+    });
+
+    // Add LKR Fiat Cash
+    const cashPct = ((walletDetails.availableBalance / totalVal) * 100).toFixed(1);
+    allocData.push({
+      id: holdings.length + 1,
+      name: 'LKR Fiat',
+      percent: `${cashPct}%`,
+      color: '#1A5BFF'
+    });
+  }
+
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -61,10 +98,10 @@ export const WalletOverviewScreen = () => {
           {/* Balance Card */}
           <Card style={styles.balanceCard}>
             <Text style={styles.balanceLabel}>Total Asset Value</Text>
-            <Text style={styles.balanceValue}>LKR {balance ? (balance.balance + 195000).toLocaleString(undefined, { minimumFractionDigits: 2 }) : '245,320.50'}</Text>
-            <View style={styles.pnlPill}>
-              <MaterialIcons name="trending-up" size={14} color={colors.accent} />
-              <Text style={styles.pnlText}>+1.24% Today</Text>
+            <Text style={styles.balanceValue}>LKR {walletDetails ? walletDetails.balanceLKR.toLocaleString(undefined, { minimumFractionDigits: 2 }) : '1,000,000.00'}</Text>
+            <View style={styles.walletBalanceContainer}>
+              <Text style={styles.walletBalanceLabel}>Available Cash: </Text>
+              <Text style={styles.walletBalanceValue}>LKR {walletDetails ? walletDetails.availableBalance.toLocaleString(undefined, { minimumFractionDigits: 2 }) : '1,000,000.00'}</Text>
             </View>
           </Card>
 
@@ -226,7 +263,23 @@ const styles = StyleSheet.create({
   },
   balanceValue: {
     ...typography.price,
-    marginBottom: 16,
+    marginBottom: 12,
+  },
+  walletBalanceContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  walletBalanceLabel: {
+    ...typography.bodySmall,
+    color: colors.textSecondary,
+    fontSize: 13,
+  },
+  walletBalanceValue: {
+    ...typography.bodySmall,
+    color: colors.textPrimary,
+    fontWeight: '700',
+    fontSize: 13,
   },
   pnlPill: {
     flexDirection: 'row',
