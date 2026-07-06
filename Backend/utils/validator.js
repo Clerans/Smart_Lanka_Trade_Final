@@ -4,8 +4,9 @@ const validateEmail = (email) => {
 };
 
 const validatePassword = (password) => {
-  // At least 6 characters
-  return password && password.length >= 6;
+  // Enforce secure password policy: min 8 characters, uppercase, lowercase, number, special character
+  const re = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/;
+  return password && re.test(password);
 };
 
 module.exports = {

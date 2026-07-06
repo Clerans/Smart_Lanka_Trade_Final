@@ -2,7 +2,9 @@ import React, { useEffect } from 'react';
 import { View, Text, StyleSheet, Animated } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { MaterialIcons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { colors, typography } from '../../theme';
+import { authService } from '../../services/apiService';
 
 export const SplashScreen = () => {
   const navigation = useNavigation<any>();
@@ -13,8 +15,28 @@ export const SplashScreen = () => {
       toValue: 100,
       duration: 2500,
       useNativeDriver: false,
-    }).start(({ finished }) => {
+    }).start(async ({ finished }) => {
       if (finished) {
+        try {
+          const rememberMe = await AsyncStorage.getItem('rememberMe');
+          const token = await AsyncStorage.getItem('userToken');
+
+          if (rememberMe === 'true' && token) {
+            try {
+              await authService.validateToken();
+              navigation.replace('MainApp');
+              return;
+            } catch (validateErr) {
+              console.log('Stored token is invalid or expired. Clearing storage.');
+              await authService.logout();
+            }
+          } else {
+            // Clean up session if not remembering
+            await authService.logout();
+          }
+        } catch (storageErr) {
+          console.error('Storage check failed:', storageErr);
+        }
         navigation.replace('Login');
       }
     });

@@ -3,6 +3,9 @@ export * from './auth/LoginScreen';
 export * from './auth/RegisterScreen';
 export * from './auth/OTPVerificationScreen';
 export * from './auth/KYCVerificationScreen';
+export * from './auth/ForgotPasswordScreen';
+export * from './auth/ResetPasswordScreen';
+
 export * from './home/HomeScreen';
 export * from './market/MarketWatchScreen';
 export * from './market/TradingTerminalScreen';

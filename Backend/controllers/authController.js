@@ -5,35 +5,240 @@ exports.register = async (req, res) => {
   try {
     const { name, email, password } = req.body;
 
-    // Validation
-    if (!validateEmail(email)) return res.status(400).json({ error: 'Invalid email format' });
-    if (!validatePassword(password)) return res.status(400).json({ error: 'Password must be at least 6 characters' });
+    if (!name || !email || !password) {
+      return res.status(422).json({
+        success: false,
+        code: 'MISSING_FIELDS',
+        message: 'Please fill in all registration fields.'
+      });
+    }
 
-    await authService.registerUser(name, email, password);
-    res.status(201).json({ message: 'Registration successful! Please check your email to verify your account.' });
+    if (!validateEmail(email)) {
+      return res.status(422).json({
+        success: false,
+        code: 'INVALID_EMAIL',
+        message: 'Invalid email format.'
+      });
+    }
+
+    if (!validatePassword(password)) {
+      return res.status(422).json({
+        success: false,
+        code: 'PASSWORD_TOO_WEAK',
+        message: 'Password is too weak. Must be at least 8 characters, and contain uppercase, lowercase, numbers, and special characters.'
+      });
+    }
+
+    const result = await authService.registerUser(name, email, password);
+    res.status(201).json({
+      success: true,
+      message: 'Registration successful! Please check your email for the verification code.',
+      userId: result.userId,
+      otp: result.otp // Returned for development simulation/testing
+    });
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    res.status(err.status || 500).json({
+      success: false,
+      code: err.code || 'SERVER_ERROR',
+      message: err.message
+    });
   }
 };
 
 exports.login = async (req, res) => {
   try {
     const { email, password } = req.body;
+    if (!email || !password) {
+      return res.status(422).json({
+        success: false,
+        code: 'MISSING_FIELDS',
+        message: 'Please enter both email and password.'
+      });
+    }
+
     const data = await authService.loginUser(email, password);
-    res.json(data);
+    res.json({
+      success: true,
+      token: data.token,
+      user: data.user
+    });
   } catch (err) {
-    res.status(401).json({ error: err.message });
+    res.status(err.status || 500).json({
+      success: false,
+      code: err.code || 'SERVER_ERROR',
+      message: err.message
+    });
   }
 };
 
 exports.verifyEmail = async (req, res) => {
   try {
+    const { email, otp } = req.body;
+    if (!email || !otp) {
+      return res.status(422).json({
+        success: false,
+        code: 'MISSING_FIELDS',
+        message: 'Email and OTP code are required.'
+      });
+    }
+
+    const result = await authService.verifyEmailOTP(email, otp);
+    res.json({
+      success: true,
+      message: result.message
+    });
+  } catch (err) {
+    res.status(err.status || 500).json({
+      success: false,
+      code: err.code || 'SERVER_ERROR',
+      message: err.message
+    });
+  }
+};
+
+exports.verifyEmailToken = async (req, res) => {
+  try {
     const { token } = req.params;
     const result = await authService.verifyEmailToken(token);
     res.send(`<h1>Verification Successful</h1><p>${result.message}</p>`);
   } catch (err) {
-    res.status(400).send(`<h1>Verification Failed</h1><p>${err.message}</p>`);
+    res.status(err.status || 400).send(`<h1>Verification Failed</h1><p>${err.message}</p>`);
   }
+};
+
+exports.sendVerification = async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) {
+      return res.status(422).json({
+        success: false,
+        code: 'MISSING_FIELDS',
+        message: 'Email is required.'
+      });
+    }
+
+    const result = await authService.sendVerificationOTP(email);
+    res.json({
+      success: true,
+      message: 'Verification OTP sent successfully.',
+      otp: result.otp
+    });
+  } catch (err) {
+    res.status(err.status || 500).json({
+      success: false,
+      code: err.code || 'SERVER_ERROR',
+      message: err.message
+    });
+  }
+};
+
+exports.resendVerification = async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) {
+      return res.status(422).json({
+        success: false,
+        code: 'MISSING_FIELDS',
+        message: 'Email is required.'
+      });
+    }
+
+    const result = await authService.resendVerificationOTP(email);
+    res.json({
+      success: true,
+      message: 'Verification OTP resent successfully.',
+      otp: result.otp
+    });
+  } catch (err) {
+    res.status(err.status || 500).json({
+      success: false,
+      code: err.code || 'SERVER_ERROR',
+      message: err.message
+    });
+  }
+};
+
+exports.forgotPassword = async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) {
+      return res.status(422).json({
+        success: false,
+        code: 'MISSING_FIELDS',
+        message: 'Email is required.'
+      });
+    }
+
+    const result = await authService.forgotPassword(email);
+    res.json({
+      success: true,
+      message: 'Password reset OTP sent successfully.',
+      otp: result.otp
+    });
+  } catch (err) {
+    res.status(err.status || 500).json({
+      success: false,
+      code: err.code || 'SERVER_ERROR',
+      message: err.message
+    });
+  }
+};
+
+exports.verifyResetOTP = async (req, res) => {
+  try {
+    const { email, otp } = req.body;
+    if (!email || !otp) {
+      return res.status(422).json({
+        success: false,
+        code: 'MISSING_FIELDS',
+        message: 'Email and OTP code are required.'
+      });
+    }
+
+    const result = await authService.verifyResetOTP(email, otp);
+    res.json({
+      success: true,
+      message: result.message
+    });
+  } catch (err) {
+    res.status(err.status || 500).json({
+      success: false,
+      code: err.code || 'SERVER_ERROR',
+      message: err.message
+    });
+  }
+};
+
+exports.resetPassword = async (req, res) => {
+  try {
+    const { email, otp, password } = req.body;
+    if (!email || !otp || !password) {
+      return res.status(422).json({
+        success: false,
+        code: 'MISSING_FIELDS',
+        message: 'Email, OTP, and new password are required.'
+      });
+    }
+
+    const result = await authService.resetPassword(email, otp, password);
+    res.json({
+      success: true,
+      message: result.message
+    });
+  } catch (err) {
+    res.status(err.status || 500).json({
+      success: false,
+      code: err.code || 'SERVER_ERROR',
+      message: err.message
+    });
+  }
+};
+
+exports.validateToken = async (req, res) => {
+  res.json({
+    success: true,
+    user: req.user
+  });
 };
 
 exports.getUsers = async (req, res) => {
@@ -42,6 +247,36 @@ exports.getUsers = async (req, res) => {
     const users = await userModel.findAllUsers();
     res.json(users);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({
+      success: false,
+      code: 'SERVER_ERROR',
+      message: err.message
+    });
+  }
+};
+
+exports.googleLogin = async (req, res) => {
+  try {
+    const { email, name } = req.body;
+    if (!email || !name) {
+      return res.status(422).json({
+        success: false,
+        code: 'MISSING_FIELDS',
+        message: 'Email and Name are required.'
+      });
+    }
+
+    const data = await authService.googleLoginUser(email, name);
+    res.json({
+      success: true,
+      token: data.token,
+      user: data.user
+    });
+  } catch (err) {
+    res.status(err.status || 500).json({
+      success: false,
+      code: err.code || 'SERVER_ERROR',
+      message: err.message
+    });
   }
 };

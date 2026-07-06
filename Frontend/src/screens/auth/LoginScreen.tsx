@@ -1,11 +1,12 @@
 import * as React from 'react';
 const { useState } = React;
-import { View, Text, StyleSheet, TouchableOpacity, KeyboardAvoidingView, Platform, Dimensions, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, KeyboardAvoidingView, Platform, Dimensions, ActivityIndicator, Modal, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { colors, typography, layout } from '../../theme';
-import { InputField, PrimaryButton } from '../../components';
+import { InputField, PrimaryButton, Toast, NetworkErrorScreen } from '../../components';
 import { authService } from '../../services/apiService';
 
 const { height } = Dimensions.get('window');
@@ -15,22 +16,77 @@ export const LoginScreen = () => {
   const navigation = useNavigation<any>();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [rememberMe, setRememberMe] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+
+  // Google sign-in simulation states
+  const [googleModalVisible, setGoogleModalVisible] = useState(false);
+  const [customGoogleEmail, setCustomGoogleEmail] = useState('');
+  const [customGoogleName, setCustomGoogleName] = useState('');
+  const [showCustomGoogleInput, setShowCustomGoogleInput] = useState(false);
+
+  // Toast states
+  const [toastVisible, setToastVisible] = useState(false);
+  const [toastMessage, setToastMessage] = useState('');
+  const [toastType, setToastType] = useState<'success' | 'error' | 'warning'>('success');
+  const [isNetworkError, setIsNetworkError] = useState(false);
+
+  const showToast = (message: string, type: 'success' | 'error' | 'warning') => {
+    setToastMessage(message);
+    setToastType(type);
+    setToastVisible(true);
+  };
+
+  const handleGoogleLogin = async (selectedEmail: string, selectedName: string) => {
+    setGoogleModalVisible(false);
+    setLoading(true);
+    setIsNetworkError(false);
+    try {
+      const response = await authService.googleLogin(selectedEmail, selectedName);
+      if (response.token) {
+        await AsyncStorage.setItem('rememberMe', 'true'); // Auto-login on startup for Google OAuth
+        showToast('Successfully signed in with Google!', 'success');
+        setTimeout(() => {
+          navigation.replace('MainApp');
+        }, 1200);
+      }
+    } catch (error: any) {
+      if (error.code === 'NETWORK_ERROR') {
+        setIsNetworkError(true);
+      } else {
+        showToast(error.message || 'Google Sign-In failed.', 'error');
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleLogin = async () => {
     if (!email || !password) {
-      Alert.alert('Error', 'Please enter both email and password');
+      showToast('Please enter both email and password', 'warning');
       return;
     }
 
     setLoading(true);
+    setIsNetworkError(false);
     try {
       const response = await authService.login(email, password);
       if (response.token) {
+        await AsyncStorage.setItem('rememberMe', rememberMe ? 'true' : 'false');
         navigation.replace('MainApp');
       }
     } catch (error: any) {
-      Alert.alert('Login Failed', error.error || 'Invalid credentials or connection error');
+      if (error.code === 'NETWORK_ERROR') {
+        setIsNetworkError(true);
+      } else if (error.code === 'EMAIL_NOT_VERIFIED') {
+        showToast('Please verify your email before logging in. Redirecting...', 'warning');
+        setTimeout(() => {
+          navigation.navigate('OTPVerification', { email });
+        }, 2000);
+      } else {
+        showToast(error.message || 'Login failed. Please check your credentials.', 'error');
+      }
     } finally {
       setLoading(false);
     }
@@ -38,6 +94,20 @@ export const LoginScreen = () => {
 
   return (
     <SafeAreaView style={styles.safeArea}>
+      {isNetworkError && (
+        <NetworkErrorScreen
+          onRetry={() => {
+            setIsNetworkError(false);
+            handleLogin();
+          }}
+        />
+      )}
+      <Toast
+        visible={toastVisible}
+        message={toastMessage}
+        type={toastType}
+        onDismiss={() => setToastVisible(false)}
+      />
       <KeyboardAvoidingView
         style={styles.keyboardAvoiding}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -73,19 +143,37 @@ export const LoginScreen = () => {
 
             <View style={styles.passwordHeader}>
               <Text style={styles.label}>Password</Text>
-              <TouchableOpacity>
+              <TouchableOpacity onPress={() => navigation.navigate('ForgotPassword')}>
                 <Text style={styles.forgotPassword}>Forgot Password?</Text>
               </TouchableOpacity>
             </View>
 
             <InputField
               placeholder="••••••••••••"
-              secureTextEntry
+              secureTextEntry={!showPassword}
               value={password}
               onChangeText={setPassword}
               iconLeft={<MaterialIcons name="lock-outline" size={20} color={colors.accent} />}
-              iconRight={<MaterialIcons name="visibility-off" size={20} color={colors.textSecondary} />}
+              iconRight={
+                <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
+                  <MaterialIcons name={showPassword ? "visibility" : "visibility-off"} size={20} color={colors.textSecondary} />
+                </TouchableOpacity>
+              }
             />
+
+            {/* Remember Me Checkbox */}
+            <TouchableOpacity
+              style={styles.rememberMeContainer}
+              activeOpacity={0.8}
+              onPress={() => setRememberMe(!rememberMe)}
+            >
+              <MaterialIcons
+                name={rememberMe ? "check-box" : "check-box-outline-blank"}
+                size={20}
+                color={rememberMe ? colors.accent : colors.textSecondary}
+              />
+              <Text style={styles.rememberMeText}>Remember Me</Text>
+            </TouchableOpacity>
 
             {/* Biometrics Button */}
             <TouchableOpacity style={styles.biometricsButton}>
@@ -117,10 +205,121 @@ export const LoginScreen = () => {
           <View style={styles.smallSpacer} />
 
           {/* Google Button */}
-          <TouchableOpacity style={styles.googleButton}>
+          <TouchableOpacity
+            style={styles.googleButton}
+            onPress={() => {
+              setShowCustomGoogleInput(false);
+              setCustomGoogleEmail('');
+              setCustomGoogleName('');
+              setGoogleModalVisible(true);
+            }}
+          >
             <FontAwesome5 name="google" size={18} color="#FFFFFF" />
             <Text style={styles.googleText}>Continue with Google</Text>
           </TouchableOpacity>
+
+          {/* Google Chooser Modal */}
+          <Modal
+            visible={googleModalVisible}
+            transparent={true}
+            animationType="fade"
+            onRequestClose={() => setGoogleModalVisible(false)}
+          >
+            <View style={styles.modalOverlay}>
+              <View style={styles.modalContent}>
+                <View style={styles.modalHeader}>
+                  <FontAwesome5 name="google" size={20} color="#4285F4" style={{ marginRight: 10 }} />
+                  <Text style={styles.modalTitle}>Sign in with Google</Text>
+                </View>
+                <Text style={styles.modalSubtitle}>Choose an account to continue to SmartLanka Trade</Text>
+
+                {/* Account List */}
+                <TouchableOpacity
+                  style={styles.googleAccountItem}
+                  onPress={() => handleGoogleLogin('michaelclerans01@gmail.com', 'Michael Clerans')}
+                >
+                  <View style={styles.avatarCircle}>
+                    <Text style={styles.avatarText}>MC</Text>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.accountName}>Michael Clerans</Text>
+                    <Text style={styles.accountEmail}>michaelclerans01@gmail.com</Text>
+                  </View>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.googleAccountItem}
+                  onPress={() => handleGoogleLogin('test@smartlanka.com', 'Test User')}
+                >
+                  <View style={styles.avatarCircle}>
+                    <Text style={styles.avatarText}>TU</Text>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.accountName}>Test User</Text>
+                    <Text style={styles.accountEmail}>test@smartlanka.com</Text>
+                  </View>
+                </TouchableOpacity>
+
+                {!showCustomGoogleInput ? (
+                  <TouchableOpacity
+                    style={styles.addAccountButton}
+                    onPress={() => setShowCustomGoogleInput(true)}
+                  >
+                    <MaterialIcons name="person-add-alt-1" size={20} color={colors.accent} style={{ marginRight: 12 }} />
+                    <Text style={styles.addAccountText}>Use another account</Text>
+                  </TouchableOpacity>
+                ) : (
+                  <View style={styles.customInputSection}>
+                    <TextInput
+                      placeholder="Enter Name"
+                      placeholderTextColor={colors.textSecondary}
+                      value={customGoogleName}
+                      onChangeText={setCustomGoogleName}
+                      style={styles.customGoogleInput}
+                    />
+                    <TextInput
+                      placeholder="Enter Google Email"
+                      placeholderTextColor={colors.textSecondary}
+                      value={customGoogleEmail}
+                      onChangeText={setCustomGoogleEmail}
+                      keyboardType="email-address"
+                      autoCapitalize="none"
+                      style={styles.customGoogleInput}
+                    />
+                    <View style={styles.customInputButtons}>
+                      <TouchableOpacity
+                        style={styles.cancelBtn}
+                        onPress={() => setShowCustomGoogleInput(false)}
+                      >
+                        <Text style={styles.cancelBtnText}>Cancel</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.submitBtn}
+                        onPress={() => {
+                          if (!customGoogleEmail || !customGoogleName) {
+                            showToast('Please enter both name and email', 'warning');
+                            return;
+                          }
+                          const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+                          if (!emailRegex.test(customGoogleEmail)) {
+                            showToast('Please enter a valid email address', 'warning');
+                            return;
+                          }
+                          handleGoogleLogin(customGoogleEmail, customGoogleName);
+                        }}
+                      >
+                        <Text style={styles.submitBtnText}>Continue</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                )}
+
+                <TouchableOpacity style={styles.closeModalButton} onPress={() => setGoogleModalVisible(false)}>
+                  <Text style={styles.closeModalText}>CANCEL</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </Modal>
 
           <View style={styles.spacer} />
 
@@ -210,6 +409,18 @@ const styles = StyleSheet.create({
     ...typography.bodySmall,
     color: colors.accent,
   },
+  rememberMeContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+    marginBottom: 16,
+  },
+  rememberMeText: {
+    ...typography.bodySmall,
+    color: colors.textPrimary,
+    marginLeft: 8,
+    fontWeight: '500',
+  },
   biometricsButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -278,5 +489,121 @@ const styles = StyleSheet.create({
   registerLink: {
     color: colors.accent,
     fontWeight: '700',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.85)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  modalContent: {
+    backgroundColor: colors.bgCard,
+    borderRadius: 20,
+    width: '100%',
+    padding: 24,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  modalTitle: {
+    ...typography.h3,
+    color: colors.textPrimary,
+  },
+  modalSubtitle: {
+    ...typography.bodySmall,
+    color: colors.textSecondary,
+    marginBottom: 24,
+  },
+  googleAccountItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  avatarCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.bgInput,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  avatarText: {
+    color: colors.accent,
+    fontWeight: '700',
+    fontSize: 14,
+  },
+  accountName: {
+    ...typography.body,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  accountEmail: {
+    ...typography.bodySmall,
+    fontSize: 12,
+  },
+  addAccountButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 16,
+    marginBottom: 8,
+  },
+  addAccountText: {
+    color: colors.accent,
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  customInputSection: {
+    marginTop: 12,
+    marginBottom: 8,
+  },
+  customGoogleInput: {
+    backgroundColor: colors.bgInput,
+    borderRadius: layout.borderRadiusSmall,
+    color: colors.textPrimary,
+    height: 48,
+    paddingHorizontal: 12,
+    marginBottom: 10,
+  },
+  customInputButtons: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    marginTop: 4,
+  },
+  cancelBtn: {
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    marginRight: 10,
+  },
+  cancelBtnText: {
+    color: colors.textSecondary,
+    fontWeight: '600',
+  },
+  submitBtn: {
+    backgroundColor: colors.accent,
+    borderRadius: 18,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+  },
+  submitBtnText: {
+    color: '#000',
+    fontWeight: '700',
+  },
+  closeModalButton: {
+    alignSelf: 'center',
+    marginTop: 16,
+    paddingVertical: 8,
+  },
+  closeModalText: {
+    color: colors.textSecondary,
+    fontWeight: '700',
+    letterSpacing: 1.5,
   },
 });

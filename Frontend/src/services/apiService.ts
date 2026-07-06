@@ -1,7 +1,7 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const BASE_URL = 'http://10.76.63.154:5000/api';
+const BASE_URL = 'http://192.168.8.108:5000/api';
 
 const api = axios.create({
   baseURL: BASE_URL,
@@ -20,8 +20,30 @@ api.interceptors.request.use(async (config) => {
   return config;
 });
 
+// Standardize error structures
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (!error.response) {
+      // Network Error
+      const networkError = {
+        success: false,
+        code: 'NETWORK_ERROR',
+        message: 'Network connection failed. Please check your connection and try again.'
+      };
+      return Promise.reject(networkError);
+    }
+    const backendError = error.response.data || {
+      success: false,
+      code: 'SERVER_ERROR',
+      message: error.message || 'An internal server error occurred.'
+    };
+    return Promise.reject(backendError);
+  }
+);
+
 export const authService = {
-  login: async (email, password) => {
+  login: async (email: string, password: string) => {
     try {
       const response = await api.post('/auth/login', { email, password });
       if (response.data.token) {
@@ -29,24 +51,91 @@ export const authService = {
         await AsyncStorage.setItem('userData', JSON.stringify(response.data.user));
       }
       return response.data;
-    } catch (error) {
-      console.error('Login Error:', error.response?.data || error.message);
-      throw error.response?.data || error;
+    } catch (error: any) {
+      throw error;
     }
   },
-  register: async (name, email, password) => {
+  register: async (name: string, email: string, password: string) => {
     try {
       const response = await api.post('/auth/register', { name, email, password });
       return response.data;
-    } catch (error) {
-      console.error('Registration Error:', error.response?.data || error.message);
-      throw error.response?.data || error;
+    } catch (error: any) {
+      throw error;
     }
   },
   logout: async () => {
     await AsyncStorage.removeItem('userToken');
     await AsyncStorage.removeItem('userData');
+    await AsyncStorage.removeItem('rememberMe');
   },
+  forgotPassword: async (email: string) => {
+    try {
+      const response = await api.post('/auth/forgot-password', { email });
+      return response.data;
+    } catch (error: any) {
+      throw error;
+    }
+  },
+  verifyResetOTP: async (email: string, otp: string) => {
+    try {
+      const response = await api.post('/auth/verify-reset-otp', { email, otp });
+      return response.data;
+    } catch (error: any) {
+      throw error;
+    }
+  },
+  resetPassword: async (email: string, otp: string, password: string) => {
+    try {
+      const response = await api.post('/auth/reset-password', { email, otp, password });
+      return response.data;
+    } catch (error: any) {
+      throw error;
+    }
+  },
+  sendVerification: async (email: string) => {
+    try {
+      const response = await api.post('/auth/send-verification', { email });
+      return response.data;
+    } catch (error: any) {
+      throw error;
+    }
+  },
+  verifyEmail: async (email: string, otp: string) => {
+    try {
+      const response = await api.post('/auth/verify-email', { email, otp });
+      return response.data;
+    } catch (error: any) {
+      throw error;
+    }
+  },
+  resendVerification: async (email: string) => {
+    try {
+      const response = await api.post('/auth/resend-verification', { email });
+      return response.data;
+    } catch (error: any) {
+      throw error;
+    }
+  },
+  validateToken: async () => {
+    try {
+      const response = await api.get('/auth/validate-token');
+      return response.data;
+    } catch (error: any) {
+      throw error;
+    }
+  },
+  googleLogin: async (email: string, name: string) => {
+    try {
+      const response = await api.post('/auth/google-login', { email, name });
+      if (response.data.token) {
+        await AsyncStorage.setItem('userToken', response.data.token);
+        await AsyncStorage.setItem('userData', JSON.stringify(response.data.user));
+      }
+      return response.data;
+    } catch (error: any) {
+      throw error;
+    }
+  }
 };
 
 export const marketService = {
@@ -93,6 +182,63 @@ export const walletService = {
       return response.data;
     } catch (error) {
       console.error('Error fetching wallet balance:', error);
+      throw error;
+    }
+  },
+  deposit: async (amount: number) => {
+    try {
+      const response = await api.post('/wallet/deposit', { amount });
+      return response.data;
+    } catch (error) {
+      console.error('Error depositing money:', error);
+      throw error;
+    }
+  },
+  getTransactions: async () => {
+    try {
+      const response = await api.get('/wallet/transactions');
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching transactions:', error);
+      throw error;
+    }
+  },
+};
+
+export const alertService = {
+  createAlert: async (symbol: string, targetPrice: number, alertType: 'ABOVE' | 'BELOW') => {
+    try {
+      const response = await api.post('/alerts', { symbol, targetPrice, alertType });
+      return response.data;
+    } catch (error: any) {
+      console.error('Error creating alert:', error.response?.data || error.message);
+      throw error.response?.data || error;
+    }
+  },
+  getUserAlerts: async () => {
+    try {
+      const response = await api.get('/alerts');
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching alerts:', error);
+      throw error;
+    }
+  },
+  deleteAlert: async (id: number) => {
+    try {
+      const response = await api.delete(`/alerts/${id}`);
+      return response.data;
+    } catch (error) {
+      console.error('Error deleting alert:', error);
+      throw error;
+    }
+  },
+  savePushToken: async (token: string) => {
+    try {
+      const response = await api.post('/alerts/push-token', { token });
+      return response.data;
+    } catch (error) {
+      console.error('Error saving push token:', error);
       throw error;
     }
   },

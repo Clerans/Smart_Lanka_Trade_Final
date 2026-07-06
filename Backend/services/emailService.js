@@ -41,4 +41,35 @@ const sendVerificationEmail = async (email, token) => {
   }
 };
 
-module.exports = { sendVerificationEmail };
+const sendPriceAlertEmail = async (email, symbol, targetPrice, currentPrice, alertType) => {
+  const mailOptions = {
+    from: `"SmartLankaTrade" <${process.env.EMAIL_USER}>`,
+    to: email,
+    subject: `🚀 Price Alert: ${symbol} hit ${targetPrice}`,
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #eee; border-radius: 10px;">
+        <h2 style="color: #4CAF50; text-align: center;">Price Alert Triggered!</h2>
+        <p>Hi there,</p>
+        <p>Your alert for <strong>${symbol}</strong> has been triggered.</p>
+        <div style="background-color: #f9f9f9; padding: 20px; border-radius: 5px; margin: 20px 0;">
+          <p style="margin: 5px 0;"><strong>Symbol:</strong> ${symbol}</p>
+          <p style="margin: 5px 0;"><strong>Target Price:</strong> ${targetPrice}</p>
+          <p style="margin: 5px 0;"><strong>Current Price:</strong> ${currentPrice}</p>
+          <p style="margin: 5px 0;"><strong>Alert Type:</strong> ${alertType === 'ABOVE' ? 'Price went above' : 'Price went below'}</p>
+        </div>
+        <p>Log in to the app to take action!</p>
+        <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
+        <p style="font-size: 12px; color: #aaa; text-align: center;">SmartLanka Trading Platform</p>
+      </div>
+    `
+  };
+
+  try {
+    await transporter.sendMail(mailOptions);
+    console.log(`✅ Price alert email sent to ${email}`);
+  } catch (error) {
+    console.error('❌ Price Alert Email Error:', error.message);
+  }
+};
+
+module.exports = { sendVerificationEmail, sendPriceAlertEmail };

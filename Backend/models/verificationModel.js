@@ -1,0 +1,104 @@
+const oracledb = require('oracledb');
+
+// Create a new password reset OTP
+exports.createPasswordResetOTP = async (userId, otp, expiresAt) => {
+  let connection;
+  try {
+    connection = await oracledb.getConnection();
+    await connection.execute(
+      `INSERT INTO SL_PASSWORD_RESET (USER_ID, OTP, EXPIRES_AT, USED)
+       VALUES (:userId, :otp, :expiresAt, 0)`,
+      { userId, otp, expiresAt }
+    );
+    await connection.commit();
+  } finally {
+    if (connection) await connection.close();
+  }
+};
+
+// Check if a password reset OTP is valid
+exports.findPasswordResetOTP = async (email, otp) => {
+  let connection;
+  try {
+    connection = await oracledb.getConnection();
+    // Retrieve OTP matching the email
+    const result = await connection.execute(
+      `SELECT r.ID, r.USER_ID, r.OTP, r.EXPIRES_AT, r.USED 
+       FROM SL_PASSWORD_RESET r
+       JOIN SL_USERS u ON r.USER_ID = u.ID
+       WHERE u.EMAIL = :email AND r.OTP = :otp AND r.USED = 0
+       ORDER BY r.EXPIRES_AT DESC`,
+      { email, otp },
+      { outFormat: oracledb.OUT_FORMAT_OBJECT }
+    );
+    return result.rows[0];
+  } finally {
+    if (connection) await connection.close();
+  }
+};
+
+// Mark a password reset OTP as used
+exports.markPasswordResetOTPUsed = async (resetId) => {
+  let connection;
+  try {
+    connection = await oracledb.getConnection();
+    await connection.execute(
+      `UPDATE SL_PASSWORD_RESET SET USED = 1 WHERE ID = :resetId`,
+      { resetId }
+    );
+    await connection.commit();
+  } finally {
+    if (connection) await connection.close();
+  }
+};
+
+// Create a new email verification OTP
+exports.createEmailVerificationOTP = async (userId, otp, expiresAt) => {
+  let connection;
+  try {
+    connection = await oracledb.getConnection();
+    await connection.execute(
+      `INSERT INTO SL_EMAIL_VERIFICATION (USER_ID, OTP, EXPIRES_AT, VERIFIED)
+       VALUES (:userId, :otp, :expiresAt, 0)`,
+      { userId, otp, expiresAt }
+    );
+    await connection.commit();
+  } finally {
+    if (connection) await connection.close();
+  }
+};
+
+// Find latest email verification OTP
+exports.findEmailVerificationOTP = async (email, otp) => {
+  let connection;
+  try {
+    connection = await oracledb.getConnection();
+    const result = await connection.execute(
+      `SELECT v.ID, v.USER_ID, v.OTP, v.EXPIRES_AT, v.VERIFIED 
+       FROM SL_EMAIL_VERIFICATION v
+       JOIN SL_USERS u ON v.USER_ID = u.ID
+       WHERE u.EMAIL = :email AND v.OTP = :otp AND v.VERIFIED = 0
+       ORDER BY v.EXPIRES_AT DESC`,
+      { email, otp },
+      { outFormat: oracledb.OUT_FORMAT_OBJECT }
+    );
+    return result.rows[0];
+  } finally {
+    if (connection) await connection.close();
+  }
+};
+
+// Mark email verification OTP as verified
+exports.markEmailVerificationOTPVerified = async (verificationId) => {
+  let connection;
+  try {
+    connection = await oracledb.getConnection();
+    await connection.execute(
+      `UPDATE SL_EMAIL_VERIFICATION SET VERIFIED = 1 WHERE ID = :verificationId`,
+      { verificationId }
+    );
+    await connection.commit();
+  } finally {
+    if (connection) await connection.close();
+  }
+};

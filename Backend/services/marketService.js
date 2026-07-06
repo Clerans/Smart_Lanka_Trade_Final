@@ -2,6 +2,14 @@ const axios = require("axios");
 
 // 1. Get crypto ticker from Binance (Price + 24h Change)
 async function getCryptoTicker(symbol = "BTCUSDT") {
+  // Special case for USDT/USDT (used for LKR/USDT rate alerts)
+  if (symbol === "USDTUSDT" || symbol === "USDT") {
+    return {
+      price: 1.0,
+      changePercent: 0
+    };
+  }
+
   const response = await axios.get(
     `https://api.binance.com/api/v3/ticker/24hr?symbol=${symbol}`
   );
@@ -45,9 +53,13 @@ async function getMultiplePricesInLKR(symbols = ["BTCUSDT", "ETHUSDT"], includeS
       let sparkline = [];
 
       if (includeSparkline) {
-        // Fetch last 24 1-hour candles
-        const klines = await axios.get(`https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=1h&limit=24`);
-        sparkline = klines.data.map(k => parseFloat(k[4])); // Closing prices
+        if (symbol === "USDTUSDT" || symbol === "USDT") {
+          sparkline = Array(24).fill(1.0);
+        } else {
+          // Fetch last 24 1-hour candles
+          const klines = await axios.get(`https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=1h&limit=24`);
+          sparkline = klines.data.map(k => parseFloat(k[4])); // Closing prices
+        }
       }
 
       return {
