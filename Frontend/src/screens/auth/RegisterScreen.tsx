@@ -1,11 +1,11 @@
 import * as React from 'react';
 const { useState } = React;
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, KeyboardAvoidingView, Platform, Dimensions, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, KeyboardAvoidingView, Platform, Dimensions, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { colors, typography, layout } from '../../theme';
-import { InputField, PrimaryButton } from '../../components';
+import { InputField, PrimaryButton, Toast, NetworkErrorScreen } from '../../components';
 import { authService } from '../../services/apiService';
 
 export const RegisterScreen = () => {
@@ -19,41 +19,84 @@ export const RegisterScreen = () => {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [agree, setAgree] = useState(false);
 
+  // Toast & Network states
+  const [toastVisible, setToastVisible] = useState(false);
+  const [toastMessage, setToastMessage] = useState('');
+  const [toastType, setToastType] = useState<'success' | 'error' | 'warning'>('success');
+  const [isNetworkError, setIsNetworkError] = useState(false);
+
   const { height } = Dimensions.get('window');
   const isSmallDevice = height < 700;
 
-  // Very basic strength calculation for UI
+  // Password requirements checks
+  const hasMinLength = password.length >= 8;
+  const hasUppercase = /[A-Z]/.test(password);
+  const hasLowercase = /[a-z]/.test(password);
+  const hasNumber = /\d/.test(password);
+  const hasSpecial = /[^A-Za-z0-9]/.test(password);
+
   const getStrengthLevel = () => {
+    let score = 0;
     if (password.length === 0) return 0;
-    if (password.length < 6) return 1;
-    if (password.length < 8) return 2;
-    return 3;
+    if (hasMinLength) score++;
+    if (hasUppercase && hasLowercase) score++;
+    if (hasNumber) score++;
+    if (hasSpecial) score++;
+    return score; // Max 4
   };
 
   const strength = getStrengthLevel();
 
+  const showToast = (message: string, type: 'success' | 'error' | 'warning') => {
+    setToastMessage(message);
+    setToastType(type);
+    setToastVisible(true);
+  };
+
   const handleRegister = async () => {
     if (!name || !email || !password) {
-      Alert.alert('Error', 'Please fill all fields');
+      showToast('Please fill in all fields', 'warning');
       return;
     }
+
+    // Email basic check
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      showToast('Please enter a valid email address', 'warning');
+      return;
+    }
+
+    // Password policy check
+    if (!hasMinLength || !hasUppercase || !hasLowercase || !hasNumber || !hasSpecial) {
+      showToast('Password does not meet complexity requirements.', 'error');
+      return;
+    }
+
     if (password !== confirmPassword) {
-      Alert.alert('Error', 'Passwords do not match');
+      showToast('Passwords do not match', 'warning');
       return;
     }
+
     if (!agree) {
-      Alert.alert('Error', 'You must agree to the Terms of Service and Privacy Policy');
+      showToast('You must agree to the Terms of Service and Privacy Policy', 'warning');
       return;
     }
 
     setLoading(true);
+    setIsNetworkError(false);
     try {
       const response = await authService.register(name, email, password);
-      Alert.alert('Success', 'Registration successful! Please check your email for verification.', [
-        { text: 'OK', onPress: () => navigation.navigate('Login') }
-      ]);
+      showToast('Registration successful! Redirecting to verification...', 'success');
+      setTimeout(() => {
+        // Redirect to OTP Verification passing the registered email and simulated OTP
+        navigation.navigate('OTPVerification', { email });
+      }, 2000);
     } catch (error: any) {
-      Alert.alert('Registration Failed', error.error || 'Connection error');
+      if (error.code === 'NETWORK_ERROR') {
+        setIsNetworkError(true);
+      } else {
+        showToast(error.message || 'Registration failed.', 'error');
+      }
     } finally {
       setLoading(false);
     }
@@ -61,6 +104,20 @@ export const RegisterScreen = () => {
 
   return (
     <SafeAreaView style={styles.safeArea}>
+      {isNetworkError && (
+        <NetworkErrorScreen
+          onRetry={() => {
+            setIsNetworkError(false);
+            handleRegister();
+          }}
+        />
+      )}
+      <Toast
+        visible={toastVisible}
+        message={toastMessage}
+        type={toastType}
+        onDismiss={() => setToastVisible(false)}
+      />
       <KeyboardAvoidingView
         style={styles.keyboardAvoiding}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -122,13 +179,56 @@ export const RegisterScreen = () => {
               <View style={[styles.strengthBar, strength >= 1 && styles.strengthActive]} />
               <View style={[styles.strengthBar, strength >= 2 && styles.strengthActive]} />
               <View style={[styles.strengthBar, strength >= 3 && styles.strengthActive]} />
-              <View style={styles.strengthBar} />
+              <View style={[styles.strengthBar, strength >= 4 && styles.strengthActive]} />
             </View>
             <View style={styles.strengthTextRow}>
-              <Text style={[styles.strengthLabel, strength >= 3 && { color: colors.accent }]}>
-                STRENGTH: {strength >= 3 ? 'STRONG' : strength > 0 ? 'WEAK' : 'NONE'}
+              <Text style={[styles.strengthLabel, strength >= 4 && { color: colors.accent }]}>
+                STRENGTH: {strength >= 4 ? 'STRONG' : strength >= 2 ? 'MEDIUM' : strength > 0 ? 'WEAK' : 'NONE'}
               </Text>
-              <Text style={styles.minCharText}>Min. 8 characters</Text>
+            </View>
+
+            {/* Password Checklist */}
+            <View style={styles.checklistContainer}>
+              <View style={styles.checklistItem}>
+                <MaterialIcons
+                  name={hasMinLength ? "check-circle" : "radio-button-unchecked"}
+                  size={14}
+                  color={hasMinLength ? colors.accent : colors.textSecondary}
+                />
+                <Text style={[styles.checklistText, hasMinLength && styles.checklistTextActive]}>Min. 8 characters</Text>
+              </View>
+              <View style={styles.checklistItem}>
+                <MaterialIcons
+                  name={hasUppercase ? "check-circle" : "radio-button-unchecked"}
+                  size={14}
+                  color={hasUppercase ? colors.accent : colors.textSecondary}
+                />
+                <Text style={[styles.checklistText, hasUppercase && styles.checklistTextActive]}>At least one uppercase letter</Text>
+              </View>
+              <View style={styles.checklistItem}>
+                <MaterialIcons
+                  name={hasLowercase ? "check-circle" : "radio-button-unchecked"}
+                  size={14}
+                  color={hasLowercase ? colors.accent : colors.textSecondary}
+                />
+                <Text style={[styles.checklistText, hasLowercase && styles.checklistTextActive]}>At least one lowercase letter</Text>
+              </View>
+              <View style={styles.checklistItem}>
+                <MaterialIcons
+                  name={hasNumber ? "check-circle" : "radio-button-unchecked"}
+                  size={14}
+                  color={hasNumber ? colors.accent : colors.textSecondary}
+                />
+                <Text style={[styles.checklistText, hasNumber && styles.checklistTextActive]}>At least one number</Text>
+              </View>
+              <View style={styles.checklistItem}>
+                <MaterialIcons
+                  name={hasSpecial ? "check-circle" : "radio-button-unchecked"}
+                  size={14}
+                  color={hasSpecial ? colors.accent : colors.textSecondary}
+                />
+                <Text style={[styles.checklistText, hasSpecial && styles.checklistTextActive]}>Special character (@$!%*?&)</Text>
+              </View>
             </View>
 
             <Text style={styles.sectionLabel}>CONFIRM PASSWORD</Text>
@@ -266,6 +366,24 @@ const styles = StyleSheet.create({
     ...typography.bodySmall,
     color: colors.textSecondary,
     fontSize: 12,
+  },
+  checklistContainer: {
+    marginBottom: 16,
+    paddingHorizontal: 4,
+  },
+  checklistItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  checklistText: {
+    ...typography.bodySmall,
+    color: colors.textSecondary,
+    fontSize: 12,
+    marginLeft: 8,
+  },
+  checklistTextActive: {
+    color: colors.accent,
   },
   termsContainer: {
     flexDirection: 'row',

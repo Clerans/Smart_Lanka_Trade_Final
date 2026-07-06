@@ -5,7 +5,7 @@ exports.findByEmail = async (email) => {
   try {
     connection = await oracledb.getConnection();
     const result = await connection.execute(
-      `SELECT ID, NAME, EMAIL, PASSWORD, IS_VERIFIED FROM SL_USERS WHERE EMAIL = :email`,
+      `SELECT ID, NAME, EMAIL, PASSWORD, IS_VERIFIED, FAILED_ATTEMPTS, ACCOUNT_LOCKED_UNTIL, LAST_LOGIN FROM SL_USERS WHERE EMAIL = :email`,
       [email],
       { outFormat: oracledb.OUT_FORMAT_OBJECT }
     );
@@ -95,3 +95,64 @@ exports.findAllUsers = async () => {
     if (connection) await connection.close();
   }
 };
+
+exports.updateFailedAttempts = async (userId, attempts) => {
+  let connection;
+  try {
+    connection = await oracledb.getConnection();
+    await connection.execute(
+      `UPDATE SL_USERS SET FAILED_ATTEMPTS = :attempts, UPDATED_AT = CURRENT_TIMESTAMP WHERE ID = :userId`,
+      { attempts, userId }
+    );
+    await connection.commit();
+  } finally {
+    if (connection) await connection.close();
+  }
+};
+
+exports.lockAccount = async (userId, lockUntil) => {
+  let connection;
+  try {
+    connection = await oracledb.getConnection();
+    await connection.execute(
+      `UPDATE SL_USERS 
+       SET FAILED_ATTEMPTS = 5, ACCOUNT_LOCKED_UNTIL = :lockUntil, UPDATED_AT = CURRENT_TIMESTAMP 
+       WHERE ID = :userId`,
+      { lockUntil, userId }
+    );
+    await connection.commit();
+  } finally {
+    if (connection) await connection.close();
+  }
+};
+
+exports.resetFailedAttemptsAndLogLogin = async (userId) => {
+  let connection;
+  try {
+    connection = await oracledb.getConnection();
+    await connection.execute(
+      `UPDATE SL_USERS 
+       SET FAILED_ATTEMPTS = 0, ACCOUNT_LOCKED_UNTIL = NULL, LAST_LOGIN = CURRENT_TIMESTAMP, UPDATED_AT = CURRENT_TIMESTAMP 
+       WHERE ID = :userId`,
+      { userId }
+    );
+    await connection.commit();
+  } finally {
+    if (connection) await connection.close();
+  }
+};
+
+exports.updatePassword = async (userId, hashedPassword) => {
+  let connection;
+  try {
+    connection = await oracledb.getConnection();
+    await connection.execute(
+      `UPDATE SL_USERS SET PASSWORD = :hashedPassword, UPDATED_AT = CURRENT_TIMESTAMP WHERE ID = :userId`,
+      { hashedPassword, userId }
+    );
+    await connection.commit();
+  } finally {
+    if (connection) await connection.close();
+  }
+};
+

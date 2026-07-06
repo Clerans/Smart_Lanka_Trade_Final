@@ -5,7 +5,9 @@ import {
     LoginScreen,
     RegisterScreen,
     OTPVerificationScreen,
-    KYCVerificationScreen
+    KYCVerificationScreen,
+    ForgotPasswordScreen,
+    ResetPasswordScreen
 } from '../screens';
 
 const Stack = createStackNavigator();
@@ -18,6 +20,8 @@ export const AuthStackNavigator = () => {
             <Stack.Screen name="Register" component={RegisterScreen} />
             <Stack.Screen name="OTPVerification" component={OTPVerificationScreen} />
             <Stack.Screen name="KYCVerification" component={KYCVerificationScreen} />
+            <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
+            <Stack.Screen name="ResetPassword" component={ResetPasswordScreen} />
         </Stack.Navigator>
     );
 };

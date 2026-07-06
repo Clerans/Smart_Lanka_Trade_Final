@@ -1,7 +1,7 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const BASE_URL = 'http://10.63.164.154:5000/api';
+const BASE_URL = 'http://192.168.8.108:5000/api';
 
 const api = axios.create({
   baseURL: BASE_URL,
@@ -20,6 +20,28 @@ api.interceptors.request.use(async (config) => {
   return config;
 });
 
+// Standardize error structures
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (!error.response) {
+      // Network Error
+      const networkError = {
+        success: false,
+        code: 'NETWORK_ERROR',
+        message: 'Network connection failed. Please check your connection and try again.'
+      };
+      return Promise.reject(networkError);
+    }
+    const backendError = error.response.data || {
+      success: false,
+      code: 'SERVER_ERROR',
+      message: error.message || 'An internal server error occurred.'
+    };
+    return Promise.reject(backendError);
+  }
+);
+
 export const authService = {
   login: async (email: string, password: string) => {
     try {
@@ -30,8 +52,7 @@ export const authService = {
       }
       return response.data;
     } catch (error: any) {
-      console.error('Login Error:', error.response?.data || error.message);
-      throw error.response?.data || error;
+      throw error;
     }
   },
   register: async (name: string, email: string, password: string) => {
@@ -39,14 +60,82 @@ export const authService = {
       const response = await api.post('/auth/register', { name, email, password });
       return response.data;
     } catch (error: any) {
-      console.error('Registration Error:', error.response?.data || error.message);
-      throw error.response?.data || error;
+      throw error;
     }
   },
   logout: async () => {
     await AsyncStorage.removeItem('userToken');
     await AsyncStorage.removeItem('userData');
+    await AsyncStorage.removeItem('rememberMe');
   },
+  forgotPassword: async (email: string) => {
+    try {
+      const response = await api.post('/auth/forgot-password', { email });
+      return response.data;
+    } catch (error: any) {
+      throw error;
+    }
+  },
+  verifyResetOTP: async (email: string, otp: string) => {
+    try {
+      const response = await api.post('/auth/verify-reset-otp', { email, otp });
+      return response.data;
+    } catch (error: any) {
+      throw error;
+    }
+  },
+  resetPassword: async (email: string, otp: string, password: string) => {
+    try {
+      const response = await api.post('/auth/reset-password', { email, otp, password });
+      return response.data;
+    } catch (error: any) {
+      throw error;
+    }
+  },
+  sendVerification: async (email: string) => {
+    try {
+      const response = await api.post('/auth/send-verification', { email });
+      return response.data;
+    } catch (error: any) {
+      throw error;
+    }
+  },
+  verifyEmail: async (email: string, otp: string) => {
+    try {
+      const response = await api.post('/auth/verify-email', { email, otp });
+      return response.data;
+    } catch (error: any) {
+      throw error;
+    }
+  },
+  resendVerification: async (email: string) => {
+    try {
+      const response = await api.post('/auth/resend-verification', { email });
+      return response.data;
+    } catch (error: any) {
+      throw error;
+    }
+  },
+  validateToken: async () => {
+    try {
+      const response = await api.get('/auth/validate-token');
+      return response.data;
+    } catch (error: any) {
+      throw error;
+    }
+  },
+  googleLogin: async (email: string, name: string) => {
+    try {
+      const response = await api.post('/auth/google-login', { email, name });
+      if (response.data.token) {
+        await AsyncStorage.setItem('userToken', response.data.token);
+        await AsyncStorage.setItem('userData', JSON.stringify(response.data.user));
+      }
+      return response.data;
+    } catch (error: any) {
+      throw error;
+    }
+  }
 };
 
 export const marketService = {

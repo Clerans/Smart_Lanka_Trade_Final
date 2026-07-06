@@ -1,15 +1,27 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import { MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
 import { colors, typography, layout } from '../../theme';
-import { PrimaryButton } from '../../components';
+import { PrimaryButton, Toast, NetworkErrorScreen } from '../../components';
+import { authService } from '../../services/apiService';
 
 export const OTPVerificationScreen = () => {
   const navigation = useNavigation<any>();
+  const route = useRoute<any>();
+  const email = route.params?.email || '';
+
   const [otp, setOtp] = useState<string>('');
   const [timer, setTimer] = useState(59);
+  const [loading, setLoading] = useState(false);
+
+  // Toast & Network error states
+  const [toastVisible, setToastVisible] = useState(false);
+  const [toastMessage, setToastMessage] = useState('');
+  const [toastType, setToastType] = useState<'success' | 'error' | 'warning'>('success');
+  const [isNetworkError, setIsNetworkError] = useState(false);
+  const [lastAction, setLastAction] = useState<'verify' | 'resend'>('verify');
 
   useEffect(() => {
     if (timer > 0) {
@@ -17,6 +29,12 @@ export const OTPVerificationScreen = () => {
       return () => clearInterval(interval);
     }
   }, [timer]);
+
+  const showToast = (message: string, type: 'success' | 'error' | 'warning') => {
+    setToastMessage(message);
+    setToastType(type);
+    setToastVisible(true);
+  };
 
   const handleKeyPress = (num: string) => {
     if (otp.length < 6) {
@@ -32,8 +50,75 @@ export const OTPVerificationScreen = () => {
     // Implement biometric auth logic
   };
 
+  const handleVerify = async () => {
+    if (otp.length < 6) {
+      showToast('Please enter the 6-digit OTP code', 'warning');
+      return;
+    }
+
+    setLoading(true);
+    setIsNetworkError(false);
+    setLastAction('verify');
+    try {
+      const response = await authService.verifyEmail(email, otp);
+      showToast(response.message || 'Email verified successfully!', 'success');
+      setTimeout(() => {
+        navigation.navigate('Login');
+      }, 2000);
+    } catch (error: any) {
+      if (error.code === 'NETWORK_ERROR') {
+        setIsNetworkError(true);
+      } else {
+        showToast(error.message || 'OTP verification failed.', 'error');
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResend = async () => {
+    setLoading(true);
+    setIsNetworkError(false);
+    setLastAction('resend');
+    try {
+      const response = await authService.resendVerification(email);
+      showToast('A new OTP has been sent to your email.', 'success');
+      if (response.otp) {
+        console.log(`[DEVELOPMENT] Resent Verification OTP: ${response.otp}`);
+        showToast(`Verification code sent! (Simulated code: ${response.otp})`, 'success');
+      }
+      setTimer(59);
+    } catch (error: any) {
+      if (error.code === 'NETWORK_ERROR') {
+        setIsNetworkError(true);
+      } else {
+        showToast(error.message || 'Failed to resend verification OTP.', 'error');
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <SafeAreaView style={styles.safeArea}>
+      {isNetworkError && (
+        <NetworkErrorScreen
+          onRetry={() => {
+            setIsNetworkError(false);
+            if (lastAction === 'verify') {
+              handleVerify();
+            } else {
+              handleResend();
+            }
+          }}
+        />
+      )}
+      <Toast
+        visible={toastVisible}
+        message={toastMessage}
+        type={toastType}
+        onDismiss={() => setToastVisible(false)}
+      />
       <ScrollView contentContainerStyle={styles.container}>
 
         {/* Header */}
@@ -53,7 +138,7 @@ export const OTPVerificationScreen = () => {
 
           <Text style={styles.mainTitle}>OTP Verification</Text>
           <Text style={styles.description}>
-            A verification code has been sent to your registered mobile number <Text style={styles.highlightText}>+94 ••••••1234</Text> for secure access.
+            A verification code has been sent to your email address <Text style={styles.highlightText}>{email || 'your registered email'}</Text> for secure access.
           </Text>
 
           {/* OTP Input UI */}
@@ -83,18 +168,22 @@ export const OTPVerificationScreen = () => {
                 00:{timer < 10 ? `0${timer}` : timer}
               </Text>
             </View>
-            <TouchableOpacity disabled={timer > 0}>
+            <TouchableOpacity disabled={timer > 0} onPress={handleResend}>
               <Text style={[styles.resendText, timer > 0 && styles.resendTextDisabled]}>
                 Resend OTP
               </Text>
             </TouchableOpacity>
           </View>
 
-          <PrimaryButton
-            title="Verify →"
-            onPress={() => navigation.navigate('KYCVerification')}
-            style={styles.verifyBtn}
-          />
+          {loading ? (
+            <ActivityIndicator color={colors.accent} size="large" style={{ marginBottom: 32 }} />
+          ) : (
+            <PrimaryButton
+              title="Verify →"
+              onPress={handleVerify}
+              style={styles.verifyBtn}
+            />
+          )}
 
           <Text style={styles.securityBadge}>
             SMARTLANKA TRADE SECURITY
