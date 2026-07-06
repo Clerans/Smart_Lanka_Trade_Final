@@ -71,6 +71,12 @@ exports.createUser = async (name, email, password, token) => {
       [userId]
     );
 
+    // Create Initial WALLETS (v3 Demo Trading Engine)
+    await connection.execute(
+      `INSERT INTO WALLETS (USER_ID, BALANCE_LKR) VALUES (:userId, 1000000.00)`,
+      [userId]
+    );
+
     await connection.commit();
     return userId;
   } catch (err) {

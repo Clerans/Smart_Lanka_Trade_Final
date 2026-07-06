@@ -8,7 +8,7 @@ import Svg, { Path } from 'react-native-svg';
 import { colors, typography, layout } from '../../theme';
 import { Card } from '../../components';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { marketService, walletService } from '../../services/apiService';
+import { marketService, walletService, portfolioService } from '../../services/apiService';
 import { SetAlertModal } from '../../components/SetAlertModal';
 
 // Helper to generate SVG path for sparklines
@@ -32,6 +32,9 @@ export const HomeScreen = () => {
   const [lkrPriceData, setLkrPriceData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [balance, setBalance] = useState<number | null>(null);
+  const [portfolioValue, setPortfolioValue] = useState<number | null>(null);
+  const [todaysProfit, setTodaysProfit] = useState<number | null>(null);
+  const [pnlPercent, setPnlPercent] = useState<number | null>(null);
   const [user, setUser] = useState<{ name: string } | null>(null);
   const [isAlertModalVisible, setIsAlertModalVisible] = useState(false);
 
@@ -47,8 +50,8 @@ export const HomeScreen = () => {
         // Fetch watchlist prices with sparkline data
         const marketResponse = await marketService.getMultiplePricesLKR(['BTCUSDT', 'ETHUSDT'], true);
         
-        // Fetch real wallet balance
-        const walletResponse = await walletService.getBalance();
+        // Fetch portfolio summary
+        const portfolioResponse = await portfolioService.getPortfolio();
         
         if (marketResponse.success) {
           const formatted = marketResponse.data.prices.map((p: any) => ({
@@ -62,8 +65,12 @@ export const HomeScreen = () => {
           setLkrPriceData(marketResponse.data);
         }
 
-        if (walletResponse.success) {
-          setBalance(walletResponse.data.balance);
+        if (portfolioResponse.success) {
+          const { summary } = portfolioResponse.data;
+          setBalance(summary.availableCash);
+          setPortfolioValue(summary.totalPortfolioValue);
+          setTodaysProfit(summary.todaysProfit);
+          setPnlPercent(summary.profitLossPercent);
         }
 
       } catch (error) {
@@ -107,11 +114,29 @@ export const HomeScreen = () => {
         <Card style={styles.balanceCard}>
           <Text style={styles.balanceLabel}>Est. Total Value</Text>
           <Text style={styles.balanceValue}>
-            LKR {balance ? (balance + 195000).toLocaleString(undefined, { minimumFractionDigits: 2 }) : '245,320.50'}
+            LKR {portfolioValue !== null ? portfolioValue.toLocaleString(undefined, { minimumFractionDigits: 2 }) : '1,000,000.00'}
           </Text>
-          <View style={styles.pnlPill}>
-            <MaterialIcons name="trending-up" size={14} color={colors.accent} />
-            <Text style={styles.pnlText}>+1.24% Today's PNL</Text>
+          <View style={styles.balanceFooterRow}>
+            <View style={[
+              styles.pnlPill,
+              todaysProfit !== null && todaysProfit < 0 ? styles.pnlPillRed : styles.pnlPillGreen
+            ]}>
+              <MaterialIcons 
+                name={todaysProfit !== null && todaysProfit >= 0 ? "trending-up" : "trending-down"} 
+                size={14} 
+                color={todaysProfit !== null && todaysProfit >= 0 ? colors.accent : colors.red} 
+              />
+              <Text style={[
+                styles.pnlText,
+                todaysProfit !== null && todaysProfit >= 0 ? { color: colors.accent } : { color: colors.red }
+              ]}>
+                {todaysProfit !== null && todaysProfit >= 0 ? '+' : ''}{pnlPercent !== null ? pnlPercent.toFixed(2) : '0.00'}% PNL
+              </Text>
+            </View>
+            <View style={styles.walletBalanceContainer}>
+              <Text style={styles.walletBalanceLabel}>Available: </Text>
+              <Text style={styles.walletBalanceValue}>LKR {balance !== null ? balance.toLocaleString(undefined, { maximumFractionDigits: 0 }) : '1,000,000'}</Text>
+            </View>
           </View>
           <MaterialIcons
             name="account-balance-wallet"
@@ -147,7 +172,7 @@ export const HomeScreen = () => {
           </TouchableOpacity>
           <TouchableOpacity 
             style={styles.actionCard}
-            onPress={() => { /* Navigation for History */ }}
+            onPress={() => navigation.navigate('Wallet', { screen: 'WalletOverview' })}
           >
             <MaterialIcons name="history" size={24} color={colors.accent} />
             <Text style={styles.actionCardText}>History</Text>
@@ -309,17 +334,41 @@ const styles = StyleSheet.create({
   pnlPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.accentMuted,
     alignSelf: 'flex-start',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 20,
   },
+  pnlPillGreen: {
+    backgroundColor: colors.accentMuted,
+  },
+  pnlPillRed: {
+    backgroundColor: colors.red + '22',
+  },
   pnlText: {
-    color: colors.accent,
     fontWeight: '600',
     fontSize: 12,
     marginLeft: 4,
+  },
+  balanceFooterRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  walletBalanceContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  walletBalanceLabel: {
+    ...typography.bodySmall,
+    color: colors.textSecondary,
+    fontSize: 11,
+  },
+  walletBalanceValue: {
+    ...typography.bodySmall,
+    color: colors.textPrimary,
+    fontWeight: '700',
+    fontSize: 11,
   },
   walletWatermark: {
     position: 'absolute',

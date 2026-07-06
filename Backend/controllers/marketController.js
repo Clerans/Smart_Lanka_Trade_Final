@@ -55,3 +55,21 @@ exports.getAllPrices = async (req, res) => {
     });
   }
 };
+
+exports.getLive = async (req, res) => {
+  try {
+    const { getLivePrices } = require("../services/marketService");
+    const data = await getLivePrices();
+    res.json({
+      success: true,
+      data
+    });
+  } catch (error) {
+    console.error('getLive Error:', error.message);
+    res.status(500).json({
+      success: false,
+      code: 'SERVER_ERROR',
+      message: 'Failed to fetch live market prices'
+    });
+  }
+};

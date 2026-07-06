@@ -173,6 +173,15 @@ export const marketService = {
       throw error;
     }
   },
+  getLivePrices: async () => {
+    try {
+      const response = await api.get('/market/live');
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching live market prices:', error);
+      throw error;
+    }
+  },
 };
 
 export const walletService = {
@@ -200,6 +209,15 @@ export const walletService = {
       return response.data;
     } catch (error) {
       console.error('Error fetching transactions:', error);
+      throw error;
+    }
+  },
+  getWalletDetails: async () => {
+    try {
+      const response = await api.get('/wallet');
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching wallet details:', error);
       throw error;
     }
   },
@@ -242,6 +260,51 @@ export const alertService = {
       throw error;
     }
   },
+};
+
+export const tradeService = {
+  buy: async (symbol: string, amountLKR: number) => {
+    try {
+      const response = await api.post('/trade/buy', { symbol, amountLKR });
+      return response.data;
+    } catch (error) {
+      console.error('Error executing buy trade:', error);
+      throw error;
+    }
+  },
+  sell: async (symbol: string, quantity: number) => {
+    try {
+      const response = await api.post('/trade/sell', { symbol, quantity });
+      return response.data;
+    } catch (error) {
+      console.error('Error executing sell trade:', error);
+      throw error;
+    }
+  }
+};
+
+export const portfolioService = {
+  getPortfolio: async () => {
+    try {
+      const response = await api.get('/portfolio');
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching portfolio:', error);
+      throw error;
+    }
+  }
+};
+
+export const transactionService = {
+  getTransactions: async () => {
+    try {
+      const response = await api.get('/transactions');
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching transaction history:', error);
+      throw error;
+    }
+  }
 };
 
 export default api;

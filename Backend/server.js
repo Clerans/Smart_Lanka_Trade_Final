@@ -17,6 +17,9 @@ app.use('/api/auth', require('./routes/authRoutes'));
 app.use('/api/wallet', require('./routes/walletRoutes'));
 app.use('/api/market', require('./routes/marketRoutes'));
 app.use('/api/alerts', require('./routes/alertRoutes'));
+app.use('/api/trade', require('./routes/tradeRoutes'));
+app.use('/api/portfolio', require('./routes/portfolioRoutes'));
+app.use('/api/transactions', require('./routes/transactionRoutes'));
 app.get('/api/test-market', (req, res) => res.json({ message: "Market route test works" }));
 
 // Start Price Monitor
