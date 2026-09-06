@@ -21,9 +21,9 @@ exports.getSingleRecommendation = async (req, res) => {
 
     const recommendation = await aiRecommendationService.getRecommendation(symbol, interval || '1h');
 
-    // Asynchronously save to Oracle DB for audit/research logging
+    // Save to Oracle DB for audit/research logging
     const userId = req.user ? req.user.id : null;
-    aiRecommendationModel.saveRecommendation(recommendation, userId);
+    await aiRecommendationModel.saveRecommendation(recommendation, userId);
 
     return res.status(200).json({
       success: true,
