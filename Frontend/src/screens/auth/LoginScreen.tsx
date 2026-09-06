@@ -278,34 +278,34 @@ export const LoginScreen = () => {
               <View style={styles.modalContent}>
                 <View style={styles.modalHeader}>
                   <FontAwesome5 name="google" size={20} color="#4285F4" style={{ marginRight: 10 }} />
-                  <Text style={styles.modalTitle}>Sign in with Google</Text>
+                  <Text style={styles.modalTitle}>Sign in with Google (Demo)</Text>
                 </View>
-                <Text style={styles.modalSubtitle}>Choose an account to continue to SmartLanka Trade</Text>
+                <Text style={styles.modalSubtitle}>Choose a demo account or enter your email to continue</Text>
 
-                {/* Account List */}
+                {/* Demo Account List */}
                 <TouchableOpacity
                   style={styles.googleAccountItem}
-                  onPress={() => handleGoogleLogin('michaelclerans01@gmail.com', 'Michael Clerans')}
+                  onPress={() => handleGoogleLogin('demo.trader@smartlanka.com', 'Demo Trader')}
                 >
                   <View style={styles.avatarCircle}>
-                    <Text style={styles.avatarText}>MC</Text>
+                    <Text style={styles.avatarText}>DT</Text>
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.accountName}>Michael Clerans</Text>
-                    <Text style={styles.accountEmail}>michaelclerans01@gmail.com</Text>
+                    <Text style={styles.accountName}>Demo Trader</Text>
+                    <Text style={styles.accountEmail}>demo.trader@smartlanka.com</Text>
                   </View>
                 </TouchableOpacity>
 
                 <TouchableOpacity
                   style={styles.googleAccountItem}
-                  onPress={() => handleGoogleLogin('test@smartlanka.com', 'Test User')}
+                  onPress={() => handleGoogleLogin('investor.demo@smartlanka.com', 'Institutional Demo')}
                 >
                   <View style={styles.avatarCircle}>
-                    <Text style={styles.avatarText}>TU</Text>
+                    <Text style={styles.avatarText}>ID</Text>
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.accountName}>Test User</Text>
-                    <Text style={styles.accountEmail}>test@smartlanka.com</Text>
+                    <Text style={styles.accountName}>Institutional Demo</Text>
+                    <Text style={styles.accountEmail}>investor.demo@smartlanka.com</Text>
                   </View>
                 </TouchableOpacity>
 

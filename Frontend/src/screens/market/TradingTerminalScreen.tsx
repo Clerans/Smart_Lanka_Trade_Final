@@ -6,10 +6,9 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { colors, typography, layout } from '../../theme';
 import { PrimaryButton, Card } from '../../components';
-import { marketService } from '../../services/apiService';
+import { marketService, aiService } from '../../services/apiService';
 
 const tradeableSymbols = ['BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'SOLUSDT', 'ADAUSDT', 'XRPUSDT', 'DOGEUSDT'];
-
 
 export const TradingTerminalScreen = () => {
   const navigation = useNavigation<any>();
@@ -18,6 +17,8 @@ export const TradingTerminalScreen = () => {
   const [tradeType, setTradeType] = useState<'BUY' | 'SELL'>('BUY');
   const [selectedSymbol, setSelectedSymbol] = useState(route.params?.symbol || 'BTCUSDT');
   const [lkrPriceData, setLkrPriceData] = useState<any>(null);
+  const [aiRec, setAiRec] = useState<any>(null);
+  const [loadingAi, setLoadingAi] = useState(false);
   const [loading, setLoading] = useState(true);
   const [quantity, setQuantity] = useState('0.0025');
   const [limitPrice, setLimitPrice] = useState('0');
@@ -40,28 +41,44 @@ export const TradingTerminalScreen = () => {
   }, []);
 
   useEffect(() => {
-    const fetchPrice = async () => {
+    let isMounted = true;
+    const fetchPriceAndAI = async () => {
       try {
-        const response = await marketService.getPriceLKR(selectedSymbol);
-        if (response.success) {
-          setLkrPriceData(response.data);
-          const price = response.data.priceLKR;
-          // Use more precision for cheap coins so they don't show as "0"
-          const formattedPrice = price < 10 
-            ? price.toFixed(4) 
-            : Math.round(price).toString();
-          setLimitPrice(formattedPrice);
+        setLoadingAi(true);
+        const [priceRes, aiRes] = await Promise.allSettled([
+          marketService.getPriceLKR(selectedSymbol),
+          aiService.getRecommendation(selectedSymbol, '1h')
+        ]);
+
+        if (isMounted) {
+          if (priceRes.status === 'fulfilled' && priceRes.value.success) {
+            setLkrPriceData(priceRes.value.data);
+            const price = priceRes.value.data.priceLKR;
+            const formattedPrice = price < 10 
+              ? price.toFixed(4) 
+              : Math.round(price).toString();
+            setLimitPrice(formattedPrice);
+          }
+          if (aiRes.status === 'fulfilled' && aiRes.value?.data) {
+            setAiRec(aiRes.value.data);
+          }
         }
       } catch (error) {
-        console.error('Failed to fetch price:', error);
+        console.error('Failed to fetch price and AI data:', error);
       } finally {
-        setLoading(false);
+        if (isMounted) {
+          setLoading(false);
+          setLoadingAi(false);
+        }
       }
     };
 
-    fetchPrice();
-    const interval = setInterval(fetchPrice, 30000);
-    return () => clearInterval(interval);
+    fetchPriceAndAI();
+    const interval = setInterval(fetchPriceAndAI, 30000);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
   }, [selectedSymbol]);
 
   const filteredPickerCoins = allCoins.filter(coin => 
@@ -169,6 +186,30 @@ export const TradingTerminalScreen = () => {
                 )}
               </ScrollView>
             </View>
+          )}
+
+          {/* Live AI Recommendation Banner */}
+          {aiRec && (
+            <TouchableOpacity 
+              style={styles.aiBannerCard}
+              activeOpacity={0.8}
+              onPress={() => navigation.navigate('AIAnalytics')}
+            >
+              <View style={styles.aiBannerLeft}>
+                <View style={[
+                  styles.aiActionPill,
+                  aiRec.recommendation === 'BUY' ? styles.aiPillBuy :
+                  aiRec.recommendation === 'SELL' ? styles.aiPillSell : styles.aiPillHold
+                ]}>
+                  <Text style={styles.aiActionPillText}>AI: {aiRec.recommendation}</Text>
+                </View>
+                <Text style={styles.aiConfidenceText}>{aiRec.confidence}% Confidence</Text>
+                <Text style={styles.aiRiskText}>• {aiRec.risk} RISK</Text>
+              </View>
+              <View style={styles.aiBannerRight}>
+                <Text style={styles.aiDetailsLink}>Analysis →</Text>
+              </View>
+            </TouchableOpacity>
           )}
 
           {/* Trade Form */}
@@ -563,5 +604,59 @@ const styles = StyleSheet.create({
   },
   syncBtn: {
     padding: 8,
+  },
+  aiBannerCard: {
+    marginHorizontal: 24,
+    marginBottom: 16,
+    backgroundColor: colors.bgCard,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  aiBannerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    flex: 1,
+  },
+  aiActionPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+    marginRight: 8,
+  },
+  aiPillBuy: { backgroundColor: colors.accent },
+  aiPillSell: { backgroundColor: colors.red },
+  aiPillHold: { backgroundColor: colors.yellow },
+  aiActionPillText: {
+    color: '#000',
+    fontWeight: '800',
+    fontSize: 11,
+  },
+  aiConfidenceText: {
+    ...typography.bodySmall,
+    color: colors.textPrimary,
+    fontWeight: '600',
+    fontSize: 12,
+    marginRight: 6,
+  },
+  aiRiskText: {
+    ...typography.bodySmall,
+    color: colors.textSecondary,
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  aiBannerRight: {
+    marginLeft: 8,
+  },
+  aiDetailsLink: {
+    color: colors.accent,
+    fontWeight: '700',
+    fontSize: 12,
   },
 });

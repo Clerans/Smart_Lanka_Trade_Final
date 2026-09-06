@@ -204,10 +204,11 @@ async function runBacktest(config = {}) {
     const sellReturns = [];
     const holdReturns = [];
 
+    // Precise 3-Class Classification Evaluation
     evaluations.forEach(e => {
       const out = e.outcomes[h];
-      const pred = e.recommendation;
-      const act = out.actualDirection;
+      const pred = e.recommendation; // 'BUY', 'HOLD', 'SELL'
+      const act = out.actualDirection; // 'UP', 'NEUTRAL', 'DOWN'
 
       if (matrix[pred] && matrix[pred][act] !== undefined) {
         matrix[pred][act]++;
@@ -215,31 +216,36 @@ async function runBacktest(config = {}) {
 
       if (out.isCorrect) correctCount++;
 
-      if (pred === 'BUY') {
-        buyReturns.push(out.returnPct);
-        if (act === 'UP') tpBuy++;
-        else fpBuy++;
-        if (act === 'UP' && pred !== 'BUY') fnBuy++;
-      } else if (pred === 'SELL') {
-        sellReturns.push(out.returnPct);
-        if (act === 'DOWN') tpSell++;
-        else fpSell++;
-        if (act === 'DOWN' && pred !== 'SELL') fnSell++;
-      } else {
-        holdReturns.push(out.returnPct);
-        if (act === 'NEUTRAL') tpHold++;
-        else fpHold++;
-        if (act === 'NEUTRAL' && pred !== 'HOLD') fnHold++;
-      }
+      // Class 1: BUY (Mapping: BUY -> UP)
+      if (pred === 'BUY' && act === 'UP') tpBuy++;
+      else if (pred === 'BUY' && act !== 'UP') fpBuy++;
+      else if (pred !== 'BUY' && act === 'UP') fnBuy++;
+
+      // Class 2: SELL (Mapping: SELL -> DOWN)
+      if (pred === 'SELL' && act === 'DOWN') tpSell++;
+      else if (pred === 'SELL' && act !== 'DOWN') fpSell++;
+      else if (pred !== 'SELL' && act === 'DOWN') fnSell++;
+
+      // Class 3: HOLD (Mapping: HOLD -> NEUTRAL)
+      if (pred === 'HOLD' && act === 'NEUTRAL') tpHold++;
+      else if (pred === 'HOLD' && act !== 'NEUTRAL') fpHold++;
+      else if (pred !== 'HOLD' && act === 'NEUTRAL') fnHold++;
+
+      if (pred === 'BUY') buyReturns.push(out.returnPct);
+      else if (pred === 'SELL') sellReturns.push(out.returnPct);
+      else holdReturns.push(out.returnPct);
     });
 
-    const buyMetrics = calculateClassificationMetrics(tpBuy, fpBuy, fnBuy, evaluations.filter(e => e.recommendation === 'BUY').length);
-    const sellMetrics = calculateClassificationMetrics(tpSell, fpSell, fnSell, evaluations.filter(e => e.recommendation === 'SELL').length);
-    const holdMetrics = calculateClassificationMetrics(tpHold, fpHold, fnHold, evaluations.filter(e => e.recommendation === 'HOLD').length);
+    const buyMetrics = calculateClassificationMetrics(tpBuy, fpBuy, fnBuy, evaluations.length);
+    const sellMetrics = calculateClassificationMetrics(tpSell, fpSell, fnSell, evaluations.length);
+    const holdMetrics = calculateClassificationMetrics(tpHold, fpHold, fnHold, evaluations.length);
 
+    // Macro Precision & Macro Recall (Arithmetic Mean of 3 Classes)
     const macroPrecision = (buyMetrics.precision + sellMetrics.precision + holdMetrics.precision) / 3;
     const macroRecall = (buyMetrics.recall + sellMetrics.recall + holdMetrics.recall) / 3;
-    const macroF1 = (macroPrecision + macroRecall) > 0 ? (2 * macroPrecision * macroRecall) / (macroPrecision + macroRecall) : 0;
+    
+    // Macro F1 (Arithmetic Mean of Class-Level F1 Scores)
+    const macroF1 = (buyMetrics.f1Score + sellMetrics.f1Score + holdMetrics.f1Score) / 3;
     const overallAccuracy = total > 0 ? correctCount / total : 0;
 
     const avgBuyReturn = buyReturns.length > 0 ? buyReturns.reduce((a, b) => a + b, 0) / buyReturns.length : 0;
@@ -259,9 +265,11 @@ async function runBacktest(config = {}) {
       averageBuyReturnPct: parseFloat(avgBuyReturn.toFixed(2)),
       averageSellReturnPct: parseFloat(avgSellReturn.toFixed(2)),
       averageHoldReturnPct: parseFloat(avgHoldReturn.toFixed(2)),
-      buyPrecision: buyMetrics.precision,
-      sellPrecision: sellMetrics.precision,
-      holdPrecision: holdMetrics.precision
+      classMetrics: {
+        BUY: { tp: tpBuy, fp: fpBuy, fn: fnBuy, precision: buyMetrics.precision, recall: buyMetrics.recall, f1Score: buyMetrics.f1Score },
+        SELL: { tp: tpSell, fp: fpSell, fn: fnSell, precision: sellMetrics.precision, recall: sellMetrics.recall, f1Score: sellMetrics.f1Score },
+        HOLD: { tp: tpHold, fp: fpHold, fn: fnHold, precision: holdMetrics.precision, recall: holdMetrics.recall, f1Score: holdMetrics.f1Score }
+      }
     };
 
     confusionMatrices[h] = matrix;
@@ -330,9 +338,11 @@ async function runBacktest(config = {}) {
   }
 
   // --- OFFLINE PAPER TRADING SIMULATION (LKR 1,000,000) ---
+  const usdToLkrRate = config.usdToLkrRate || 328.20;
   let capitalLKR = startingCapitalLKR;
   let holdings = 0;
-  let tradeCount = 0;
+  let entryCostLKR = 0;
+  let completedTrades = 0;
   let winningTrades = 0;
   let losingTrades = 0;
   let peakEquity = capitalLKR;
@@ -341,26 +351,31 @@ async function runBacktest(config = {}) {
 
   for (let i = 0; i < evaluations.length; i++) {
     const e = evaluations[i];
-    const priceLKR = e.price * 328.2; // USD to LKR conversion factor
+    const priceLKR = e.price * usdToLkrRate;
 
     if (e.recommendation === 'BUY' && capitalLKR > 10000 && holdings === 0) {
-      // Allocate 50% capital
+      // Allocate 50% available capital to position
       const tradeAmount = capitalLKR * 0.5;
       const fee = tradeAmount * TAKER_FEE_PCT;
       holdings = (tradeAmount - fee) / priceLKR;
+      entryCostLKR = tradeAmount;
       capitalLKR -= tradeAmount;
-      tradeCount++;
     } else if (e.recommendation === 'SELL' && holdings > 0) {
-      const proceeds = holdings * priceLKR;
-      const fee = proceeds * TAKER_FEE_PCT;
-      const netProceeds = proceeds - fee;
-      const entryEstimated = (proceeds / (1 + (e.outcomes[1]?.returnPct || 0) / 100));
-      if (netProceeds > entryEstimated) winningTrades++;
-      else losingTrades++;
+      // Close open position (Entry + Exit = 1 Completed Trade)
+      const grossProceeds = holdings * priceLKR;
+      const fee = grossProceeds * TAKER_FEE_PCT;
+      const netProceeds = grossProceeds - fee;
+
+      completedTrades++;
+      if (netProceeds > entryCostLKR) {
+        winningTrades++;
+      } else {
+        losingTrades++;
+      }
 
       capitalLKR += netProceeds;
       holdings = 0;
-      tradeCount++;
+      entryCostLKR = 0;
     }
 
     const currentTotalEquity = capitalLKR + (holdings * priceLKR);
@@ -369,21 +384,42 @@ async function runBacktest(config = {}) {
     if (currentDrawdown > maxDrawdownPct) maxDrawdownPct = currentDrawdown;
   }
 
-  // Liquidate at end of backtest period
-  const finalPriceLKR = evaluations[evaluations.length - 1].price * 328.2;
-  const finalEquityLKR = capitalLKR + (holdings * finalPriceLKR);
+  // Final liquidation of any open position at the end of the backtesting window
+  if (holdings > 0 && evaluations.length > 0) {
+    const finalPriceLKR = evaluations[evaluations.length - 1].price * usdToLkrRate;
+    const grossProceeds = holdings * finalPriceLKR;
+    const fee = grossProceeds * TAKER_FEE_PCT;
+    const netProceeds = grossProceeds - fee;
+
+    completedTrades++;
+    if (netProceeds > entryCostLKR) {
+      winningTrades++;
+    } else {
+      losingTrades++;
+    }
+
+    capitalLKR += netProceeds;
+    holdings = 0;
+    entryCostLKR = 0;
+  }
+
+  const finalEquityLKR = capitalLKR;
   const totalReturnPct = ((finalEquityLKR - startingCapitalLKR) / startingCapitalLKR) * 100;
-  const winRatePct = tradeCount > 0 ? (winningTrades / tradeCount) * 100 : 0;
+  const winRatePct = completedTrades > 0 ? (winningTrades / completedTrades) * 100 : 0;
 
   const paperTradingSimulation = {
     startingCapitalLKR: parseFloat(startingCapitalLKR.toFixed(2)),
     endingEquityLKR: parseFloat(finalEquityLKR.toFixed(2)),
+    realizedPnLLKR: parseFloat((finalEquityLKR - startingCapitalLKR).toFixed(2)),
     totalReturnPct: parseFloat(totalReturnPct.toFixed(2)),
-    totalTrades: tradeCount,
+    completedTrades,
     winningTrades,
     losingTrades,
     winRatePct: parseFloat(winRatePct.toFixed(2)),
-    maxDrawdownPct: parseFloat(maxDrawdownPct.toFixed(2))
+    maxDrawdownPct: parseFloat(maxDrawdownPct.toFixed(2)),
+    takerFeeRate: TAKER_FEE_PCT,
+    usdToLkrRate,
+    usdToLkrType: 'fixed_configurable'
   };
 
   return {

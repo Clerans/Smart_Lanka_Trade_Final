@@ -1,14 +1,14 @@
 # Empirical Evaluation and Backtesting of the SmartLanka Trade AI Recommendation Engine
 
 ## Abstract
-This document provides the formal research methodology, empirical evaluation metrics, and backtesting performance analysis for the **SmartLanka Trade AI-Assisted Multi-Factor Technical Indicator Recommendation Engine**. The evaluation was executed on historical hourly ($1\text{h}$) OHLCV candlestick data across seven major digital asset pairs quoted against USDT on the Binance exchange, adhering strictly to a **walk-forward, zero-data-leakage** simulation protocol.
+This document presents the empirical research methodology, evaluation framework, and empirical backtesting results for the **SmartLanka Trade AI-Assisted Multi-Factor Technical Indicator Recommendation Engine**. The evaluation was executed on historical 1-hour ($1\text{h}$) OHLCV candlestick data across seven major digital asset pairs quoted against USDT on the Binance exchange, adhering strictly to a **walk-forward, zero-lookahead-leakage** simulation protocol.
 
 ---
 
 ## 1. System Architecture & Methodology
 
 ### 1.1 Algorithmic Classification
-The SmartLanka Trade recommendation engine is an **AI-assisted, multi-factor rule-and-statistical scoring engine**. It combines momentum, trend-following, mean-reversion, and volatility indicators into an aggregate weighted score $S \in \mathbb{R}$:
+The SmartLanka Trade recommendation engine is categorized academically as an **AI-assisted multi-factor technical-indicator recommendation engine** (rule-and-statistical multi-factor heuristic ensemble). It does not employ an offline-trained deep neural network or offline machine learning weight optimization; rather, it combines momentum, trend-following, mean-reversion, and volume confirmation indicators into an aggregate weighted score $S \in \mathbb{R}$:
 
 $$S = \sum_{i=1}^{K} w_i \cdot I_i$$
 
@@ -21,8 +21,8 @@ where each indicator signal $I_i \in \{-1.5, -1.0, -0.5, 0.0, +0.5, +1.0, +1.5\}
    - $\text{EMA}_{20} > \text{SMA}_{20}$: Short-term momentum acceleration ($w = +1.0$).
 2. **Relative Strength Index (RSI 14)**:
    - $50 \le \text{RSI} \le 70$: Steady bullish momentum ($w = +1.5$).
-   - $\text{RSI} < 30$: Deeply oversold accumulation zone ($w = +1.0$).
-   - $\text{RSI} > 70$: Overbought warning ($w = -0.5$).
+   - $\text{RSI} < 30$: Oversold accumulation zone ($w = +1.0$).
+   - $\text{RSI} > 70$: Overbought caution ($w = -0.5$).
    - $\text{RSI} < 50$: Bearish momentum ($w = -1.5$).
 3. **Moving Average Convergence Divergence (MACD 12, 26, 9)**:
    - $\text{MACD Histogram} > 0$: Positive momentum expansion ($w = +1.5$).
@@ -46,11 +46,11 @@ where each indicator signal $I_i \in \{-1.5, -1.0, -0.5, 0.0, +0.5, +1.0, +1.5\}
 ## 2. Zero-Data-Leakage Backtesting Protocol
 
 ### 2.1 Chronological Walk-Forward Pipeline
-To guarantee complete scientific rigor and eliminate lookahead bias:
-1. At timestamp $T$, the engine is passed only the sub-array of historical candles $[C_0, C_1, \dots, C_T]$.
-2. All technical indicators, statistical parameters, and signals are computed strictly using data available at or before $T$.
+To guarantee scientific validity and eliminate lookahead bias:
+1. At evaluation timestamp $T$, the engine is supplied only with the historical candle sub-array $[C_0, C_1, \dots, C_T]$.
+2. All technical indicators, moving averages, and signals are computed strictly using observations at or prior to $T$.
 3. The recommendation $\hat{y}_T \in \{\text{BUY}, \text{HOLD}, \text{SELL}\}$ is recorded.
-4. Future price returns are inspected only after $\hat{y}_T$ is locked:
+4. Future price returns are inspected only after $\hat{y}_T$ is generated:
    - **$1\text{h}$ Horizon**: Candle $T+1$ closing price.
    - **$4\text{h}$ Horizon**: Candle $T+4$ closing price.
    - **$24\text{h}$ Horizon**: Candle $T+24$ closing price.
@@ -59,86 +59,99 @@ To guarantee complete scientific rigor and eliminate lookahead bias:
 The future percentage return is defined as:
 $$R_{T, h} = \frac{P_{T+h} - P_T}{P_T} \times 100\%$$
 
-The true market movement $y_{T, h}$ is categorized according to volatility-adjusted thresholds:
+The actual market outcome $y_{T, h}$ is categorized according to volatility-adjusted thresholds:
 - $y_{T, h} = \text{UP}$ if $R_{T, h} > +\theta_h$
 - $y_{T, h} = \text{DOWN}$ if $R_{T, h} < -\theta_h$
 - $y_{T, h} = \text{NEUTRAL}$ if $|R_{T, h}| \le \theta_h$
 
 Where $\theta_{1\text{h}} = 0.35\%$, $\theta_{4\text{h}} = 0.75\%$, and $\theta_{24\text{h}} = 1.50\%$.
 
+### 2.3 Macro Metric Formulations
+For each of the three classes ($\text{BUY} \rightarrow \text{UP}$, $\text{HOLD} \rightarrow \text{NEUTRAL}$, $\text{SELL} \rightarrow \text{DOWN}$):
+$$\text{Precision}_c = \frac{\text{TP}_c}{\text{TP}_c + \text{FP}_c}, \quad \text{Recall}_c = \frac{\text{TP}_c}{\text{TP}_c + \text{FN}_c}, \quad \text{F1}_c = \frac{2 \cdot \text{Precision}_c \cdot \text{Recall}_c}{\text{Precision}_c + \text{Recall}_c}$$
+
+The Macro metrics are computed as the arithmetic mean across all three classes:
+$$\text{Macro Precision} = \frac{\text{Precision}_{\text{BUY}} + \text{Precision}_{\text{HOLD}} + \text{Precision}_{\text{SELL}}}{3}$$
+$$\text{Macro Recall} = \frac{\text{Recall}_{\text{BUY}} + \text{Recall}_{\text{HOLD}} + \text{Recall}_{\text{SELL}}}{3}$$
+$$\text{Macro F1} = \frac{\text{F1}_{\text{BUY}} + \text{F1}_{\text{HOLD}} + \text{F1}_{\text{SELL}}}{3}$$
+
 ---
 
-## 3. Empirical Results Across 7 Cryptocurrency Assets
+## 3. Empirical Results Across 7 Cryptocurrency Assets (1h Horizon)
 
-Evaluated on $500$ hourly candles ($426$ walk-forward evaluation points per asset):
+Evaluated on $500$ hourly candles ($426$ walk-forward evaluation points per asset, $2,982$ total evaluation points):
 
-| Asset | Samples | Accuracy ($1\text{h}$) | Precision | Recall | Macro F1 | Avg BUY Return ($1\text{h}$) | Avg BUY Return ($24\text{h}$) |
+| Asset | Evaluated Points | Directional Accuracy | Macro Precision | Macro Recall | Macro F1 | Avg BUY Return ($1\text{h}$) | Paper Trading Return (%) |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| **BTCUSDT** | 426 | **31.92%** | 0.3229 | 1.0000 | **0.4882** | +0.08% | **+0.97%** |
-| **ETHUSDT** | 426 | **31.22%** | 0.3174 | 1.0000 | **0.4819** | +0.07% | **+0.84%** |
-| **BNBUSDT** | 426 | **29.81%** | 0.3130 | 1.0000 | **0.4767** | +0.06% | **+0.79%** |
-| **SOLUSDT** | 426 | **34.27%** | 0.3369 | 1.0000 | **0.5040** | +0.12% | **+1.18%** |
-| **XRPUSDT** | 426 | **33.57%** | 0.3565 | 1.0000 | **0.5257** | +0.12% | **+1.05%** |
-| **ADAUSDT** | 426 | **33.33%** | 0.3358 | 1.0000 | **0.5027** | +0.14% | **+1.22%** |
-| **DOGEUSDT** | 426 | **32.16%** | 0.3276 | 1.0000 | **0.4935** | +0.11% | **+1.10%** |
+| **BTCUSDT** | 426 | **31.92%** | 0.3229 | 0.3112 | 0.2669 | +0.08% | +8.48% |
+| **ETHUSDT** | 426 | **31.22%** | 0.3181 | 0.3059 | 0.2811 | +0.07% | +6.21% |
+| **BNBUSDT** | 426 | **29.58%** | 0.3116 | 0.3160 | 0.2612 | +0.06% | +3.14% |
+| **SOLUSDT** | 426 | **34.04%** | 0.3354 | 0.3365 | 0.3213 | +0.12% | +11.45% |
+| **XRPUSDT** | 426 | **33.80%** | 0.3584 | 0.3537 | 0.3354 | +0.12% | +9.80% |
+| **ADAUSDT** | 426 | **33.33%** | 0.3358 | 0.3346 | 0.3294 | +0.14% | +7.62% |
+| **DOGEUSDT** | 426 | **32.16%** | 0.3273 | 0.3239 | 0.3148 | +0.10% | +5.30% |
 
 ---
 
 ## 4. Multi-Horizon Predictive Analysis (BTCUSDT)
 
-| Horizon | Sample Size | Directional Accuracy | Macro Precision | Macro F1 | Avg BUY Return | Avg SELL Return | Avg HOLD Return |
-| :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| **$1\text{h}$** | 426 | 31.92% | 0.3229 | 0.4882 | **+0.08%** | +0.02% | +0.04% |
-| **$4\text{h}$** | 426 | 31.92% | 0.3185 | 0.4831 | **+0.22%** | +0.06% | +0.32% |
-| **$24\text{h}$** | 426 | 31.69% | 0.3059 | 0.4685 | **+0.97%** | +0.51% | +1.69% |
+| Horizon | Sample Size | Directional Accuracy | Macro Precision | Macro Recall | Macro F1 | Avg BUY Return | Avg SELL Return | Avg HOLD Return |
+| :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| **$1\text{h}$** | 426 | 31.92% | 0.3229 | 0.3112 | 0.2669 | **+0.08%** | +0.02% | +0.04% |
+| **$4\text{h}$** | 426 | 31.92% | 0.3185 | 0.3267 | 0.2759 | **+0.22%** | +0.06% | +0.32% |
+| **$24\text{h}$** | 426 | 31.92% | 0.3084 | 0.3115 | 0.2920 | **+0.97%** | +0.51% | +1.63% |
 
 ### 4.1 Confusion Matrix ($1\text{h}$ Horizon, BTCUSDT)
-| Predicted \ Actual | Actual UP | Actual NEUTRAL | Actual DOWN |
-| :--- | :---: | :---: | :---: |
-| **BUY** | **28** | 122 | 26 |
-| **HOLD** | 25 | **97** | 14 |
-| **SELL** | 17 | 86 | **11** |
+| Predicted \ Actual | Actual UP | Actual NEUTRAL | Actual DOWN | Row Total (Predictions) |
+| :--- | :---: | :---: | :---: | :---: |
+| **BUY** | **28** | 122 | 26 | 176 |
+| **HOLD** | 25 | **97** | 14 | 136 |
+| **SELL** | 17 | 86 | **11** | 114 |
+| **Column Total (Outcomes)** | 70 | 305 | 51 | **426 Total Points** |
 
 ---
 
-## 5. Confidence & Risk Stratification
+## 5. Confidence & Risk Stratification (BTCUSDT)
 
 ### 5.1 Model Confidence Stratification
 | Confidence Band | Sample Count | Directional Accuracy | Average Horizon Return |
 | :--- | :---: | :---: | :---: |
-| **$90 - 100\%$** | 118 | **38.14%** | **+0.12%** |
-| **$80 - 89\%$** | 142 | 32.39% | +0.06% |
-| **$70 - 79\%$** | 96 | 29.17% | +0.04% |
-| **$50 - 69\%$** | 70 | 25.71% | +0.01% |
+| **$90 - 100\%$** | 136 | 15.44% | +0.07% |
+| **$80 - 89\%$** | 176 | 19.32% | +0.05% |
+| **$70 - 79\%$** | 114 | 71.05% | +0.03% |
+| **$50 - 69\%$** | 0 | 0.00% | 0.00% |
+| **$0 - 49\%$** | 0 | 0.00% | 0.00% |
 
 ### 5.2 Risk Tier Stratification
-| Risk Tier | Sample Count | Directional Accuracy | Volatility Profile |
+| Risk Tier | Sample Count | Directional Accuracy | Average Horizon Return |
 | :--- | :---: | :---: | :---: |
-| **LOW** | 148 | **36.49%** | Controlled, tight ATR |
-| **MEDIUM** | 212 | 30.19% | Normal market noise |
-| **HIGH** | 66 | 25.76% | Elevated momentum divergence |
+| **LOW** | 284 | 13.03% | +0.05% |
+| **MEDIUM** | 118 | 74.58% | +0.01% |
+| **HIGH** | 24 | 45.83% | +0.29% |
 
 ---
 
-## 6. Offline Paper Trading Simulation
+## 6. Offline Paper Trading Simulation (BTCUSDT)
 
-- **Initial Capital**: $\text{LKR } 1,000,000.00$ (Offline Virtual Capital)
+- **Initial Capital**: $\text{LKR } 1,000,000.00$ (Virtual Balance)
 - **Simulated Taker Fee**: $0.10\%$ per executed leg
-- **Simulated Asset**: $\text{BTC/LKR}$ over 426 hours
-- **Total Executed Trades**: 28
-- **Simulated Win Rate**: $57.14\%$
-- **Maximum Drawdown**: $4.82\%$
-- **Net Simulated Equity**: $\text{LKR } 1,038,420.50$ ($+3.84\%$)
+- **Simulated Asset**: $\text{BTC/LKR}$ (Configurable Rate: $1\text{ USD} = 328.20\text{ LKR}$)
+- **Completed Trades (Entry + Exit)**: 12
+- **Winning Trades**: 4
+- **Losing Trades**: 8
+- **Simulated Win Rate**: $33.33\%$
+- **Maximum Drawdown**: $3.39\%$
+- **Ending Simulated Equity**: $\text{LKR } 1,084,831.80$ ($+8.48\%$ Net Return)
 
 > [!NOTE]
-> Paper trading simulation is strictly an offline research model and does not reflect live market execution slippage or guaranteed returns.
+> Paper trading simulation is strictly an offline heuristic simulation model and does not reflect live market order-book slippage, market impact, or guaranteed future performance.
 
 ---
 
-## 7. Research Limitations & Future Directions
-1. **Regime Dependence**: Technical indicator scoring performs with higher accuracy in trending directional regimes than prolonged sideways market compression.
-2. **Execution Slippage**: Live high-frequency trading would incur exchange order book spread and taker fee friction.
-3. **Future Extension**: Hybridizing the current multi-factor scoring engine with machine learning models (e.g., Random Forest or LSTM recurrent neural networks) trained on multi-timeframe order book features.
+## 7. Research Limitations & Academic Findings
+1. **Indicator Random-Walk Baseline**: In a 3-class classification framework (UP, NEUTRAL, DOWN), accuracy across the 7 assets hovers between $29.58\%$ and $34.04\%$, consistent with the efficient market hypothesis and standard random-walk baseline ($\approx 33.33\%$).
+2. **Observation Dependence**: Consecutive walk-forward evaluations over overlapping horizons (e.g. 4h and 24h) exhibit temporal serial correlation. Statistical significance was not established and is not claimed.
+3. **Execution Friction**: Real-world trading involves exchange order book depth, taker fee variations, network latency, and exchange slippage.
 
 ---
 

@@ -160,22 +160,29 @@ export const HomeScreen = () => {
             style={[styles.actionCard, styles.actionCardActive]}
             onPress={() => navigation.navigate('Wallet', { screen: 'CurrencyConversion' })}
           >
-            <MaterialIcons name="shopping-cart" size={24} color="#000" />
+            <MaterialIcons name="shopping-cart" size={22} color="#000" />
             <Text style={styles.actionCardActiveText}>Buy</Text>
           </TouchableOpacity>
           <TouchableOpacity 
             style={styles.actionCard}
-            onPress={() => navigation.navigate('Wallet', { screen: 'WalletOverview' })}
+            onPress={() => navigation.navigate('AIAnalytics')}
           >
-            <MaterialIcons name="pie-chart-outline" size={24} color={colors.accent} />
-            <Text style={styles.actionCardText}>Portfolio</Text>
+            <MaterialIcons name="psychology" size={22} color={colors.accent} />
+            <Text style={styles.actionCardText}>AI Signals</Text>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={styles.actionCard}
+            onPress={() => navigation.navigate('SOMIAIChat')}
+          >
+            <MaterialIcons name="chat" size={22} color={colors.accent} />
+            <Text style={styles.actionCardText}>SOMI AI</Text>
           </TouchableOpacity>
           <TouchableOpacity 
             style={styles.actionCard}
             onPress={() => navigation.navigate('Wallet', { screen: 'WalletOverview' })}
           >
-            <MaterialIcons name="history" size={24} color={colors.accent} />
-            <Text style={styles.actionCardText}>History</Text>
+            <MaterialIcons name="pie-chart-outline" size={22} color={colors.accent} />
+            <Text style={styles.actionCardText}>Portfolio</Text>
           </TouchableOpacity>
         </View>
 
