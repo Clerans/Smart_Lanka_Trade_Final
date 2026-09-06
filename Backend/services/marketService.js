@@ -1,5 +1,10 @@
 const axios = require("axios");
 
+// Shared rate & inflight caches
+let cachedUsdToLkr = null;
+let cachedUsdToLkrTime = 0;
+let inflightLivePricesPromise = null;
+
 // 1. Get crypto ticker from Binance (Price + 24h Change)
 async function getCryptoTicker(symbol = "BTCUSDT") {
   // Special case for USDT/USDT (used for LKR/USDT rate alerts)
@@ -11,7 +16,8 @@ async function getCryptoTicker(symbol = "BTCUSDT") {
   }
 
   const response = await axios.get(
-    `https://api.binance.com/api/v3/ticker/24hr?symbol=${symbol}`
+    `https://api.binance.com/api/v3/ticker/24hr?symbol=${symbol}`,
+    { timeout: 4000 }
   );
 
   return {
@@ -20,13 +26,27 @@ async function getCryptoTicker(symbol = "BTCUSDT") {
   };
 }
 
-// 2. Get USD → LKR rate
+// 2. Get USD → LKR rate (cached for 60s)
 async function getUSDToLKR() {
-  const response = await axios.get(
-    "https://api.exchangerate-api.com/v4/latest/USD"
-  );
+  if (cachedUsdToLkr && (Date.now() - cachedUsdToLkrTime) < 60000) {
+    return cachedUsdToLkr;
+  }
 
-  return response.data.rates.LKR;
+  try {
+    const response = await axios.get(
+      "https://api.exchangerate-api.com/v4/latest/USD",
+      { timeout: 3500 }
+    );
+    if (response.data && response.data.rates && response.data.rates.LKR) {
+      cachedUsdToLkr = parseFloat(response.data.rates.LKR);
+      cachedUsdToLkrTime = Date.now();
+      return cachedUsdToLkr;
+    }
+  } catch (err) {
+    console.warn('⚠️ Currency API warning, using cached or fallback rate:', err.message);
+  }
+
+  return cachedUsdToLkr || 328.2;
 }
 
 // 3. Final conversion
@@ -57,7 +77,7 @@ async function getMultiplePricesInLKR(symbols = ["BTCUSDT", "ETHUSDT"], includeS
           sparkline = Array(24).fill(1.0);
         } else {
           // Fetch last 24 1-hour candles
-          const klines = await axios.get(`https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=1h&limit=24`);
+          const klines = await axios.get(`https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=1h&limit=24`, { timeout: 3500 });
           sparkline = klines.data.map(k => parseFloat(k[4])); // Closing prices
         }
       }
@@ -66,18 +86,26 @@ async function getMultiplePricesInLKR(symbols = ["BTCUSDT", "ETHUSDT"], includeS
         symbol,
         priceUSDT: ticker.price,
         changePercent: ticker.changePercent,
+        usdToLkr,
         priceLKR: ticker.price * usdToLkr,
         sparkline
       };
-    } catch (error) {
-      console.error(`Error fetching ${symbol}:`, error.message);
-      return null;
+    } catch (err) {
+      return {
+        symbol,
+        priceUSDT: 0,
+        changePercent: 0,
+        usdToLkr,
+        priceLKR: 0,
+        sparkline: []
+      };
     }
   }));
 
   return {
     usdToLkr,
-    prices: results.filter(r => r !== null)
+    totalCoins: results.length,
+    prices: results
   };
 }
 
@@ -104,6 +132,44 @@ async function getAllPricesInLKR() {
   };
 }
 
+// Internal worker for fetching live prices
+async function fetchFreshLivePrices() {
+  const symbols = ['BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'SOLUSDT', 'XRPUSDT', 'ADAUSDT', 'DOGEUSDT'];
+  const response = await axios.get("https://api.binance.com/api/v3/ticker/24hr", { timeout: 4000 });
+  const usdToLkr = await getUSDToLKR();
+  
+  const tickerMap = {};
+  if (Array.isArray(response.data)) {
+    response.data.forEach(t => {
+      if (symbols.includes(t.symbol)) {
+        tickerMap[t.symbol] = t;
+      }
+    });
+  }
+
+  const liveData = symbols.map(symbol => {
+    const ticker = tickerMap[symbol] || { lastPrice: "0", priceChangePercent: "0", volume: "0" };
+    const coin = symbol.replace('USDT', '');
+    const priceUSD = parseFloat(ticker.lastPrice) || 0;
+    const priceLKR = priceUSD * usdToLkr;
+    const change24h = parseFloat(ticker.priceChangePercent) || 0;
+    const volume = parseFloat(ticker.volume) || 0;
+
+    return {
+      coin,
+      symbol,
+      priceUSD,
+      priceLKR,
+      change24h,
+      volume
+    };
+  });
+
+  global.marketCacheMemory = liveData;
+  global.marketCacheMemoryTime = Date.now();
+  return liveData;
+}
+
 async function getLivePrices() {
   const oracledb = require('oracledb');
   const symbols = ['BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'SOLUSDT', 'XRPUSDT', 'ADAUSDT', 'DOGEUSDT'];
@@ -113,47 +179,24 @@ async function getLivePrices() {
     return global.marketCacheMemory;
   }
 
-  let liveData = null;
-
-  // 2. Fetch live data from Binance & Exchange Rates
-  try {
-    const response = await axios.get("https://api.binance.com/api/v3/ticker/24hr", { timeout: 10000 });
-    const usdToLkr = await getUSDToLKR().catch(() => 328.2); // Fallback USD/LKR rate if currency API is down
-    
-    const tickerMap = {};
-    if (Array.isArray(response.data)) {
-      response.data.forEach(t => {
-        if (symbols.includes(t.symbol)) {
-          tickerMap[t.symbol] = t;
-        }
-      });
-    }
-
-    liveData = symbols.map(symbol => {
-      const ticker = tickerMap[symbol] || { lastPrice: "0", priceChangePercent: "0", volume: "0" };
-      const coin = symbol.replace('USDT', '');
-      const priceUSD = parseFloat(ticker.lastPrice) || 0;
-      const priceLKR = priceUSD * usdToLkr;
-      const change24h = parseFloat(ticker.priceChangePercent) || 0;
-      const volume = parseFloat(ticker.volume) || 0;
-
-      return {
-        coin,
-        symbol,
-        priceUSD,
-        priceLKR,
-        change24h,
-        volume
-      };
-    });
-
-    global.marketCacheMemory = liveData;
-    global.marketCacheMemoryTime = Date.now();
-  } catch (apiError) {
-    console.warn('⚠️ Binance / Exchange API warning:', apiError.message);
+  // 2. Coalesce in-flight requests
+  if (inflightLivePricesPromise) {
+    return inflightLivePricesPromise;
   }
 
-  // 3. If live fetch succeeded, persist to Oracle DB asynchronously/safely
+  let liveData = null;
+
+  // 3. Fetch live data with deduping
+  try {
+    inflightLivePricesPromise = fetchFreshLivePrices();
+    liveData = await inflightLivePricesPromise;
+  } catch (apiError) {
+    console.warn('⚠️ Binance / Exchange API warning:', apiError.message);
+  } finally {
+    inflightLivePricesPromise = null;
+  }
+
+  // 4. If live fetch succeeded, persist to Oracle DB asynchronously/safely
   if (liveData && liveData.length > 0) {
     (async () => {
       let connection;

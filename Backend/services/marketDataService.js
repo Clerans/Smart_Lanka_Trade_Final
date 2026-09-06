@@ -27,10 +27,12 @@ function validateSymbol(symbol) {
   if (!symbol || typeof symbol !== 'string') {
     throw new Error('Invalid symbol parameter');
   }
-  const normalized = symbol.toUpperCase().trim();
+  let normalized = symbol.toUpperCase().trim();
+  if (!normalized.endsWith('USDT')) {
+    normalized = normalized + 'USDT';
+  }
   if (!SUPPORTED_SYMBOLS.includes(normalized)) {
-    // Allow any USDT pair if desired, but validate format
-    if (!normalized.endsWith('USDT') || normalized.length < 5) {
+    if (normalized.length < 5) {
       throw new Error(`Symbol '${symbol}' is not supported. Supported symbols: ${SUPPORTED_SYMBOLS.join(', ')}`);
     }
   }

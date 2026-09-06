@@ -90,7 +90,8 @@ async function runBenchmark() {
     { name: 'Health Endpoint', path: '/health' },
     { name: 'Live Market Data', path: '/api/market/live' },
     { name: 'Price LKR (BTC)', path: '/api/market/price-lkr?coin=BTC' },
-    { name: 'AI Recommendation (BTC)', path: '/api/ai/recommendation?symbol=BTC' }
+    { name: 'AI Recommendation (BTC)', path: '/api/ai/recommendation/BTC' },
+    { name: 'All AI Recommendations', path: '/api/ai/recommendations' }
   ];
 
   const concurrencyLevels = [10, 25, 50];
