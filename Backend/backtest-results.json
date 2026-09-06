@@ -1,0 +1,1241 @@
+{
+  "BTCUSDT": {
+    "symbol": "BTCUSDT",
+    "interval": "1h",
+    "period": {
+      "from": 1787104800000,
+      "to": 1788634800000,
+      "startDate": "2026-08-19T02:00:00.000Z",
+      "endDate": "2026-09-05T19:00:00.000Z"
+    },
+    "dataset": {
+      "totalCandlesLoaded": 500,
+      "validCandlesCount": 500,
+      "evaluatedPoints": 426,
+      "skippedCount": 0,
+      "errorCount": 0
+    },
+    "horizonResults": {
+      "1": {
+        "horizon": "1h",
+        "sampleCount": 426,
+        "accuracy": 31.92,
+        "macroPrecision": 0.3229,
+        "macroRecall": 1,
+        "macroF1Score": 0.4882,
+        "buyCount": 176,
+        "sellCount": 114,
+        "holdCount": 136,
+        "averageBuyReturnPct": 0.08,
+        "averageSellReturnPct": 0.02,
+        "averageHoldReturnPct": 0.04,
+        "buyPrecision": 0.1591,
+        "sellPrecision": 0.0965,
+        "holdPrecision": 0.7132
+      },
+      "4": {
+        "horizon": "4h",
+        "sampleCount": 426,
+        "accuracy": 31.92,
+        "macroPrecision": 0.3185,
+        "macroRecall": 1,
+        "macroF1Score": 0.4831,
+        "buyCount": 176,
+        "sellCount": 114,
+        "holdCount": 136,
+        "averageBuyReturnPct": 0.22,
+        "averageSellReturnPct": 0.06,
+        "averageHoldReturnPct": 0.32,
+        "buyPrecision": 0.2045,
+        "sellPrecision": 0.0965,
+        "holdPrecision": 0.6544
+      },
+      "24": {
+        "horizon": "24h",
+        "sampleCount": 426,
+        "accuracy": 31.69,
+        "macroPrecision": 0.3059,
+        "macroRecall": 1,
+        "macroF1Score": 0.4685,
+        "buyCount": 176,
+        "sellCount": 114,
+        "holdCount": 136,
+        "averageBuyReturnPct": 0.97,
+        "averageSellReturnPct": 0.51,
+        "averageHoldReturnPct": 1.69,
+        "buyPrecision": 0.3125,
+        "sellPrecision": 0.1053,
+        "holdPrecision": 0.5
+      }
+    },
+    "confusionMatrices": {
+      "1": {
+        "BUY": {
+          "UP": 28,
+          "NEUTRAL": 122,
+          "DOWN": 26
+        },
+        "HOLD": {
+          "UP": 25,
+          "NEUTRAL": 97,
+          "DOWN": 14
+        },
+        "SELL": {
+          "UP": 17,
+          "NEUTRAL": 86,
+          "DOWN": 11
+        }
+      },
+      "4": {
+        "BUY": {
+          "UP": 36,
+          "NEUTRAL": 118,
+          "DOWN": 22
+        },
+        "HOLD": {
+          "UP": 30,
+          "NEUTRAL": 89,
+          "DOWN": 17
+        },
+        "SELL": {
+          "UP": 12,
+          "NEUTRAL": 91,
+          "DOWN": 11
+        }
+      },
+      "24": {
+        "BUY": {
+          "UP": 55,
+          "NEUTRAL": 82,
+          "DOWN": 39
+        },
+        "HOLD": {
+          "UP": 45,
+          "NEUTRAL": 68,
+          "DOWN": 23
+        },
+        "SELL": {
+          "UP": 15,
+          "NEUTRAL": 87,
+          "DOWN": 12
+        }
+      }
+    },
+    "confidenceAnalysis": {
+      "0-49%": {
+        "sampleCount": 0,
+        "accuracyPct": 0,
+        "averageReturnPct": 0
+      },
+      "50-69%": {
+        "sampleCount": 0,
+        "accuracyPct": 0,
+        "averageReturnPct": 0
+      },
+      "70-79%": {
+        "sampleCount": 114,
+        "accuracyPct": 71.05,
+        "averageReturnPct": 0.03
+      },
+      "80-89%": {
+        "sampleCount": 176,
+        "accuracyPct": 19.32,
+        "averageReturnPct": 0.05
+      },
+      "90-100%": {
+        "sampleCount": 136,
+        "accuracyPct": 15.44,
+        "averageReturnPct": 0.07
+      }
+    },
+    "riskAnalysis": {
+      "LOW": {
+        "sampleCount": 284,
+        "accuracyPct": 13.03,
+        "averageReturnPct": 0.05
+      },
+      "MEDIUM": {
+        "sampleCount": 118,
+        "accuracyPct": 74.58,
+        "averageReturnPct": 0
+      },
+      "HIGH": {
+        "sampleCount": 24,
+        "accuracyPct": 45.83,
+        "averageReturnPct": 0.29
+      }
+    },
+    "paperTradingSimulation": {
+      "startingCapitalLKR": 1000000,
+      "endingEquityLKR": 1085483.93,
+      "totalReturnPct": 8.55,
+      "totalTrades": 23,
+      "winningTrades": 6,
+      "losingTrades": 5,
+      "winRatePct": 26.09,
+      "maxDrawdownPct": 3.39
+    }
+  },
+  "ETHUSDT": {
+    "symbol": "ETHUSDT",
+    "interval": "1h",
+    "period": {
+      "from": 1787104800000,
+      "to": 1788634800000,
+      "startDate": "2026-08-19T02:00:00.000Z",
+      "endDate": "2026-09-05T19:00:00.000Z"
+    },
+    "dataset": {
+      "totalCandlesLoaded": 500,
+      "validCandlesCount": 500,
+      "evaluatedPoints": 426,
+      "skippedCount": 0,
+      "errorCount": 0
+    },
+    "horizonResults": {
+      "1": {
+        "horizon": "1h",
+        "sampleCount": 426,
+        "accuracy": 31.22,
+        "macroPrecision": 0.3174,
+        "macroRecall": 1,
+        "macroF1Score": 0.4819,
+        "buyCount": 168,
+        "sellCount": 123,
+        "holdCount": 135,
+        "averageBuyReturnPct": 0.07,
+        "averageSellReturnPct": 0.04,
+        "averageHoldReturnPct": 0.07,
+        "buyPrecision": 0.1845,
+        "sellPrecision": 0.1382,
+        "holdPrecision": 0.6296
+      },
+      "4": {
+        "horizon": "4h",
+        "sampleCount": 426,
+        "accuracy": 29.81,
+        "macroPrecision": 0.2983,
+        "macroRecall": 1,
+        "macroF1Score": 0.4595,
+        "buyCount": 168,
+        "sellCount": 123,
+        "holdCount": 135,
+        "averageBuyReturnPct": 0.32,
+        "averageSellReturnPct": 0.07,
+        "averageHoldReturnPct": 0.34,
+        "buyPrecision": 0.2262,
+        "sellPrecision": 0.1057,
+        "holdPrecision": 0.563
+      },
+      "24": {
+        "horizon": "24h",
+        "sampleCount": 426,
+        "accuracy": 24.65,
+        "macroPrecision": 0.2432,
+        "macroRecall": 1,
+        "macroF1Score": 0.3912,
+        "buyCount": 168,
+        "sellCount": 123,
+        "holdCount": 135,
+        "averageBuyReturnPct": 1.13,
+        "averageSellReturnPct": 0.44,
+        "averageHoldReturnPct": 2.05,
+        "buyPrecision": 0.25,
+        "sellPrecision": 0.1463,
+        "holdPrecision": 0.3333
+      }
+    },
+    "confusionMatrices": {
+      "1": {
+        "BUY": {
+          "UP": 31,
+          "NEUTRAL": 101,
+          "DOWN": 36
+        },
+        "HOLD": {
+          "UP": 32,
+          "NEUTRAL": 85,
+          "DOWN": 18
+        },
+        "SELL": {
+          "UP": 24,
+          "NEUTRAL": 82,
+          "DOWN": 17
+        }
+      },
+      "4": {
+        "BUY": {
+          "UP": 38,
+          "NEUTRAL": 99,
+          "DOWN": 31
+        },
+        "HOLD": {
+          "UP": 40,
+          "NEUTRAL": 76,
+          "DOWN": 19
+        },
+        "SELL": {
+          "UP": 19,
+          "NEUTRAL": 91,
+          "DOWN": 13
+        }
+      },
+      "24": {
+        "BUY": {
+          "UP": 42,
+          "NEUTRAL": 70,
+          "DOWN": 56
+        },
+        "HOLD": {
+          "UP": 65,
+          "NEUTRAL": 45,
+          "DOWN": 25
+        },
+        "SELL": {
+          "UP": 34,
+          "NEUTRAL": 71,
+          "DOWN": 18
+        }
+      }
+    },
+    "confidenceAnalysis": {
+      "0-49%": {
+        "sampleCount": 0,
+        "accuracyPct": 0,
+        "averageReturnPct": 0
+      },
+      "50-69%": {
+        "sampleCount": 0,
+        "accuracyPct": 0,
+        "averageReturnPct": 0
+      },
+      "70-79%": {
+        "sampleCount": 113,
+        "accuracyPct": 60.18,
+        "averageReturnPct": 0.07
+      },
+      "80-89%": {
+        "sampleCount": 186,
+        "accuracyPct": 23.12,
+        "averageReturnPct": 0.05
+      },
+      "90-100%": {
+        "sampleCount": 127,
+        "accuracyPct": 17.32,
+        "averageReturnPct": 0.07
+      }
+    },
+    "riskAnalysis": {
+      "LOW": {
+        "sampleCount": 284,
+        "accuracyPct": 16.55,
+        "averageReturnPct": 0.07
+      },
+      "MEDIUM": {
+        "sampleCount": 124,
+        "accuracyPct": 63.71,
+        "averageReturnPct": 0.05
+      },
+      "HIGH": {
+        "sampleCount": 18,
+        "accuracyPct": 38.89,
+        "averageReturnPct": 0.03
+      }
+    },
+    "paperTradingSimulation": {
+      "startingCapitalLKR": 1000000,
+      "endingEquityLKR": 1125808.94,
+      "totalReturnPct": 12.58,
+      "totalTrades": 19,
+      "winningTrades": 6,
+      "losingTrades": 3,
+      "winRatePct": 31.58,
+      "maxDrawdownPct": 4.04
+    }
+  },
+  "BNBUSDT": {
+    "symbol": "BNBUSDT",
+    "interval": "1h",
+    "period": {
+      "from": 1787104800000,
+      "to": 1788634800000,
+      "startDate": "2026-08-19T02:00:00.000Z",
+      "endDate": "2026-09-05T19:00:00.000Z"
+    },
+    "dataset": {
+      "totalCandlesLoaded": 500,
+      "validCandlesCount": 500,
+      "evaluatedPoints": 426,
+      "skippedCount": 0,
+      "errorCount": 0
+    },
+    "horizonResults": {
+      "1": {
+        "horizon": "1h",
+        "sampleCount": 426,
+        "accuracy": 29.81,
+        "macroPrecision": 0.313,
+        "macroRecall": 1,
+        "macroF1Score": 0.4767,
+        "buyCount": 215,
+        "sellCount": 94,
+        "holdCount": 117,
+        "averageBuyReturnPct": 0.06,
+        "averageSellReturnPct": 0.04,
+        "averageHoldReturnPct": 0.08,
+        "buyPrecision": 0.2,
+        "sellPrecision": 0.1064,
+        "holdPrecision": 0.6325
+      },
+      "4": {
+        "horizon": "4h",
+        "sampleCount": 426,
+        "accuracy": 33.57,
+        "macroPrecision": 0.3404,
+        "macroRecall": 1,
+        "macroF1Score": 0.5079,
+        "buyCount": 215,
+        "sellCount": 94,
+        "holdCount": 117,
+        "averageBuyReturnPct": 0.27,
+        "averageSellReturnPct": 0.1,
+        "averageHoldReturnPct": 0.29,
+        "buyPrecision": 0.2651,
+        "sellPrecision": 0.1064,
+        "holdPrecision": 0.6496
+      },
+      "24": {
+        "horizon": "24h",
+        "sampleCount": 426,
+        "accuracy": 33.1,
+        "macroPrecision": 0.3093,
+        "macroRecall": 1,
+        "macroF1Score": 0.4724,
+        "buyCount": 215,
+        "sellCount": 94,
+        "holdCount": 117,
+        "averageBuyReturnPct": 0.96,
+        "averageSellReturnPct": 0.75,
+        "averageHoldReturnPct": 2.19,
+        "buyPrecision": 0.3535,
+        "sellPrecision": 0.0957,
+        "holdPrecision": 0.4786
+      }
+    },
+    "confusionMatrices": {
+      "1": {
+        "BUY": {
+          "UP": 43,
+          "NEUTRAL": 142,
+          "DOWN": 30
+        },
+        "HOLD": {
+          "UP": 23,
+          "NEUTRAL": 74,
+          "DOWN": 20
+        },
+        "SELL": {
+          "UP": 16,
+          "NEUTRAL": 68,
+          "DOWN": 10
+        }
+      },
+      "4": {
+        "BUY": {
+          "UP": 57,
+          "NEUTRAL": 130,
+          "DOWN": 28
+        },
+        "HOLD": {
+          "UP": 25,
+          "NEUTRAL": 76,
+          "DOWN": 16
+        },
+        "SELL": {
+          "UP": 14,
+          "NEUTRAL": 70,
+          "DOWN": 10
+        }
+      },
+      "24": {
+        "BUY": {
+          "UP": 76,
+          "NEUTRAL": 102,
+          "DOWN": 37
+        },
+        "HOLD": {
+          "UP": 55,
+          "NEUTRAL": 56,
+          "DOWN": 6
+        },
+        "SELL": {
+          "UP": 15,
+          "NEUTRAL": 70,
+          "DOWN": 9
+        }
+      }
+    },
+    "confidenceAnalysis": {
+      "0-49%": {
+        "sampleCount": 0,
+        "accuracyPct": 0,
+        "averageReturnPct": 0
+      },
+      "50-69%": {
+        "sampleCount": 0,
+        "accuracyPct": 0,
+        "averageReturnPct": 0
+      },
+      "70-79%": {
+        "sampleCount": 97,
+        "accuracyPct": 64.95,
+        "averageReturnPct": 0.03
+      },
+      "80-89%": {
+        "sampleCount": 174,
+        "accuracyPct": 17.82,
+        "averageReturnPct": 0.09
+      },
+      "90-100%": {
+        "sampleCount": 155,
+        "accuracyPct": 21.29,
+        "averageReturnPct": 0.05
+      }
+    },
+    "riskAnalysis": {
+      "LOW": {
+        "sampleCount": 299,
+        "accuracyPct": 16.05,
+        "averageReturnPct": 0.04
+      },
+      "MEDIUM": {
+        "sampleCount": 124,
+        "accuracyPct": 61.29,
+        "averageReturnPct": 0.07
+      },
+      "HIGH": {
+        "sampleCount": 3,
+        "accuracyPct": 100,
+        "averageReturnPct": 1.16
+      }
+    },
+    "paperTradingSimulation": {
+      "startingCapitalLKR": 1000000,
+      "endingEquityLKR": 1096158.27,
+      "totalReturnPct": 9.62,
+      "totalTrades": 21,
+      "winningTrades": 7,
+      "losingTrades": 3,
+      "winRatePct": 33.33,
+      "maxDrawdownPct": 5.38
+    }
+  },
+  "SOLUSDT": {
+    "symbol": "SOLUSDT",
+    "interval": "1h",
+    "period": {
+      "from": 1787104800000,
+      "to": 1788634800000,
+      "startDate": "2026-08-19T02:00:00.000Z",
+      "endDate": "2026-09-05T19:00:00.000Z"
+    },
+    "dataset": {
+      "totalCandlesLoaded": 500,
+      "validCandlesCount": 500,
+      "evaluatedPoints": 426,
+      "skippedCount": 0,
+      "errorCount": 0
+    },
+    "horizonResults": {
+      "1": {
+        "horizon": "1h",
+        "sampleCount": 426,
+        "accuracy": 34.27,
+        "macroPrecision": 0.3369,
+        "macroRecall": 1,
+        "macroF1Score": 0.504,
+        "buyCount": 178,
+        "sellCount": 111,
+        "holdCount": 137,
+        "averageBuyReturnPct": 0.12,
+        "averageSellReturnPct": 0.02,
+        "averageHoldReturnPct": 0.05,
+        "buyPrecision": 0.2978,
+        "sellPrecision": 0.1802,
+        "holdPrecision": 0.5328
+      },
+      "4": {
+        "horizon": "4h",
+        "sampleCount": 426,
+        "accuracy": 29.58,
+        "macroPrecision": 0.2877,
+        "macroRecall": 1,
+        "macroF1Score": 0.4468,
+        "buyCount": 178,
+        "sellCount": 111,
+        "holdCount": 137,
+        "averageBuyReturnPct": 0.34,
+        "averageSellReturnPct": 0.1,
+        "averageHoldReturnPct": 0.39,
+        "buyPrecision": 0.2809,
+        "sellPrecision": 0.1441,
+        "holdPrecision": 0.438
+      },
+      "24": {
+        "horizon": "24h",
+        "sampleCount": 426,
+        "accuracy": 30.75,
+        "macroPrecision": 0.2808,
+        "macroRecall": 1,
+        "macroF1Score": 0.4384,
+        "buyCount": 178,
+        "sellCount": 111,
+        "holdCount": 137,
+        "averageBuyReturnPct": 0.75,
+        "averageSellReturnPct": 1.44,
+        "averageHoldReturnPct": 2.87,
+        "buyPrecision": 0.4663,
+        "sellPrecision": 0.1351,
+        "holdPrecision": 0.2409
+      }
+    },
+    "confusionMatrices": {
+      "1": {
+        "BUY": {
+          "UP": 53,
+          "NEUTRAL": 81,
+          "DOWN": 44
+        },
+        "HOLD": {
+          "UP": 37,
+          "NEUTRAL": 73,
+          "DOWN": 27
+        },
+        "SELL": {
+          "UP": 25,
+          "NEUTRAL": 66,
+          "DOWN": 20
+        }
+      },
+      "4": {
+        "BUY": {
+          "UP": 50,
+          "NEUTRAL": 90,
+          "DOWN": 38
+        },
+        "HOLD": {
+          "UP": 51,
+          "NEUTRAL": 60,
+          "DOWN": 26
+        },
+        "SELL": {
+          "UP": 22,
+          "NEUTRAL": 73,
+          "DOWN": 16
+        }
+      },
+      "24": {
+        "BUY": {
+          "UP": 83,
+          "NEUTRAL": 29,
+          "DOWN": 66
+        },
+        "HOLD": {
+          "UP": 77,
+          "NEUTRAL": 33,
+          "DOWN": 27
+        },
+        "SELL": {
+          "UP": 46,
+          "NEUTRAL": 50,
+          "DOWN": 15
+        }
+      }
+    },
+    "confidenceAnalysis": {
+      "0-49%": {
+        "sampleCount": 0,
+        "accuracyPct": 0,
+        "averageReturnPct": 0
+      },
+      "50-69%": {
+        "sampleCount": 0,
+        "accuracyPct": 0,
+        "averageReturnPct": 0
+      },
+      "70-79%": {
+        "sampleCount": 112,
+        "accuracyPct": 54.46,
+        "averageReturnPct": 0.08
+      },
+      "80-89%": {
+        "sampleCount": 180,
+        "accuracyPct": 25,
+        "averageReturnPct": 0.04
+      },
+      "90-100%": {
+        "sampleCount": 134,
+        "accuracyPct": 29.85,
+        "averageReturnPct": 0.11
+      }
+    },
+    "riskAnalysis": {
+      "LOW": {
+        "sampleCount": 242,
+        "accuracyPct": 26.86,
+        "averageReturnPct": 0.13
+      },
+      "MEDIUM": {
+        "sampleCount": 149,
+        "accuracyPct": 46.31,
+        "averageReturnPct": 0.04
+      },
+      "HIGH": {
+        "sampleCount": 35,
+        "accuracyPct": 34.29,
+        "averageReturnPct": -0.19
+      }
+    },
+    "paperTradingSimulation": {
+      "startingCapitalLKR": 1000000,
+      "endingEquityLKR": 1112236.45,
+      "totalReturnPct": 11.22,
+      "totalTrades": 19,
+      "winningTrades": 4,
+      "losingTrades": 5,
+      "winRatePct": 21.05,
+      "maxDrawdownPct": 6.73
+    }
+  },
+  "XRPUSDT": {
+    "symbol": "XRPUSDT",
+    "interval": "1h",
+    "period": {
+      "from": 1787104800000,
+      "to": 1788634800000,
+      "startDate": "2026-08-19T02:00:00.000Z",
+      "endDate": "2026-09-05T19:00:00.000Z"
+    },
+    "dataset": {
+      "totalCandlesLoaded": 500,
+      "validCandlesCount": 500,
+      "evaluatedPoints": 426,
+      "skippedCount": 0,
+      "errorCount": 0
+    },
+    "horizonResults": {
+      "1": {
+        "horizon": "1h",
+        "sampleCount": 426,
+        "accuracy": 33.57,
+        "macroPrecision": 0.3565,
+        "macroRecall": 1,
+        "macroF1Score": 0.5257,
+        "buyCount": 176,
+        "sellCount": 148,
+        "holdCount": 102,
+        "averageBuyReturnPct": 0.12,
+        "averageSellReturnPct": 0.07,
+        "averageHoldReturnPct": 0.06,
+        "buyPrecision": 0.3068,
+        "sellPrecision": 0.2432,
+        "holdPrecision": 0.5196
+      },
+      "4": {
+        "horizon": "4h",
+        "sampleCount": 426,
+        "accuracy": 33.33,
+        "macroPrecision": 0.3474,
+        "macroRecall": 1,
+        "macroF1Score": 0.5157,
+        "buyCount": 176,
+        "sellCount": 148,
+        "holdCount": 102,
+        "averageBuyReturnPct": 0.47,
+        "averageSellReturnPct": 0.07,
+        "averageHoldReturnPct": 0.56,
+        "buyPrecision": 0.3352,
+        "sellPrecision": 0.2365,
+        "holdPrecision": 0.4706
+      },
+      "24": {
+        "horizon": "24h",
+        "sampleCount": 426,
+        "accuracy": 37.32,
+        "macroPrecision": 0.3774,
+        "macroRecall": 1,
+        "macroF1Score": 0.548,
+        "buyCount": 176,
+        "sellCount": 148,
+        "holdCount": 102,
+        "averageBuyReturnPct": 2.99,
+        "averageSellReturnPct": 0.31,
+        "averageHoldReturnPct": 2.42,
+        "buyPrecision": 0.4034,
+        "sellPrecision": 0.2973,
+        "holdPrecision": 0.4314
+      }
+    },
+    "confusionMatrices": {
+      "1": {
+        "BUY": {
+          "UP": 54,
+          "NEUTRAL": 74,
+          "DOWN": 48
+        },
+        "HOLD": {
+          "UP": 26,
+          "NEUTRAL": 53,
+          "DOWN": 23
+        },
+        "SELL": {
+          "UP": 39,
+          "NEUTRAL": 73,
+          "DOWN": 36
+        }
+      },
+      "4": {
+        "BUY": {
+          "UP": 59,
+          "NEUTRAL": 71,
+          "DOWN": 46
+        },
+        "HOLD": {
+          "UP": 31,
+          "NEUTRAL": 48,
+          "DOWN": 23
+        },
+        "SELL": {
+          "UP": 35,
+          "NEUTRAL": 78,
+          "DOWN": 35
+        }
+      },
+      "24": {
+        "BUY": {
+          "UP": 71,
+          "NEUTRAL": 30,
+          "DOWN": 75
+        },
+        "HOLD": {
+          "UP": 34,
+          "NEUTRAL": 44,
+          "DOWN": 24
+        },
+        "SELL": {
+          "UP": 49,
+          "NEUTRAL": 55,
+          "DOWN": 44
+        }
+      }
+    },
+    "confidenceAnalysis": {
+      "0-49%": {
+        "sampleCount": 0,
+        "accuracyPct": 0,
+        "averageReturnPct": 0
+      },
+      "50-69%": {
+        "sampleCount": 0,
+        "accuracyPct": 0,
+        "averageReturnPct": 0
+      },
+      "70-79%": {
+        "sampleCount": 87,
+        "accuracyPct": 50.57,
+        "averageReturnPct": 0.14
+      },
+      "80-89%": {
+        "sampleCount": 155,
+        "accuracyPct": 29.68,
+        "averageReturnPct": 0.13
+      },
+      "90-100%": {
+        "sampleCount": 184,
+        "accuracyPct": 28.8,
+        "averageReturnPct": 0.03
+      }
+    },
+    "riskAnalysis": {
+      "LOW": {
+        "sampleCount": 217,
+        "accuracyPct": 25.81,
+        "averageReturnPct": 0.09
+      },
+      "MEDIUM": {
+        "sampleCount": 138,
+        "accuracyPct": 42.75,
+        "averageReturnPct": -0.07
+      },
+      "HIGH": {
+        "sampleCount": 71,
+        "accuracyPct": 39.44,
+        "averageReturnPct": 0.4
+      }
+    },
+    "paperTradingSimulation": {
+      "startingCapitalLKR": 1000000,
+      "endingEquityLKR": 1180554.07,
+      "totalReturnPct": 18.06,
+      "totalTrades": 19,
+      "winningTrades": 5,
+      "losingTrades": 4,
+      "winRatePct": 26.32,
+      "maxDrawdownPct": 12.69
+    }
+  },
+  "ADAUSDT": {
+    "symbol": "ADAUSDT",
+    "interval": "1h",
+    "period": {
+      "from": 1787104800000,
+      "to": 1788634800000,
+      "startDate": "2026-08-19T02:00:00.000Z",
+      "endDate": "2026-09-05T19:00:00.000Z"
+    },
+    "dataset": {
+      "totalCandlesLoaded": 500,
+      "validCandlesCount": 500,
+      "evaluatedPoints": 426,
+      "skippedCount": 0,
+      "errorCount": 0
+    },
+    "horizonResults": {
+      "1": {
+        "horizon": "1h",
+        "sampleCount": 426,
+        "accuracy": 33.33,
+        "macroPrecision": 0.3358,
+        "macroRecall": 1,
+        "macroF1Score": 0.5027,
+        "buyCount": 176,
+        "sellCount": 131,
+        "holdCount": 119,
+        "averageBuyReturnPct": 0.14,
+        "averageSellReturnPct": 0.09,
+        "averageHoldReturnPct": -0.1,
+        "buyPrecision": 0.3352,
+        "sellPrecision": 0.2519,
+        "holdPrecision": 0.4202
+      },
+      "4": {
+        "horizon": "4h",
+        "sampleCount": 426,
+        "accuracy": 36.15,
+        "macroPrecision": 0.3519,
+        "macroRecall": 1,
+        "macroF1Score": 0.5206,
+        "buyCount": 176,
+        "sellCount": 131,
+        "holdCount": 119,
+        "averageBuyReturnPct": 0.53,
+        "averageSellReturnPct": 0.23,
+        "averageHoldReturnPct": -0.2,
+        "buyPrecision": 0.4545,
+        "sellPrecision": 0.2061,
+        "holdPrecision": 0.395
+      },
+      "24": {
+        "horizon": "24h",
+        "sampleCount": 426,
+        "accuracy": 37.09,
+        "macroPrecision": 0.3563,
+        "macroRecall": 1,
+        "macroF1Score": 0.5254,
+        "buyCount": 176,
+        "sellCount": 131,
+        "holdCount": 119,
+        "averageBuyReturnPct": 2.44,
+        "averageSellReturnPct": 0.68,
+        "averageHoldReturnPct": 0.31,
+        "buyPrecision": 0.4886,
+        "sellPrecision": 0.2443,
+        "holdPrecision": 0.3361
+      }
+    },
+    "confusionMatrices": {
+      "1": {
+        "BUY": {
+          "UP": 59,
+          "NEUTRAL": 63,
+          "DOWN": 54
+        },
+        "HOLD": {
+          "UP": 31,
+          "NEUTRAL": 50,
+          "DOWN": 38
+        },
+        "SELL": {
+          "UP": 44,
+          "NEUTRAL": 54,
+          "DOWN": 33
+        }
+      },
+      "4": {
+        "BUY": {
+          "UP": 80,
+          "NEUTRAL": 54,
+          "DOWN": 42
+        },
+        "HOLD": {
+          "UP": 33,
+          "NEUTRAL": 47,
+          "DOWN": 39
+        },
+        "SELL": {
+          "UP": 41,
+          "NEUTRAL": 63,
+          "DOWN": 27
+        }
+      },
+      "24": {
+        "BUY": {
+          "UP": 86,
+          "NEUTRAL": 20,
+          "DOWN": 70
+        },
+        "HOLD": {
+          "UP": 33,
+          "NEUTRAL": 40,
+          "DOWN": 46
+        },
+        "SELL": {
+          "UP": 55,
+          "NEUTRAL": 44,
+          "DOWN": 32
+        }
+      }
+    },
+    "confidenceAnalysis": {
+      "0-49%": {
+        "sampleCount": 0,
+        "accuracyPct": 0,
+        "averageReturnPct": 0
+      },
+      "50-69%": {
+        "sampleCount": 0,
+        "accuracyPct": 0,
+        "averageReturnPct": 0
+      },
+      "70-79%": {
+        "sampleCount": 92,
+        "accuracyPct": 44.57,
+        "averageReturnPct": -0.02
+      },
+      "80-89%": {
+        "sampleCount": 174,
+        "accuracyPct": 31.03,
+        "averageReturnPct": 0.07
+      },
+      "90-100%": {
+        "sampleCount": 160,
+        "accuracyPct": 29.38,
+        "averageReturnPct": 0.09
+      }
+    },
+    "riskAnalysis": {
+      "LOW": {
+        "sampleCount": 182,
+        "accuracyPct": 28.02,
+        "averageReturnPct": 0.13
+      },
+      "MEDIUM": {
+        "sampleCount": 174,
+        "accuracyPct": 37.93,
+        "averageReturnPct": -0.05
+      },
+      "HIGH": {
+        "sampleCount": 70,
+        "accuracyPct": 35.71,
+        "averageReturnPct": 0.15
+      }
+    },
+    "paperTradingSimulation": {
+      "startingCapitalLKR": 1000000,
+      "endingEquityLKR": 1122091.17,
+      "totalReturnPct": 12.21,
+      "totalTrades": 17,
+      "winningTrades": 4,
+      "losingTrades": 4,
+      "winRatePct": 23.53,
+      "maxDrawdownPct": 13.02
+    }
+  },
+  "DOGEUSDT": {
+    "symbol": "DOGEUSDT",
+    "interval": "1h",
+    "period": {
+      "from": 1787104800000,
+      "to": 1788634800000,
+      "startDate": "2026-08-19T02:00:00.000Z",
+      "endDate": "2026-09-05T19:00:00.000Z"
+    },
+    "dataset": {
+      "totalCandlesLoaded": 500,
+      "validCandlesCount": 500,
+      "evaluatedPoints": 426,
+      "skippedCount": 0,
+      "errorCount": 0
+    },
+    "horizonResults": {
+      "1": {
+        "horizon": "1h",
+        "sampleCount": 426,
+        "accuracy": 32.16,
+        "macroPrecision": 0.3276,
+        "macroRecall": 1,
+        "macroF1Score": 0.4935,
+        "buyCount": 149,
+        "sellCount": 147,
+        "holdCount": 130,
+        "averageBuyReturnPct": 0.11,
+        "averageSellReturnPct": 0.03,
+        "averageHoldReturnPct": 0.06,
+        "buyPrecision": 0.3221,
+        "sellPrecision": 0.1837,
+        "holdPrecision": 0.4769
+      },
+      "4": {
+        "horizon": "4h",
+        "sampleCount": 426,
+        "accuracy": 35.45,
+        "macroPrecision": 0.36,
+        "macroRecall": 1,
+        "macroF1Score": 0.5294,
+        "buyCount": 149,
+        "sellCount": 147,
+        "holdCount": 130,
+        "averageBuyReturnPct": 0.52,
+        "averageSellReturnPct": 0.09,
+        "averageHoldReturnPct": 0.16,
+        "buyPrecision": 0.3758,
+        "sellPrecision": 0.2041,
+        "holdPrecision": 0.5
+      },
+      "24": {
+        "horizon": "24h",
+        "sampleCount": 426,
+        "accuracy": 36.15,
+        "macroPrecision": 0.3595,
+        "macroRecall": 1,
+        "macroF1Score": 0.5288,
+        "buyCount": 149,
+        "sellCount": 147,
+        "holdCount": 130,
+        "averageBuyReturnPct": 1.98,
+        "averageSellReturnPct": 0.54,
+        "averageHoldReturnPct": 1.69,
+        "buyPrecision": 0.4832,
+        "sellPrecision": 0.2721,
+        "holdPrecision": 0.3231
+      }
+    },
+    "confusionMatrices": {
+      "1": {
+        "BUY": {
+          "UP": 48,
+          "NEUTRAL": 61,
+          "DOWN": 40
+        },
+        "HOLD": {
+          "UP": 34,
+          "NEUTRAL": 62,
+          "DOWN": 34
+        },
+        "SELL": {
+          "UP": 37,
+          "NEUTRAL": 83,
+          "DOWN": 27
+        }
+      },
+      "4": {
+        "BUY": {
+          "UP": 56,
+          "NEUTRAL": 58,
+          "DOWN": 35
+        },
+        "HOLD": {
+          "UP": 31,
+          "NEUTRAL": 65,
+          "DOWN": 34
+        },
+        "SELL": {
+          "UP": 37,
+          "NEUTRAL": 80,
+          "DOWN": 30
+        }
+      },
+      "24": {
+        "BUY": {
+          "UP": 72,
+          "NEUTRAL": 18,
+          "DOWN": 59
+        },
+        "HOLD": {
+          "UP": 48,
+          "NEUTRAL": 42,
+          "DOWN": 40
+        },
+        "SELL": {
+          "UP": 39,
+          "NEUTRAL": 68,
+          "DOWN": 40
+        }
+      }
+    },
+    "confidenceAnalysis": {
+      "0-49%": {
+        "sampleCount": 0,
+        "accuracyPct": 0,
+        "averageReturnPct": 0
+      },
+      "50-69%": {
+        "sampleCount": 0,
+        "accuracyPct": 0,
+        "averageReturnPct": 0
+      },
+      "70-79%": {
+        "sampleCount": 109,
+        "accuracyPct": 50.46,
+        "averageReturnPct": 0.13
+      },
+      "80-89%": {
+        "sampleCount": 157,
+        "accuracyPct": 24.84,
+        "averageReturnPct": 0.04
+      },
+      "90-100%": {
+        "sampleCount": 160,
+        "accuracyPct": 26.88,
+        "averageReturnPct": 0.06
+      }
+    },
+    "riskAnalysis": {
+      "LOW": {
+        "sampleCount": 216,
+        "accuracyPct": 24.07,
+        "averageReturnPct": 0.06
+      },
+      "MEDIUM": {
+        "sampleCount": 158,
+        "accuracyPct": 43.04,
+        "averageReturnPct": 0.01
+      },
+      "HIGH": {
+        "sampleCount": 52,
+        "accuracyPct": 32.69,
+        "averageReturnPct": 0.26
+      }
+    },
+    "paperTradingSimulation": {
+      "startingCapitalLKR": 1000000,
+      "endingEquityLKR": 1139750.73,
+      "totalReturnPct": 13.98,
+      "totalTrades": 17,
+      "winningTrades": 2,
+      "losingTrades": 6,
+      "winRatePct": 11.76,
+      "maxDrawdownPct": 10.12
+    }
+  }
+}
