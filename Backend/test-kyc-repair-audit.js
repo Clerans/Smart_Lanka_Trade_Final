@@ -400,6 +400,61 @@ async function runRepairAudit() {
     recordTest(36, 'Transaction rollback on database error', rollbackSuccessful, 'Verified state preserved on rollback');
 
     // -------------------------------------------------------------
+    // SECTION 5: REAL NIC OCR NAME VARIATIONS & DEMOGRAPHICS TESTS (37 to 43)
+    // -------------------------------------------------------------
+    console.log('\n--- SECTION 5: Real NIC OCR Variations & Demographics Tests (37 to 43) ---');
+
+    // Test 37: Real NIC Extraction & Decision (200024103235 with GICHAEL CLERANS)
+    const realSampleOCR = `
+      Name: GICHAEL CLERANS
+      No: 200024103235
+      Date of Birth: 2000/08/28
+      Sex: Male
+    `;
+    const realExt = nicParser.extractFromOCRText(realSampleOCR);
+    const realSim = kycService.calculateNameSimilarity('Michael Clerans', realExt.extractedName);
+    const realDecision = kycService.evaluateKYCDecision({
+      nicNumber: realExt.nicNumber,
+      ocrConfidence: 40,
+      nameSimilarity: realSim,
+      hasExtractedName: true
+    });
+    recordTest(
+      37,
+      'Real NIC test: GICHAEL CLERANS matches Michael Clerans with PENDING decision at 40% confidence',
+      realExt.nicNumber === '200024103235' &&
+      realExt.dob === '2000-08-28' &&
+      realExt.gender === 'MALE' &&
+      realSim >= 0.85 &&
+      realDecision.verificationStatus === 'PENDING',
+      `NIC: ${realExt.nicNumber}, DOB: ${realExt.dob}, Sim: ${realSim}, Status: ${realDecision.verificationStatus}`
+    );
+
+    // Test 38: Name label variation: "Name: MICHAEL CLERANS"
+    const v1 = nicParser.cleanAndNormalizeName('Name: MICHAEL CLERANS');
+    recordTest(38, 'Label removal: "Name: MICHAEL CLERANS"', v1 === 'MICHAEL CLERANS', `Got: ${v1}`);
+
+    // Test 39: Name label variation: "NAME MICHAEL CLERANS"
+    const v2 = nicParser.cleanAndNormalizeName('NAME MICHAEL CLERANS');
+    recordTest(39, 'Label removal: "NAME MICHAEL CLERANS"', v2 === 'MICHAEL CLERANS', `Got: ${v2}`);
+
+    // Test 40: Name label variation: "Name: GICHAEL CLERANS"
+    const v3 = nicParser.cleanAndNormalizeName('Name: GICHAEL CLERANS');
+    recordTest(40, 'Label removal: "Name: GICHAEL CLERANS"', v3 === 'GICHAEL CLERANS', `Got: ${v3}`);
+
+    // Test 41: Name label variation: "Name: MICHAEL CLERAN5"
+    const v4 = nicParser.cleanAndNormalizeName('Name: MICHAEL CLERAN5');
+    recordTest(41, 'Label removal: "Name: MICHAEL CLERAN5"', v4 === 'MICHAEL CLERAN', `Got: ${v4}`);
+
+    // Test 42: Name label variation: "NAME: MICHAEL  CLERANS"
+    const v5 = nicParser.cleanAndNormalizeName('NAME: MICHAEL  CLERANS');
+    recordTest(42, 'Label removal: "NAME: MICHAEL  CLERANS"', v5 === 'MICHAEL CLERANS', `Got: ${v5}`);
+
+    // Test 43: Name variation: "MICHAEL CLERANS"
+    const v6 = nicParser.cleanAndNormalizeName('MICHAEL CLERANS');
+    recordTest(43, 'Label removal: "MICHAEL CLERANS"', v6 === 'MICHAEL CLERANS', `Got: ${v6}`);
+
+    // -------------------------------------------------------------
     // SUMMARY
     // -------------------------------------------------------------
     console.log('\n================================================================');
