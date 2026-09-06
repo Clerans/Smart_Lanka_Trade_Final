@@ -157,6 +157,28 @@ export const authService = {
     } catch (error: any) {
       throw error;
     }
+  },
+  getProfile: async () => {
+    try {
+      const response = await api.get('/auth/profile');
+      if (response.data && response.data.user) {
+        await AsyncStorage.setItem('userData', JSON.stringify(response.data.user));
+      }
+      return response.data;
+    } catch (error: any) {
+      throw error;
+    }
+  },
+  updateProfile: async (data: { name?: string; email?: string; phoneNumber?: string; profileImage?: string | null }) => {
+    try {
+      const response = await api.put('/auth/profile', data);
+      if (response.data && response.data.user) {
+        await AsyncStorage.setItem('userData', JSON.stringify(response.data.user));
+      }
+      return response.data;
+    } catch (error: any) {
+      throw error;
+    }
   }
 };
 
