@@ -108,7 +108,9 @@ exports.loginUser = async (email, password) => {
       id: user.ID,
       name: user.NAME,
       email: user.EMAIL,
-      role: userRole
+      role: userRole,
+      phoneNumber: user.PHONE_NUMBER || null,
+      profileImage: user.PROFILE_IMAGE || null
     }
   };
 };

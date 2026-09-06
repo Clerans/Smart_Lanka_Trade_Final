@@ -1,11 +1,14 @@
 const oracledb = require('oracledb');
 
+// Configure CLOB columns to fetch as string automatically
+oracledb.fetchAsString = [ oracledb.CLOB ];
+
 exports.findByEmail = async (email) => {
   let connection;
   try {
     connection = await oracledb.getConnection();
     const result = await connection.execute(
-      `SELECT ID, NAME, EMAIL, PASSWORD, IS_VERIFIED, ROLE, KYC_STATUS, NIC_NUMBER, FAILED_ATTEMPTS, ACCOUNT_LOCKED_UNTIL, LAST_LOGIN FROM SL_USERS WHERE EMAIL = :email`,
+      `SELECT ID, NAME, EMAIL, PASSWORD, IS_VERIFIED, ROLE, KYC_STATUS, NIC_NUMBER, PHONE_NUMBER, PROFILE_IMAGE, FAILED_ATTEMPTS, ACCOUNT_LOCKED_UNTIL, LAST_LOGIN FROM SL_USERS WHERE EMAIL = :email`,
       [email],
       { outFormat: oracledb.OUT_FORMAT_OBJECT }
     );
@@ -20,11 +23,38 @@ exports.findById = async (id) => {
   try {
     connection = await oracledb.getConnection();
     const result = await connection.execute(
-      `SELECT ID, NAME, EMAIL, PASSWORD, IS_VERIFIED, ROLE, KYC_STATUS, NIC_NUMBER, CREATED_AT FROM SL_USERS WHERE ID = :id`,
+      `SELECT ID, NAME, EMAIL, PASSWORD, IS_VERIFIED, ROLE, KYC_STATUS, NIC_NUMBER, PHONE_NUMBER, PROFILE_IMAGE, CREATED_AT FROM SL_USERS WHERE ID = :id`,
       [id],
       { outFormat: oracledb.OUT_FORMAT_OBJECT }
     );
     return result.rows[0] || null;
+  } finally {
+    if (connection) await connection.close();
+  }
+};
+
+exports.updateProfile = async (userId, { name, email, phoneNumber, profileImage }) => {
+  let connection;
+  try {
+    connection = await oracledb.getConnection();
+    await connection.execute(
+      `UPDATE SL_USERS 
+       SET NAME = :name, 
+           EMAIL = :email, 
+           PHONE_NUMBER = :phoneNumber, 
+           PROFILE_IMAGE = :profileImage, 
+           UPDATED_AT = CURRENT_TIMESTAMP 
+       WHERE ID = :userId`,
+      {
+        name,
+        email,
+        phoneNumber: phoneNumber !== undefined ? phoneNumber : null,
+        profileImage: profileImage !== undefined ? profileImage : null,
+        userId
+      }
+    );
+    await connection.commit();
+    return await exports.findById(userId);
   } finally {
     if (connection) await connection.close();
   }
