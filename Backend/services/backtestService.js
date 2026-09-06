@@ -9,8 +9,8 @@
  */
 
 const axios = require('axios');
-const { calculateIndicators } = require('./technicalIndicators');
-const { evaluateTechnicalSignals } = require('./aiRecommendationService');
+const technicalIndicators = require('../utils/technicalIndicators');
+const { extractFeatures, evaluateSignals } = require('./aiRecommendationService');
 
 // Return thresholds for categorizing actual price movement
 const HORIZON_THRESHOLDS = {
