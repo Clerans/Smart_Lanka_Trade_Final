@@ -136,6 +136,14 @@ export const authService = {
     } catch (error: any) {
       throw error;
     }
+  },
+  changePassword: async (currentPassword: string, newPassword: string) => {
+    try {
+      const response = await api.post('/auth/change-password', { currentPassword, newPassword });
+      return response.data;
+    } catch (error: any) {
+      throw error;
+    }
   }
 };
 
