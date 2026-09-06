@@ -108,7 +108,9 @@ exports.loginUser = async (email, password) => {
       id: user.ID,
       name: user.NAME,
       email: user.EMAIL,
-      role: userRole
+      role: userRole,
+      phoneNumber: user.PHONE_NUMBER || null,
+      profileImage: user.PROFILE_IMAGE || null
     }
   };
 };
@@ -294,8 +296,73 @@ exports.googleLoginUser = async (email, name) => {
     user: {
       id: user.ID,
       name: user.NAME,
-      email: user.EMAIL
+      email: user.EMAIL,
+      phoneNumber: user.PHONE_NUMBER || null,
+      profileImage: user.PROFILE_IMAGE || null
     }
+  };
+};
+
+exports.getUserProfile = async (userId) => {
+  const user = await userModel.findById(userId);
+  if (!user) {
+    throw createError('USER_NOT_FOUND', 'User not found.', 404);
+  }
+
+  return {
+    id: user.ID,
+    name: user.NAME,
+    email: user.EMAIL,
+    phoneNumber: user.PHONE_NUMBER || null,
+    profileImage: user.PROFILE_IMAGE || null,
+    kycStatus: user.KYC_STATUS || 'NOT_SUBMITTED',
+    isVerified: user.IS_VERIFIED === 1,
+    role: user.ROLE || 'USER',
+    createdAt: user.CREATED_AT
+  };
+};
+
+exports.updateUserProfile = async (userId, { name, email, phoneNumber, profileImage }) => {
+  const currentUser = await userModel.findById(userId);
+  if (!currentUser) {
+    throw createError('USER_NOT_FOUND', 'User not found.', 404);
+  }
+
+  const updatedName = name !== undefined && name !== null ? name.trim() : currentUser.NAME;
+  const updatedEmail = email !== undefined && email !== null ? email.trim() : currentUser.EMAIL;
+
+  if (!updatedName) {
+    throw createError('INVALID_NAME', 'Name cannot be empty.', 422);
+  }
+
+  if (!updatedEmail) {
+    throw createError('INVALID_EMAIL', 'Email cannot be empty.', 422);
+  }
+
+  // If email is changing, ensure it is unique
+  if (updatedEmail.toLowerCase() !== currentUser.EMAIL.toLowerCase()) {
+    const existing = await userModel.findByEmail(updatedEmail);
+    if (existing && existing.ID !== userId) {
+      throw createError('EMAIL_ALREADY_EXISTS', 'This email address is already in use by another account.', 409);
+    }
+  }
+
+  const updatedUser = await userModel.updateProfile(userId, {
+    name: updatedName,
+    email: updatedEmail,
+    phoneNumber: phoneNumber !== undefined ? (phoneNumber ? phoneNumber.trim() : null) : currentUser.PHONE_NUMBER,
+    profileImage: profileImage !== undefined ? profileImage : currentUser.PROFILE_IMAGE
+  });
+
+  return {
+    id: updatedUser.ID,
+    name: updatedUser.NAME,
+    email: updatedUser.EMAIL,
+    phoneNumber: updatedUser.PHONE_NUMBER || null,
+    profileImage: updatedUser.PROFILE_IMAGE || null,
+    kycStatus: updatedUser.KYC_STATUS || 'NOT_SUBMITTED',
+    isVerified: updatedUser.IS_VERIFIED === 1,
+    role: updatedUser.ROLE || 'USER'
   };
 };
 

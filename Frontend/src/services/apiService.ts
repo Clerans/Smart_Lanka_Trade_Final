@@ -2,21 +2,20 @@ import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 
-<<<<<<< HEAD
-// Configurable Backend Base URL with environment override and development fallback
-const BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.8.109:5000/api';
-=======
+// Dynamic Backend Base URL resolver with environment override and Expo hostUri detection
 const getBaseUrl = () => {
+  if (process.env.EXPO_PUBLIC_API_URL) {
+    return process.env.EXPO_PUBLIC_API_URL;
+  }
   const hostUri = Constants.expoConfig?.hostUri;
   if (hostUri) {
     const ip = hostUri.split(':')[0];
     return `http://${ip}:5000/api`;
   }
-  return 'http://10.63.164.154:5000/api';
+  return 'http://192.168.8.109:5000/api';
 };
 
 const BASE_URL = getBaseUrl();
->>>>>>> origin/Clerans
 
 const api = axios.create({
   baseURL: BASE_URL,
@@ -154,6 +153,28 @@ export const authService = {
   changePassword: async (currentPassword: string, newPassword: string) => {
     try {
       const response = await api.post('/auth/change-password', { currentPassword, newPassword });
+      return response.data;
+    } catch (error: any) {
+      throw error;
+    }
+  },
+  getProfile: async () => {
+    try {
+      const response = await api.get('/auth/profile');
+      if (response.data && response.data.user) {
+        await AsyncStorage.setItem('userData', JSON.stringify(response.data.user));
+      }
+      return response.data;
+    } catch (error: any) {
+      throw error;
+    }
+  },
+  updateProfile: async (data: { name?: string; email?: string; phoneNumber?: string; profileImage?: string | null }) => {
+    try {
+      const response = await api.put('/auth/profile', data);
+      if (response.data && response.data.user) {
+        await AsyncStorage.setItem('userData', JSON.stringify(response.data.user));
+      }
       return response.data;
     } catch (error: any) {
       throw error;

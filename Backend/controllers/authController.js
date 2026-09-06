@@ -305,3 +305,43 @@ exports.changePassword = async (req, res) => {
     });
   }
 };
+
+exports.getProfile = async (req, res) => {
+  try {
+    const profile = await authService.getUserProfile(req.user.id);
+    res.json({
+      success: true,
+      user: profile
+    });
+  } catch (err) {
+    res.status(err.status || 500).json({
+      success: false,
+      code: err.code || 'SERVER_ERROR',
+      message: err.message
+    });
+  }
+};
+
+exports.updateProfile = async (req, res) => {
+  try {
+    const { name, email, phoneNumber, profileImage } = req.body;
+    const updatedUser = await authService.updateUserProfile(req.user.id, {
+      name,
+      email,
+      phoneNumber,
+      profileImage
+    });
+
+    res.json({
+      success: true,
+      message: 'Profile updated successfully.',
+      user: updatedUser
+    });
+  } catch (err) {
+    res.status(err.status || 500).json({
+      success: false,
+      code: err.code || 'SERVER_ERROR',
+      message: err.message
+    });
+  }
+};

@@ -10,11 +10,15 @@ import {
   Alert,
   ActivityIndicator,
   Modal,
-  Linking
+  TextInput,
+  Image,
+  KeyboardAvoidingView,
+  Platform
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
+import { MaterialIcons } from '@expo/vector-icons';
 import { useNavigation, useIsFocused } from '@react-navigation/native';
+import * as ImagePicker from 'expo-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { colors, typography, layout } from '../../theme';
 import { Card } from '../../components';
@@ -33,7 +37,12 @@ const menuItems = [
 export const UserProfileScreen = () => {
   const navigation = useNavigation<any>();
   const isFocused = useIsFocused();
-  const [user, setUser] = useState<{ name: string; email: string } | null>(null);
+  const [user, setUser] = useState<{ 
+    name: string; 
+    email: string; 
+    phoneNumber?: string | null; 
+    profileImage?: string | null 
+  } | null>(null);
   const [kycStatus, setKycStatus] = useState<string>('NOT_SUBMITTED');
   const [loadingKyc, setLoadingKyc] = useState<boolean>(true);
 
@@ -42,24 +51,43 @@ export const UserProfileScreen = () => {
   const [pushEnabled, setPushEnabled] = useState(true);
 
   // Modals
+  const [editProfileModalVisible, setEditProfileModalVisible] = useState(false);
   const [limitsModalVisible, setLimitsModalVisible] = useState(false);
   const [aboutModalVisible, setAboutModalVisible] = useState(false);
   const [supportModalVisible, setSupportModalVisible] = useState(false);
 
-  useEffect(() => {
-    const loadUser = async () => {
+  // Edit Profile Form State
+  const [editName, setEditName] = useState('');
+  const [editEmail, setEditEmail] = useState('');
+  const [editPhone, setEditPhone] = useState('');
+  const [editImage, setEditImage] = useState<string | null>(null);
+  const [savingProfile, setSavingProfile] = useState(false);
+
+  const loadUserProfile = async () => {
+    try {
       const userData = await AsyncStorage.getItem('userData');
       if (userData) {
         setUser(JSON.parse(userData));
       }
 
-      const bio = await AsyncStorage.getItem('@pref_biometric');
-      if (bio !== null) setBiometricEnabled(bio === 'true');
+      const res = await authService.getProfile();
+      if (res?.user) {
+        setUser(res.user);
+        await AsyncStorage.setItem('userData', JSON.stringify(res.user));
+      }
+    } catch (err) {
+      // Offline fallback
+    }
 
-      const push = await AsyncStorage.getItem('@pref_push_notifications');
-      if (push !== null) setPushEnabled(push === 'true');
-    };
-    loadUser();
+    const bio = await AsyncStorage.getItem('@pref_biometric');
+    if (bio !== null) setBiometricEnabled(bio === 'true');
+
+    const push = await AsyncStorage.getItem('@pref_push_notifications');
+    if (push !== null) setPushEnabled(push === 'true');
+  };
+
+  useEffect(() => {
+    loadUserProfile();
   }, [isFocused]);
 
   useEffect(() => {
@@ -71,7 +99,7 @@ export const UserProfileScreen = () => {
           setKycStatus(res.data.status);
         }
       } catch (e) {
-        // user not authenticated or offline
+        // Not authenticated or offline
       } finally {
         setLoadingKyc(false);
       }
@@ -80,6 +108,106 @@ export const UserProfileScreen = () => {
       fetchKyc();
     }
   }, [isFocused]);
+
+  const handleOpenEditModal = () => {
+    setEditName(user?.name || '');
+    setEditEmail(user?.email || '');
+    setEditPhone(user?.phoneNumber || '');
+    setEditImage(user?.profileImage || null);
+    setEditProfileModalVisible(true);
+  };
+
+  const handlePickImage = async () => {
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Denied', 'Gallery access is required to select a profile picture.');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.5,
+        base64: true,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        const asset = result.assets[0];
+        if (asset.base64) {
+          setEditImage(`data:image/jpeg;base64,${asset.base64}`);
+        } else {
+          setEditImage(asset.uri);
+        }
+      }
+    } catch (err: any) {
+      Alert.alert('Image Error', err.message || 'Could not select image.');
+    }
+  };
+
+  const handleTakePhoto = async () => {
+    try {
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Denied', 'Camera access is required to take a profile picture.');
+        return;
+      }
+
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.5,
+        base64: true,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        const asset = result.assets[0];
+        if (asset.base64) {
+          setEditImage(`data:image/jpeg;base64,${asset.base64}`);
+        } else {
+          setEditImage(asset.uri);
+        }
+      }
+    } catch (err: any) {
+      Alert.alert('Camera Error', err.message || 'Could not launch camera.');
+    }
+  };
+
+  const handleSaveProfile = async () => {
+    if (!editName.trim()) {
+      Alert.alert('Validation Error', 'Please enter your full name.');
+      return;
+    }
+    if (!editEmail.trim() || !editEmail.includes('@')) {
+      Alert.alert('Validation Error', 'Please enter a valid email address.');
+      return;
+    }
+
+    try {
+      setSavingProfile(true);
+      const res = await authService.updateProfile({
+        name: editName.trim(),
+        email: editEmail.trim(),
+        phoneNumber: editPhone.trim() || undefined,
+        profileImage: editImage
+      });
+
+      if (res?.user) {
+        setUser(res.user);
+        await AsyncStorage.setItem('userData', JSON.stringify(res.user));
+      }
+
+      setEditProfileModalVisible(false);
+      Alert.alert('Profile Updated', 'Your profile details have been successfully updated.');
+    } catch (err: any) {
+      const msg = err.response?.data?.message || err.message || 'Failed to update profile.';
+      Alert.alert('Update Failed', msg);
+    } finally {
+      setSavingProfile(false);
+    }
+  };
 
   const handleBiometricToggle = async (val: boolean) => {
     setBiometricEnabled(val);
@@ -187,13 +315,37 @@ export const UserProfileScreen = () => {
         {/* User Card */}
         <Card style={styles.userCard}>
           <View style={styles.userInfoRow}>
-            <View style={styles.avatarLarge}>
-              <MaterialIcons name="person" size={40} color={colors.accent} />
-            </View>
+            <TouchableOpacity onPress={handleOpenEditModal} activeOpacity={0.8} style={styles.avatarWrapper}>
+              {user?.profileImage ? (
+                <Image source={{ uri: user.profileImage }} style={styles.avatarImage} />
+              ) : (
+                <View style={styles.avatarLarge}>
+                  <MaterialIcons name="person" size={38} color={colors.accent} />
+                </View>
+              )}
+              <View style={styles.avatarEditBadge}>
+                <MaterialIcons name="camera-alt" size={10} color="#000" />
+              </View>
+            </TouchableOpacity>
+
             <View style={styles.userDetails}>
-              <Text style={styles.userName}>{user?.name || 'SmartLanka Trader'}</Text>
-              <Text style={styles.userEmail}>{user?.email || 'trader@smartlanka.com'}</Text>
-              {getTierBadge()}
+              <View style={styles.userNameHeaderRow}>
+                <Text style={styles.userName} numberOfLines={1}>{user?.name || 'SmartLanka Trader'}</Text>
+                <TouchableOpacity onPress={handleOpenEditModal} style={styles.editPillBtn}>
+                  <MaterialIcons name="edit" size={12} color={colors.accent} />
+                  <Text style={styles.editPillText}>Edit</Text>
+                </TouchableOpacity>
+              </View>
+              <Text style={styles.userEmail} numberOfLines={1}>{user?.email || 'trader@smartlanka.com'}</Text>
+              {user?.phoneNumber ? (
+                <View style={styles.userPhoneRow}>
+                  <MaterialIcons name="phone" size={12} color={colors.textSecondary} />
+                  <Text style={styles.userPhoneText}>{user.phoneNumber}</Text>
+                </View>
+              ) : null}
+              <View style={{ marginTop: 4 }}>
+                {getTierBadge()}
+              </View>
             </View>
           </View>
         </Card>
@@ -251,21 +403,34 @@ export const UserProfileScreen = () => {
                     color={item.id === 'kyc' ? colors.accent : colors.textPrimary} 
                   />
                 </View>
-                <Text style={[styles.menuTitle, item.id === 'kyc' && { fontWeight: '700' }]}>
+                <Text style={[styles.menuTitle, item.id === 'kyc' && { fontWeight: '700' }]} numberOfLines={1}>
                   {item.title}
                 </Text>
               </View>
-              {item.id === 'kyc' && (
-                <Text style={{ fontSize: 11, color: kycStatus === 'VERIFIED' ? colors.accent : colors.yellow, marginRight: 8, fontWeight: '600' }}>
-                  {kycStatus === 'VERIFIED' ? 'Verified' : kycStatus === 'PENDING' ? 'Pending' : 'Required'}
-                </Text>
-              )}
-              {item.id === '4' && (
-                <Text style={{ fontSize: 11, color: colors.accent, marginRight: 8, fontWeight: '600' }}>
-                  2 Active
-                </Text>
-              )}
-              <MaterialIcons name="chevron-right" size={24} color={colors.textSecondary} />
+
+              <View style={styles.menuRight}>
+                {item.id === 'kyc' && (
+                  <View style={[
+                    styles.menuBadgePill, 
+                    { backgroundColor: kycStatus === 'VERIFIED' ? colors.accentMuted : colors.yellow + '22' }
+                  ]}>
+                    <Text style={[
+                      styles.menuBadgeText, 
+                      { color: kycStatus === 'VERIFIED' ? colors.accent : colors.yellow }
+                    ]}>
+                      {kycStatus === 'VERIFIED' ? 'Verified' : kycStatus === 'PENDING' ? 'Pending' : 'Required'}
+                    </Text>
+                  </View>
+                )}
+                {item.id === '4' && (
+                  <View style={[styles.menuBadgePill, { backgroundColor: colors.accentMuted }]}>
+                    <Text style={[styles.menuBadgeText, { color: colors.accent }]}>
+                      2 Active
+                    </Text>
+                  </View>
+                )}
+                <MaterialIcons name="chevron-right" size={20} color={colors.textSecondary} />
+              </View>
             </TouchableOpacity>
           ))}
         </View>
@@ -279,6 +444,135 @@ export const UserProfileScreen = () => {
         <View style={{ height: 80 }} />
 
       </ScrollView>
+
+      {/* ============================================================ */}
+      {/* 0. EDIT PROFILE MODAL */}
+      {/* ============================================================ */}
+      <Modal visible={editProfileModalVisible} transparent animationType="slide">
+        <KeyboardAvoidingView 
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={styles.modalOverlay}
+        >
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <MaterialIcons name="edit" size={20} color={colors.accent} style={{ marginRight: 8 }} />
+                <Text style={styles.modalTitle}>Edit Profile</Text>
+              </View>
+              <TouchableOpacity onPress={() => setEditProfileModalVisible(false)}>
+                <MaterialIcons name="close" size={24} color={colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 480 }}>
+              {/* Profile Image Picker Area */}
+              <View style={styles.imagePickerSection}>
+                <TouchableOpacity onPress={handlePickImage} activeOpacity={0.8} style={styles.modalAvatarWrapper}>
+                  {editImage ? (
+                    <Image source={{ uri: editImage }} style={styles.modalAvatarImage} />
+                  ) : (
+                    <View style={styles.modalAvatarPlaceholder}>
+                      <MaterialIcons name="person" size={50} color={colors.accent} />
+                    </View>
+                  )}
+                  <View style={styles.modalAvatarCamIcon}>
+                    <MaterialIcons name="camera-alt" size={16} color="#FFF" />
+                  </View>
+                </TouchableOpacity>
+
+                <View style={styles.imageBtnRow}>
+                  <TouchableOpacity style={styles.imageActionBtn} onPress={handlePickImage}>
+                    <MaterialIcons name="photo-library" size={16} color={colors.accent} />
+                    <Text style={styles.imageActionBtnText}>Choose Photo</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.imageActionBtn} onPress={handleTakePhoto}>
+                    <MaterialIcons name="photo-camera" size={16} color={colors.accent} />
+                    <Text style={styles.imageActionBtnText}>Take Photo</Text>
+                  </TouchableOpacity>
+                  {editImage && (
+                    <TouchableOpacity 
+                      style={[styles.imageActionBtn, { borderColor: colors.red + '44' }]} 
+                      onPress={() => setEditImage(null)}
+                    >
+                      <MaterialIcons name="delete-outline" size={16} color={colors.red} />
+                      <Text style={[styles.imageActionBtnText, { color: colors.red }]}>Remove</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              </View>
+
+              {/* Input Fields */}
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Full Name</Text>
+                <View style={styles.inputWrapper}>
+                  <MaterialIcons name="person" size={20} color={colors.textSecondary} style={styles.inputIcon} />
+                  <TextInput
+                    style={styles.textInput}
+                    placeholder="Enter your full name"
+                    placeholderTextColor={colors.textSecondary}
+                    value={editName}
+                    onChangeText={setEditName}
+                    autoCapitalize="words"
+                  />
+                </View>
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Email Address</Text>
+                <View style={styles.inputWrapper}>
+                  <MaterialIcons name="email" size={20} color={colors.textSecondary} style={styles.inputIcon} />
+                  <TextInput
+                    style={styles.textInput}
+                    placeholder="Enter your email"
+                    placeholderTextColor={colors.textSecondary}
+                    value={editEmail}
+                    onChangeText={setEditEmail}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                  />
+                </View>
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Phone Number (Sri Lanka / Intl)</Text>
+                <View style={styles.inputWrapper}>
+                  <MaterialIcons name="phone" size={20} color={colors.textSecondary} style={styles.inputIcon} />
+                  <TextInput
+                    style={styles.textInput}
+                    placeholder="+94 77 123 4567"
+                    placeholderTextColor={colors.textSecondary}
+                    value={editPhone}
+                    onChangeText={setEditPhone}
+                    keyboardType="phone-pad"
+                  />
+                </View>
+              </View>
+            </ScrollView>
+
+            {/* Action Buttons */}
+            <View style={styles.modalBtnRow}>
+              <TouchableOpacity 
+                style={styles.modalCancelBtn} 
+                onPress={() => setEditProfileModalVisible(false)}
+                disabled={savingProfile}
+              >
+                <Text style={styles.modalCancelBtnText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={styles.modalSaveBtn} 
+                onPress={handleSaveProfile}
+                disabled={savingProfile}
+              >
+                {savingProfile ? (
+                  <ActivityIndicator size="small" color="#000" />
+                ) : (
+                  <Text style={styles.modalSaveBtnText}>Save Changes</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
 
       {/* 1. TRADING LIMITS & FEES MODAL */}
       <Modal visible={limitsModalVisible} transparent animationType="slide">
@@ -448,74 +742,131 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     ...typography.h1,
-    color: '#FFF',
+    color: colors.textPrimary,
   },
   iconBtn: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: colors.bgInput,
-    justifyContent: 'center',
-    alignItems: 'center',
+    padding: 8,
+    backgroundColor: colors.bgCard,
+    borderRadius: layout.borderRadiusSmall,
   },
   userCard: {
     marginHorizontal: 24,
-    marginBottom: 24,
-    backgroundColor: '#161616',
+    marginBottom: 20,
+    padding: 16,
+    borderRadius: layout.borderRadius,
     borderWidth: 1,
     borderColor: colors.border,
-    padding: 18,
-    borderRadius: 16,
+    backgroundColor: colors.bgCard,
   },
   userInfoRow: {
     flexDirection: 'row',
     alignItems: 'center',
   },
+  avatarWrapper: {
+    position: 'relative',
+    marginRight: 16,
+  },
   avatarLarge: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    borderWidth: 2,
-    borderColor: colors.accent,
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: colors.accentMuted,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 16,
-    backgroundColor: 'rgba(0, 230, 118, 0.08)',
+    borderWidth: 2,
+    borderColor: colors.accent,
+  },
+  avatarImage: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    borderWidth: 2,
+    borderColor: colors.accent,
+  },
+  avatarEditBadge: {
+    position: 'absolute',
+    bottom: -2,
+    right: -2,
+    backgroundColor: colors.accent,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: colors.bgCard,
   },
   userDetails: {
     flex: 1,
   },
-  userName: {
-    ...typography.h3,
-    color: '#FFF',
+  userNameHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     marginBottom: 2,
-    fontSize: 18,
+  },
+  userName: {
+    ...typography.h2,
+    fontSize: 20,
+    color: colors.textPrimary,
+    flex: 1,
+    marginRight: 8,
+  },
+  editPillBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.accentMuted,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: colors.accent + '33',
+  },
+  editPillText: {
+    ...typography.bodySmall,
+    color: colors.accent,
+    fontSize: 11,
+    fontWeight: '700',
+    marginLeft: 3,
   },
   userEmail: {
     ...typography.bodySmall,
     color: colors.textSecondary,
-    marginBottom: 8,
+    fontSize: 13,
+    marginBottom: 2,
+  },
+  userPhoneRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  userPhoneText: {
+    ...typography.bodySmall,
+    color: colors.textSecondary,
+    fontSize: 12,
+    marginLeft: 4,
   },
   tierBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     alignSelf: 'flex-start',
-    paddingHorizontal: 10,
+    paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 16,
+    borderRadius: layout.borderRadiusSmall,
+    marginTop: 2,
   },
   tierText: {
-    ...typography.label,
-    fontSize: 10,
-    marginLeft: 4,
+    ...typography.bodySmall,
     fontWeight: '700',
+    marginLeft: 4,
   },
   preferencesSection: {
-    marginHorizontal: 24,
     backgroundColor: colors.bgCard,
+    marginHorizontal: 24,
     borderRadius: layout.borderRadius,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
     marginBottom: 24,
-    paddingVertical: 6,
     borderWidth: 1,
     borderColor: colors.border,
   },
@@ -524,7 +875,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingVertical: 12,
-    paddingHorizontal: 16,
   },
   prefLeft: {
     flexDirection: 'row',
@@ -532,12 +882,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   prefIcon: {
-    marginRight: 14,
+    marginRight: 16,
   },
   prefText: {
     ...typography.body,
-    fontWeight: '600',
-    color: '#FFF',
+    color: colors.textPrimary,
+    fontWeight: '500',
   },
   prefSubtext: {
     ...typography.bodySmall,
@@ -548,16 +898,18 @@ const styles = StyleSheet.create({
   divider: {
     height: 1,
     backgroundColor: colors.border,
-    marginHorizontal: 16,
   },
   menuSection: {
-    paddingHorizontal: 24,
-    marginBottom: 32,
+    backgroundColor: colors.bgCard,
+    marginHorizontal: 24,
+    borderRadius: layout.borderRadius,
+    paddingHorizontal: 16,
+    marginBottom: 24,
   },
   menuItem: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    justifyContent: 'space-between',
     paddingVertical: 16,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
@@ -566,57 +918,78 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
+    marginRight: 10,
   },
   menuIconBg: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 36,
+    height: 36,
+    borderRadius: layout.borderRadiusSmall,
     backgroundColor: colors.bgInput,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 16,
+    marginRight: 14,
   },
   menuTitle: {
     ...typography.body,
-    fontWeight: '600',
-    color: '#FFF',
+    color: colors.textPrimary,
+    flexShrink: 1,
+  },
+  menuRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  menuBadgePill: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    marginRight: 6,
+  },
+  menuBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
   },
   logoutBtn: {
     flexDirection: 'row',
-    justifyContent: 'center',
     alignItems: 'center',
+    justifyContent: 'center',
     marginHorizontal: 24,
     paddingVertical: 16,
-    borderRadius: layout.borderRadiusPill,
+    backgroundColor: colors.bgCard,
+    borderRadius: layout.borderRadius,
     borderWidth: 1,
-    borderColor: colors.red,
-    backgroundColor: 'rgba(255, 68, 68, 0.05)',
+    borderColor: colors.redMuted,
   },
   logoutIcon: {
     marginRight: 8,
   },
   logoutText: {
     ...typography.body,
-    color: colors.red,
     fontWeight: '700',
+    color: colors.red,
   },
+  // Modal Styling
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.75)',
-    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0,0,0,0.8)',
+    justifyContent: 'center',
+    paddingHorizontal: 20,
   },
   modalContent: {
     backgroundColor: colors.bgCard,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    padding: 24,
-    paddingBottom: 40,
+    borderRadius: 16,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: colors.border,
+    maxHeight: '85%',
   },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
   },
   modalTitle: {
     ...typography.h2,
@@ -624,18 +997,130 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '700',
   },
-  modalDoneBtn: {
-    backgroundColor: colors.accent,
-    borderRadius: 12,
-    paddingVertical: 14,
+  // Edit Profile Modal Specific
+  imagePickerSection: {
     alignItems: 'center',
-    marginTop: 20,
+    marginBottom: 16,
   },
-  modalDoneBtnText: {
+  modalAvatarWrapper: {
+    position: 'relative',
+    marginBottom: 12,
+  },
+  modalAvatarPlaceholder: {
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    backgroundColor: colors.accentMuted,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: colors.accent,
+  },
+  modalAvatarImage: {
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    borderWidth: 2,
+    borderColor: colors.accent,
+  },
+  modalAvatarCamIcon: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    backgroundColor: colors.accent,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: colors.bgCard,
+  },
+  imageBtnRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  imageActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.bgInput,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  imageActionBtnText: {
+    ...typography.bodySmall,
+    color: '#FFF',
+    fontSize: 11,
+    marginLeft: 6,
+    fontWeight: '600',
+  },
+  inputGroup: {
+    marginBottom: 14,
+  },
+  inputLabel: {
+    ...typography.bodySmall,
+    color: colors.textSecondary,
+    marginBottom: 6,
+    fontWeight: '600',
+  },
+  inputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.bgInput,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  inputIcon: {
+    marginRight: 10,
+  },
+  textInput: {
+    flex: 1,
+    paddingVertical: 12,
+    color: '#FFF',
+    fontSize: 14,
+  },
+  modalBtnRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 16,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  modalCancelBtn: {
+    flex: 1,
+    backgroundColor: colors.bgInput,
+    paddingVertical: 14,
+    borderRadius: 10,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  modalCancelBtnText: {
+    ...typography.body,
+    color: colors.textSecondary,
+    fontWeight: '600',
+  },
+  modalSaveBtn: {
+    flex: 2,
+    backgroundColor: colors.accent,
+    paddingVertical: 14,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  modalSaveBtnText: {
+    ...typography.body,
     color: '#000',
     fontWeight: '700',
-    fontSize: 15,
   },
+  // Trading Limits Specific
   limitCard: {
     backgroundColor: colors.bgInput,
     borderRadius: 12,
@@ -652,27 +1137,26 @@ const styles = StyleSheet.create({
   limitValue: {
     ...typography.body,
     fontWeight: '700',
-    color: '#FFF',
+    color: colors.accent,
   },
   limitSub: {
     ...typography.bodySmall,
     color: colors.textSecondary,
     fontSize: 11,
+    marginTop: 2,
   },
   feeBreakdown: {
-    marginTop: 10,
-    padding: 14,
-    backgroundColor: 'rgba(255,255,255,0.02)',
+    backgroundColor: colors.bgInput,
     borderRadius: 12,
+    padding: 14,
+    marginTop: 6,
     borderWidth: 1,
     borderColor: colors.border,
   },
   feeTitle: {
     ...typography.label,
-    color: colors.textSecondary,
-    fontSize: 10,
+    color: colors.accent,
     marginBottom: 10,
-    letterSpacing: 1,
   },
   feeRow: {
     flexDirection: 'row',
@@ -760,5 +1244,17 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     fontSize: 11,
     marginTop: 2,
+  },
+  modalDoneBtn: {
+    backgroundColor: colors.accent,
+    paddingVertical: 14,
+    borderRadius: 10,
+    alignItems: 'center',
+    marginTop: 16,
+  },
+  modalDoneBtnText: {
+    ...typography.body,
+    color: '#000',
+    fontWeight: '700',
   },
 });

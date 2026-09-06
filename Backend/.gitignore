@@ -13,3 +13,7 @@ yarn-error.log*
 
 # build
 dist/
+# Environment variables
+.env
+.env.*
+!.env.example

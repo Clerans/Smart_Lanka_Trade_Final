@@ -81,9 +81,17 @@ export const MarketWatchScreen = () => {
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Market Watch</Text>
-        <TouchableOpacity style={styles.filterIconBtn}>
-          <MaterialIcons name="tune" size={24} color={colors.accent} />
-        </TouchableOpacity>
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <TouchableOpacity 
+            style={[styles.filterIconBtn, { marginRight: 8 }]} 
+            onPress={() => navigation.navigate('AIAnalytics')}
+          >
+            <MaterialIcons name="psychology" size={24} color={colors.accent} />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.filterIconBtn}>
+            <MaterialIcons name="tune" size={24} color={colors.accent} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Search */}
