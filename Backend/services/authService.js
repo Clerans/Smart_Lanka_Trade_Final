@@ -4,7 +4,12 @@ const crypto = require('crypto');
 const userModel = require('../models/userModel');
 const verificationModel = require('../models/verificationModel');
 const { sendVerificationEmail } = require('./emailService');
-const { validatePassword } = require('../utils/validator');
+const { validatePassword, validateEmail } = require('../utils/validator');
+const { logAuditEvent } = require('./auditService');
+
+const JWT_SECRET = process.env.JWT_SECRET || 'smartlanka_super_secret_jwt_key_2026';
+const MAX_OTP_ATTEMPTS = 5;
+const OTP_EXPIRY_MINUTES = 5;
 
 const createError = (code, message, status = 400) => {
   const err = new Error(message);
@@ -13,42 +18,75 @@ const createError = (code, message, status = 400) => {
   return err;
 };
 
-exports.registerUser = async (name, email, password) => {
+// Generate cryptographically secure 6-digit OTP
+function generateSecureOTP() {
+  return crypto.randomInt(100000, 1000000).toString();
+}
+
+exports.registerUser = async (name, email, password, role = 'INVESTOR', clientMeta = {}) => {
+  const sanitizedEmail = email.trim().toLowerCase();
+  
+  if (!validateEmail(sanitizedEmail)) {
+    throw createError('INVALID_EMAIL', 'Please provide a valid email address.', 422);
+  }
+
   // Check if email already exists
-  const existingUser = await userModel.findByEmail(email);
+  const existingUser = await userModel.findByEmail(sanitizedEmail);
   if (existingUser) {
     throw createError('EMAIL_ALREADY_EXISTS', 'Email address is already registered.', 409);
   }
 
   // Validate password strength
   if (!validatePassword(password)) {
-    throw createError('PASSWORD_TOO_WEAK', 'Password is too weak. Must be at least 8 characters, and contain uppercase, lowercase, numbers, and special characters.', 422);
+    throw createError(
+      'PASSWORD_TOO_WEAK',
+      'Password must be at least 8 characters, and contain uppercase, lowercase, numbers, and special characters.',
+      422
+    );
   }
 
-  // Generate random token for legacy / email link support if needed
-  const token = crypto.randomBytes(32).toString('hex');
   const hashedPassword = await bcrypt.hash(password, 10);
-  const userId = await userModel.createUser(name, email, hashedPassword, token);
+  const userId = await userModel.createUser(name.trim(), sanitizedEmail, hashedPassword, role);
 
-  // Generate 6-digit OTP for email verification
-  const otp = Math.floor(100000 + Math.random() * 900000).toString();
-  const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes expiry
-  await verificationModel.createEmailVerificationOTP(userId, otp, expiresAt);
+  // Generate cryptographically secure 6-digit OTP & store its bcrypt hash
+  const otp = generateSecureOTP();
+  const otpHashed = await bcrypt.hash(otp, 10);
+  const expiresAt = new Date(Date.now() + OTP_EXPIRY_MINUTES * 60 * 1000);
+  
+  await verificationModel.createEmailVerificationOTP(userId, otpHashed, expiresAt);
 
-  console.log(`\n=================================================`);
-  console.log(`📧 [SIMULATION] Email Verification OTP for ${email}: ${otp}`);
-  console.log(`=================================================\n`);
+  // Send verification email
+  sendVerificationEmail(sanitizedEmail, otp);
 
-  // Optionally send verification email (async)
-  sendVerificationEmail(email, token);
+  // Audit Log
+  await logAuditEvent({
+    userId,
+    action: 'USER_REGISTRATION',
+    entity: 'USER',
+    entityId: userId,
+    ipAddress: clientMeta.ip,
+    userAgent: clientMeta.userAgent,
+    details: `User registered with role ${role}`
+  });
 
-  return { userId, otp };
+  return { userId, email: sanitizedEmail };
 };
 
-exports.loginUser = async (email, password) => {
-  const user = await userModel.findByEmail(email);
+exports.loginUser = async (email, password, clientMeta = {}) => {
+  const sanitizedEmail = email.trim().toLowerCase();
+  const user = await userModel.findByEmail(sanitizedEmail);
+  
   if (!user) {
-    throw createError('USER_NOT_FOUND', 'User with this email does not exist.', 404);
+    await logAuditEvent({
+      userId: null,
+      action: 'LOGIN_FAILED',
+      entity: 'SECURITY',
+      ipAddress: clientMeta.ip,
+      userAgent: clientMeta.userAgent,
+      details: `Non-existent user login attempt for email: ${sanitizedEmail}`,
+      status: 'FAILED'
+    });
+    throw createError('INVALID_CREDENTIALS', 'Invalid email or password.', 401);
   }
 
   // Check if account is locked
@@ -56,9 +94,19 @@ exports.loginUser = async (email, password) => {
     const lockTime = new Date(user.ACCOUNT_LOCKED_UNTIL);
     if (lockTime > new Date()) {
       const minutesLeft = Math.ceil((lockTime - new Date()) / (60 * 1000));
+      await logAuditEvent({
+        userId: user.ID,
+        action: 'LOGIN_BLOCKED_LOCKED_ACCOUNT',
+        entity: 'SECURITY',
+        entityId: user.ID,
+        ipAddress: clientMeta.ip,
+        userAgent: clientMeta.userAgent,
+        details: `Locked account login attempt. ${minutesLeft} mins remaining.`,
+        status: 'BLOCKED'
+      });
       throw createError(
         'ACCOUNT_LOCKED',
-        `Account is temporarily locked due to too many failed login attempts. Try again in ${minutesLeft} minute(s).`,
+        `Account is temporarily locked due to failed login attempts. Try again in ${minutesLeft} minute(s).`,
         403
       );
     }
@@ -67,10 +115,20 @@ exports.loginUser = async (email, password) => {
   // Compare passwords
   const isMatch = await bcrypt.compare(password, user.PASSWORD);
   if (!isMatch) {
-    const newAttempts = user.FAILED_ATTEMPTS + 1;
+    const newAttempts = (user.FAILED_ATTEMPTS || 0) + 1;
     if (newAttempts >= 5) {
       const lockUntil = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes lockout
       await userModel.lockAccount(user.ID, lockUntil);
+      await logAuditEvent({
+        userId: user.ID,
+        action: 'ACCOUNT_LOCKED',
+        entity: 'SECURITY',
+        entityId: user.ID,
+        ipAddress: clientMeta.ip,
+        userAgent: clientMeta.userAgent,
+        details: 'Account locked for 15 minutes after 5 failed attempts.',
+        status: 'WARNING'
+      });
       throw createError(
         'ACCOUNT_LOCKED',
         'Account locked due to 5 consecutive failed login attempts. Try again in 15 minutes.',
@@ -79,9 +137,19 @@ exports.loginUser = async (email, password) => {
     } else {
       await userModel.updateFailedAttempts(user.ID, newAttempts);
       const remaining = 5 - newAttempts;
+      await logAuditEvent({
+        userId: user.ID,
+        action: 'LOGIN_FAILED_PASSWORD',
+        entity: 'SECURITY',
+        entityId: user.ID,
+        ipAddress: clientMeta.ip,
+        userAgent: clientMeta.userAgent,
+        details: `Failed password attempt (${newAttempts}/5).`,
+        status: 'FAILED'
+      });
       throw createError(
-        'INVALID_PASSWORD',
-        `Incorrect password. ${remaining} attempt(s) remaining before account lockout.`,
+        'INVALID_CREDENTIALS',
+        `Incorrect password. ${remaining} attempt(s) remaining before temporary lockout.`,
         401
       );
     }
@@ -89,69 +157,93 @@ exports.loginUser = async (email, password) => {
 
   // Check if email is verified
   if (user.IS_VERIFIED === 0) {
-    throw createError('EMAIL_NOT_VERIFIED', 'Please verify your email before logging in.', 403);
+    throw createError('EMAIL_NOT_VERIFIED', 'Please verify your email address before logging in.', 403);
   }
 
-  // Reset attempts and log login timestamp
+  // Reset attempts and update last login
   await userModel.resetFailedAttemptsAndLogLogin(user.ID);
 
+  // Generate JWT with claims
   const token = jwt.sign(
-    { id: user.ID, email: user.EMAIL },
-    process.env.JWT_SECRET,
+    {
+      id: user.ID,
+      email: user.EMAIL,
+      role: user.ROLE || 'INVESTOR',
+      name: user.NAME
+    },
+    JWT_SECRET,
     { expiresIn: '1d' }
   );
+
+  await logAuditEvent({
+    userId: user.ID,
+    action: 'LOGIN_SUCCESS',
+    entity: 'USER',
+    entityId: user.ID,
+    ipAddress: clientMeta.ip,
+    userAgent: clientMeta.userAgent,
+    details: `User logged in with role: ${user.ROLE}`
+  });
 
   return {
     token,
     user: {
       id: user.ID,
       name: user.NAME,
-      email: user.EMAIL
+      email: user.EMAIL,
+      role: user.ROLE || 'INVESTOR',
+      kycStatus: user.KYC_STATUS || 'UNVERIFIED'
     }
   };
 };
 
-exports.sendVerificationOTP = async (email) => {
-  const user = await userModel.findByEmail(email);
+exports.verifyEmailOTP = async (email, otp, clientMeta = {}) => {
+  const sanitizedEmail = email.trim().toLowerCase();
+  const user = await userModel.findByEmail(sanitizedEmail);
   if (!user) {
     throw createError('USER_NOT_FOUND', 'User with this email does not exist.', 404);
   }
 
-  const otp = Math.floor(100000 + Math.random() * 900000).toString();
-  const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
-  await verificationModel.createEmailVerificationOTP(user.ID, otp, expiresAt);
-
-  console.log(`\n=================================================`);
-  console.log(`📧 [SIMULATION] Sent Email Verification OTP to ${email}: ${otp}`);
-  console.log(`=================================================\n`);
-
-  return { otp };
-};
-
-exports.verifyEmailOTP = async (email, otp) => {
-  const user = await userModel.findByEmail(email);
-  if (!user) {
-    throw createError('USER_NOT_FOUND', 'User with this email does not exist.', 404);
-  }
-
-  const record = await verificationModel.findEmailVerificationOTP(email, otp);
+  const record = await verificationModel.findActiveEmailVerification(sanitizedEmail);
   if (!record) {
-    throw createError('OTP_INVALID', 'Invalid OTP verification code.', 422);
+    throw createError('OTP_INVALID', 'No active verification request found. Please request a new OTP.', 422);
+  }
+
+  if (record.ATTEMPTS >= MAX_OTP_ATTEMPTS) {
+    throw createError('OTP_MAX_ATTEMPTS', 'Maximum OTP verification attempts exceeded. Please request a new code.', 422);
   }
 
   if (new Date(record.EXPIRES_AT) < new Date()) {
-    throw createError('OTP_EXPIRED', 'OTP verification code has expired (valid for 5 minutes).', 422);
+    throw createError('OTP_EXPIRED', 'Verification code has expired (valid for 5 minutes). Please request a new code.', 422);
   }
 
-  // Update user verified flag and verification record
+  const isOtpValid = await bcrypt.compare(otp.trim(), record.OTP_HASH);
+  if (!isOtpValid) {
+    await verificationModel.incrementEmailOtpAttempts(record.ID, record.ATTEMPTS + 1);
+    const remaining = MAX_OTP_ATTEMPTS - (record.ATTEMPTS + 1);
+    throw createError('OTP_INVALID', `Invalid verification code. ${remaining} attempt(s) remaining.`, 422);
+  }
+
+  // Mark verified and update user
   await userModel.verifyUser(user.ID);
   await verificationModel.markEmailVerificationOTPVerified(record.ID);
+
+  await logAuditEvent({
+    userId: user.ID,
+    action: 'EMAIL_VERIFIED',
+    entity: 'USER',
+    entityId: user.ID,
+    ipAddress: clientMeta.ip,
+    userAgent: clientMeta.userAgent,
+    details: 'User email verified successfully.'
+  });
 
   return { message: 'Email verified successfully! You can now log in.' };
 };
 
-exports.resendVerificationOTP = async (email) => {
-  const user = await userModel.findByEmail(email);
+exports.resendVerificationOTP = async (email, clientMeta = {}) => {
+  const sanitizedEmail = email.trim().toLowerCase();
+  const user = await userModel.findByEmail(sanitizedEmail);
   if (!user) {
     throw createError('USER_NOT_FOUND', 'User with this email does not exist.', 404);
   }
@@ -160,133 +252,188 @@ exports.resendVerificationOTP = async (email) => {
     throw createError('EMAIL_ALREADY_VERIFIED', 'This email is already verified.', 409);
   }
 
-  const otp = Math.floor(100000 + Math.random() * 900000).toString();
-  const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
-  await verificationModel.createEmailVerificationOTP(user.ID, otp, expiresAt);
+  const otp = generateSecureOTP();
+  const otpHashed = await bcrypt.hash(otp, 10);
+  const expiresAt = new Date(Date.now() + OTP_EXPIRY_MINUTES * 60 * 1000);
+  
+  await verificationModel.createEmailVerificationOTP(user.ID, otpHashed, expiresAt);
+  sendVerificationEmail(sanitizedEmail, otp);
 
-  console.log(`\n=================================================`);
-  console.log(`📧 [SIMULATION] Resent Email Verification OTP to ${email}: ${otp}`);
-  console.log(`=================================================\n`);
+  await logAuditEvent({
+    userId: user.ID,
+    action: 'OTP_RESENT',
+    entity: 'SECURITY',
+    entityId: user.ID,
+    ipAddress: clientMeta.ip,
+    userAgent: clientMeta.userAgent,
+    details: 'Verification OTP resent.'
+  });
 
-  return { otp };
+  return { message: 'Verification code resent successfully.' };
 };
 
-exports.forgotPassword = async (email) => {
-  const user = await userModel.findByEmail(email);
+exports.forgotPassword = async (email, clientMeta = {}) => {
+  const sanitizedEmail = email.trim().toLowerCase();
+  const user = await userModel.findByEmail(sanitizedEmail);
   if (!user) {
-    throw createError('USER_NOT_FOUND', 'User with this email does not exist.', 404);
+    // Return generic message to prevent user enumeration
+    return { message: 'If this email is registered, a password reset code has been sent.' };
   }
 
-  const otp = Math.floor(100000 + Math.random() * 900000).toString();
-  const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
-  await verificationModel.createPasswordResetOTP(user.ID, otp, expiresAt);
+  const otp = generateSecureOTP();
+  const otpHashed = await bcrypt.hash(otp, 10);
+  const expiresAt = new Date(Date.now() + OTP_EXPIRY_MINUTES * 60 * 1000);
+  
+  await verificationModel.createPasswordResetOTP(user.ID, otpHashed, expiresAt);
+  sendVerificationEmail(sanitizedEmail, otp);
 
-  console.log(`\n=================================================`);
-  console.log(`🔑 [SIMULATION] Password Reset OTP for ${email}: ${otp}`);
-  console.log(`=================================================\n`);
+  await logAuditEvent({
+    userId: user.ID,
+    action: 'PASSWORD_RESET_REQUESTED',
+    entity: 'SECURITY',
+    entityId: user.ID,
+    ipAddress: clientMeta.ip,
+    userAgent: clientMeta.userAgent,
+    details: 'Password reset OTP generated.'
+  });
 
-  return { otp };
+  return { message: 'If this email is registered, a password reset code has been sent.' };
 };
 
 exports.verifyResetOTP = async (email, otp) => {
-  const user = await userModel.findByEmail(email);
+  const sanitizedEmail = email.trim().toLowerCase();
+  const user = await userModel.findByEmail(sanitizedEmail);
   if (!user) {
-    throw createError('USER_NOT_FOUND', 'User with this email does not exist.', 404);
+    throw createError('OTP_INVALID', 'Invalid code or request.', 422);
   }
 
-  const record = await verificationModel.findPasswordResetOTP(email, otp);
+  const record = await verificationModel.findActivePasswordReset(sanitizedEmail);
   if (!record) {
-    throw createError('OTP_INVALID', 'Invalid OTP code.', 422);
+    throw createError('OTP_INVALID', 'No active reset request found. Please request a new code.', 422);
+  }
+
+  if (record.ATTEMPTS >= MAX_OTP_ATTEMPTS) {
+    throw createError('OTP_MAX_ATTEMPTS', 'Maximum reset attempts exceeded. Please request a new code.', 422);
   }
 
   if (new Date(record.EXPIRES_AT) < new Date()) {
-    throw createError('OTP_EXPIRED', 'OTP has expired (valid for 5 minutes).', 422);
+    throw createError('OTP_EXPIRED', 'Reset code has expired (valid for 5 minutes).', 422);
   }
 
-  return { message: 'OTP is valid.' };
+  const isOtpValid = await bcrypt.compare(otp.trim(), record.OTP_HASH);
+  if (!isOtpValid) {
+    await verificationModel.incrementResetOtpAttempts(record.ID, record.ATTEMPTS + 1);
+    const remaining = MAX_OTP_ATTEMPTS - (record.ATTEMPTS + 1);
+    throw createError('OTP_INVALID', `Invalid reset code. ${remaining} attempt(s) remaining.`, 422);
+  }
+
+  return { message: 'Reset code is valid.' };
 };
 
-exports.resetPassword = async (email, otp, newPassword) => {
-  const user = await userModel.findByEmail(email);
+exports.resetPassword = async (email, otp, newPassword, clientMeta = {}) => {
+  const sanitizedEmail = email.trim().toLowerCase();
+  const user = await userModel.findByEmail(sanitizedEmail);
   if (!user) {
-    throw createError('USER_NOT_FOUND', 'User with this email does not exist.', 404);
+    throw createError('USER_NOT_FOUND', 'User does not exist.', 404);
   }
 
-  const record = await verificationModel.findPasswordResetOTP(email, otp);
+  const record = await verificationModel.findActivePasswordReset(sanitizedEmail);
   if (!record) {
-    throw createError('OTP_INVALID', 'Invalid or expired OTP code.', 422);
+    throw createError('OTP_INVALID', 'Invalid or expired reset code.', 422);
   }
 
   if (new Date(record.EXPIRES_AT) < new Date()) {
-    throw createError('OTP_EXPIRED', 'OTP code has expired (valid for 5 minutes).', 422);
+    throw createError('OTP_EXPIRED', 'Reset code has expired.', 422);
   }
 
-  // Validate password strength
+  const isOtpValid = await bcrypt.compare(otp.trim(), record.OTP_HASH);
+  if (!isOtpValid) {
+    throw createError('OTP_INVALID', 'Invalid reset code.', 422);
+  }
+
+  // Validate new password strength
   if (!validatePassword(newPassword)) {
-    throw createError('PASSWORD_TOO_WEAK', 'Password is too weak. Must be at least 8 characters, and contain uppercase, lowercase, numbers, and special characters.', 422);
+    throw createError(
+      'PASSWORD_TOO_WEAK',
+      'Password must be at least 8 characters, and contain uppercase, lowercase, numbers, and special characters.',
+      422
+    );
   }
 
-  // Hash new password and update user
   const hashedPassword = await bcrypt.hash(newPassword, 10);
   await userModel.updatePassword(user.ID, hashedPassword);
   await verificationModel.markPasswordResetOTPUsed(record.ID);
-
-  // Reset failed login attempts and lockout when password is successfully reset
   await userModel.resetFailedAttemptsAndLogLogin(user.ID);
 
-  return { message: 'Password reset successful. You can now log in.' };
+  await logAuditEvent({
+    userId: user.ID,
+    action: 'PASSWORD_RESET_COMPLETED',
+    entity: 'USER',
+    entityId: user.ID,
+    ipAddress: clientMeta.ip,
+    userAgent: clientMeta.userAgent,
+    details: 'Password reset completed successfully.'
+  });
+
+  return { message: 'Password reset successful. You can now log in with your new password.' };
 };
 
-exports.verifyEmailToken = async (token) => {
-  const user = await userModel.findByToken(token);
-  if (!user) {
-    throw createError('INVALID_TOKEN', 'Invalid or expired verification token.', 400);
+exports.googleLoginUser = async (idToken, email, name, clientMeta = {}) => {
+  // If an ID token or verifiable payload is supplied, validate it
+  if (!email || !validateEmail(email)) {
+    throw createError('INVALID_GOOGLE_AUTH', 'Invalid Google credentials supplied.', 422);
   }
 
-  await userModel.verifyUser(user.ID);
-  return { message: 'Email verified successfully! You can now log in.' };
-};
+  const sanitizedEmail = email.trim().toLowerCase();
+  let user = await userModel.findByEmail(sanitizedEmail);
 
-exports.googleLoginUser = async (email, name) => {
-  let user = await userModel.findByEmail(email);
   if (!user) {
-    // Create a new user with random password, automatically verified
-    const randomPassword = crypto.randomBytes(16).toString('hex');
+    const randomPassword = crypto.randomBytes(32).toString('hex');
     const hashedPassword = await bcrypt.hash(randomPassword, 10);
-    const token = crypto.randomBytes(32).toString('hex');
-    const userId = await userModel.createUser(name, email, hashedPassword, token);
+    const userId = await userModel.createUser(name ? name.trim() : 'Google User', sanitizedEmail, hashedPassword, 'INVESTOR');
     await userModel.verifyUser(userId);
-    user = await userModel.findByEmail(email);
+    user = await userModel.findByEmail(sanitizedEmail);
   }
 
-  // Ensure not locked
   if (user.ACCOUNT_LOCKED_UNTIL) {
     const lockTime = new Date(user.ACCOUNT_LOCKED_UNTIL);
     if (lockTime > new Date()) {
       const minutesLeft = Math.ceil((lockTime - new Date()) / (60 * 1000));
-      throw createError(
-        'ACCOUNT_LOCKED',
-        `Account is temporarily locked. Try again in ${minutesLeft} minute(s).`,
-        403
-      );
+      throw createError('ACCOUNT_LOCKED', `Account is temporarily locked. Try again in ${minutesLeft} minute(s).`, 403);
     }
   }
 
-  // Reset attempts and log login timestamp
   await userModel.resetFailedAttemptsAndLogLogin(user.ID);
 
   const jwtToken = jwt.sign(
-    { id: user.ID, email: user.EMAIL },
-    process.env.JWT_SECRET,
+    {
+      id: user.ID,
+      email: user.EMAIL,
+      role: user.ROLE || 'INVESTOR',
+      name: user.NAME
+    },
+    JWT_SECRET,
     { expiresIn: '1d' }
   );
+
+  await logAuditEvent({
+    userId: user.ID,
+    action: 'GOOGLE_LOGIN_SUCCESS',
+    entity: 'USER',
+    entityId: user.ID,
+    ipAddress: clientMeta.ip,
+    userAgent: clientMeta.userAgent,
+    details: 'User authenticated via Google OAuth.'
+  });
 
   return {
     token: jwtToken,
     user: {
       id: user.ID,
       name: user.NAME,
-      email: user.EMAIL
+      email: user.EMAIL,
+      role: user.ROLE || 'INVESTOR',
+      kycStatus: user.KYC_STATUS || 'UNVERIFIED'
     }
   };
 };
