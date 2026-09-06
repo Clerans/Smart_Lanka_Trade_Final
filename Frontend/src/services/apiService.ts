@@ -355,5 +355,39 @@ export const aiService = {
   }
 };
 
+export const kycService = {
+  submitKYC: async (formData: FormData) => {
+    try {
+      const response = await api.post('/kyc/verify', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+      return response.data;
+    } catch (error: any) {
+      console.error('Error submitting KYC document:', error);
+      throw error;
+    }
+  },
+  getKYCStatus: async () => {
+    try {
+      const response = await api.get('/kyc/status');
+      return response.data;
+    } catch (error: any) {
+      console.error('Error fetching KYC status:', error);
+      throw error;
+    }
+  },
+  getKYCHistory: async () => {
+    try {
+      const response = await api.get('/kyc/history');
+      return response.data;
+    } catch (error: any) {
+      console.error('Error fetching KYC history:', error);
+      throw error;
+    }
+  }
+};
+
 export default api;
 
