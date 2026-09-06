@@ -271,5 +271,7 @@ module.exports = {
   getPriceInLKR,
   getMultiplePricesInLKR,
   getAllPricesInLKR,
-  getLivePrices
+  getLivePrices,
+  getUSDToLKR,
+  getCryptoTicker
 };

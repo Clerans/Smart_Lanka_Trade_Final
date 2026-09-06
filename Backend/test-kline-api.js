@@ -1,18 +1,21 @@
-const { getKlinesWithIndicators } = require('./services/marketDataService');
+const axios = require('axios');
 
-async function testDirect() {
+async function testHttp() {
   try {
-    const data = await getKlinesWithIndicators('BTCUSDT', '1h', 50);
-    console.log('✅ Direct Service Success:', {
-      symbol: data.symbol,
-      candlesCount: data.candles.length,
-      currentPriceUSD: data.currentPriceUSD,
-      currentPriceLKR: data.currentPriceLKR,
-      sampleCandle: data.candles[data.candles.length - 1]
+    const res = await axios.get('http://localhost:5000/api/market/klines/SOLUSDT?interval=15m&limit=25');
+    console.log('✅ HTTP API Status:', res.status);
+    console.log('Data:', {
+      success: res.data.success,
+      symbol: res.data.data.symbol,
+      interval: res.data.data.interval,
+      usdToLkr: res.data.data.usdToLkr,
+      candlesCount: res.data.data.candles.length,
+      rsi: res.data.data.indicators.rsi14,
+      macd: res.data.data.indicators.macd
     });
   } catch (err) {
-    console.error('❌ Service Error:', err);
+    console.error('❌ HTTP API Error:', err.response?.data || err.message);
   }
 }
 
-testDirect();
+testHttp();
