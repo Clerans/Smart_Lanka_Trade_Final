@@ -20,7 +20,7 @@ exports.findById = async (id) => {
   try {
     connection = await oracledb.getConnection();
     const result = await connection.execute(
-      `SELECT ID, NAME, EMAIL, IS_VERIFIED, ROLE, KYC_STATUS, NIC_NUMBER, CREATED_AT FROM SL_USERS WHERE ID = :id`,
+      `SELECT ID, NAME, EMAIL, PASSWORD, IS_VERIFIED, ROLE, KYC_STATUS, NIC_NUMBER, CREATED_AT FROM SL_USERS WHERE ID = :id`,
       [id],
       { outFormat: oracledb.OUT_FORMAT_OBJECT }
     );
