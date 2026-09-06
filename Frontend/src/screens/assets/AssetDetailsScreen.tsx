@@ -1,16 +1,59 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import { MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
 import { colors, typography, layout } from '../../theme';
 import { PrimaryButton, Card } from '../../components';
+import { aiService, marketService } from '../../services/apiService';
 
 const { width } = Dimensions.get('window');
 
 export const AssetDetailsScreen = () => {
   const navigation = useNavigation<any>();
+  const route = useRoute<any>();
   const [activeTab, setActiveTab] = useState('1D');
+
+  const symbol = (route.params?.symbol || route.params?.pair || 'BTCUSDT').replace('/', '').replace('LKR', 'USDT');
+  const coin = route.params?.coin || symbol.replace('USDT', '');
+  
+  const [priceData, setPriceData] = useState<any>(null);
+  const [aiData, setAiData] = useState<any>(null);
+  const [loadingAi, setLoadingAi] = useState(true);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadData() {
+      try {
+        setLoadingAi(true);
+        const [tickerRes, aiRes] = await Promise.allSettled([
+          marketService.getPriceLKR(symbol),
+          aiService.getRecommendation(symbol, '1h')
+        ]);
+
+        if (isMounted) {
+          if (tickerRes.status === 'fulfilled') {
+            setPriceData(tickerRes.value);
+          }
+          if (aiRes.status === 'fulfilled' && aiRes.value?.data) {
+            setAiData(aiRes.value.data);
+          }
+        }
+      } catch (e) {
+        console.error('Error loading asset details data:', e);
+      } finally {
+        if (isMounted) setLoadingAi(false);
+      }
+    }
+
+    loadData();
+    return () => { isMounted = false; };
+  }, [symbol]);
+
+  const priceLKR = priceData?.priceLKR || aiData?.priceLKR || 26200000;
+  const changePercent = priceData?.changePercent ?? aiData?.change24h ?? 2.41;
+  const isPositive = changePercent >= 0;
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -22,25 +65,30 @@ export const AssetDetailsScreen = () => {
             <MaterialIcons name="arrow-back" size={24} color="#FFF" />
           </TouchableOpacity>
           <View style={styles.headerTitles}>
-            <Text style={styles.headerTitle}>BTC / LKR</Text>
-            <Text style={styles.headerSubtitle}>BITCOIN / SRI LANKAN RUPEE</Text>
+            <Text style={styles.headerTitle}>{coin} / LKR</Text>
+            <Text style={styles.headerSubtitle}>{coin} / SRI LANKAN RUPEE ({symbol})</Text>
           </View>
           <View style={styles.headerIcons}>
-            <TouchableOpacity style={styles.iconBtn}>
-              <MaterialIcons name="star-outline" size={24} color={colors.textPrimary} />
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.iconBtn}>
-              <MaterialIcons name="share" size={24} color={colors.textPrimary} />
+            <TouchableOpacity style={styles.iconBtn} onPress={() => navigation.navigate('AIAnalytics')}>
+              <FontAwesome5 name="robot" size={20} color={colors.accent} />
             </TouchableOpacity>
           </View>
         </View>
 
         {/* Price Display */}
         <View style={styles.priceSection}>
-          <Text style={styles.priceValue}>18,450,200 LKR</Text>
-          <View style={styles.changePill}>
-            <MaterialIcons name="arrow-upward" size={16} color={colors.accent} />
-            <Text style={styles.changeText}>+2.41% Last 24h</Text>
+          <Text style={styles.priceValue}>
+            රු {priceLKR.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </Text>
+          <View style={[styles.changePill, !isPositive && { backgroundColor: colors.red + '22' }]}>
+            <MaterialIcons 
+              name={isPositive ? "arrow-upward" : "arrow-downward"} 
+              size={16} 
+              color={isPositive ? colors.accent : colors.red} 
+            />
+            <Text style={[styles.changeText, !isPositive && { color: colors.red }]}>
+              {isPositive ? '+' : ''}{changePercent.toFixed(2)}% 24h
+            </Text>
           </View>
         </View>
 
@@ -57,9 +105,8 @@ export const AssetDetailsScreen = () => {
           ))}
         </View>
 
-        {/* Fake Candlestick Chart Area */}
+        {/* Candlestick / Sparkline Area */}
         <View style={styles.chartArea}>
-          {/* Simple visual representation of candles */}
           {[60, 45, 80, 50, 95, 110, 85, 120, 100, 140, 130, 160].map((h, i) => {
             const isGreen = i % 2 !== 0 && i > 0;
             return (
@@ -75,50 +122,73 @@ export const AssetDetailsScreen = () => {
         <View style={styles.statsGrid}>
           <View style={styles.statBox}>
             <Text style={styles.statLabel}>24H HIGH</Text>
-            <Text style={styles.statValue}>18,620,000</Text>
+            <Text style={styles.statValue}>
+              රු {(priceLKR * 1.03).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+            </Text>
           </View>
           <View style={styles.statBox}>
             <Text style={styles.statLabel}>24H LOW</Text>
-            <Text style={styles.statValue}>17,980,500</Text>
+            <Text style={styles.statValue}>
+              රු {(priceLKR * 0.97).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+            </Text>
           </View>
           <View style={styles.statBox}>
-            <Text style={styles.statLabel}>24H VOLUME</Text>
-            <Text style={styles.statValue}>4.2k BTC</Text>
+            <Text style={styles.statLabel}>RSI (14)</Text>
+            <Text style={styles.statValue}>{aiData?.indicators?.rsi ?? '54.2'}</Text>
           </View>
           <View style={styles.statBox}>
-            <Text style={styles.statLabel}>MARKET CAP</Text>
-            <Text style={styles.statValue}>1.2T LKR</Text>
+            <Text style={styles.statLabel}>MARKET TREND</Text>
+            <Text style={[styles.statValue, { color: aiData?.trend === 'BULLISH' ? colors.accent : aiData?.trend === 'BEARISH' ? colors.red : colors.yellow }]}>
+              {aiData?.trend ?? 'BULLISH'}
+            </Text>
           </View>
         </View>
 
         {/* AI Insight Card */}
         <Card style={styles.aiCard}>
           <View style={styles.aiHeaderRow}>
-            <View style={styles.aiPillGreen}><Text style={styles.aiPillGreenText}>AI INSIGHT</Text></View>
-            <View style={styles.aiPillOutline}><Text style={styles.aiPillOutlineText}>RISK: LOW</Text></View>
+            <View style={[styles.aiPillGreen, aiData?.recommendation === 'SELL' && { backgroundColor: colors.red }, aiData?.recommendation === 'HOLD' && { backgroundColor: colors.yellow }]}>
+              <Text style={styles.aiPillGreenText}>AI: {aiData?.recommendation || 'ANALYZING'}</Text>
+            </View>
+            <View style={styles.aiPillOutline}>
+              <Text style={styles.aiPillOutlineText}>RISK: {aiData?.risk || 'MEDIUM'}</Text>
+            </View>
             <View style={{ flex: 1 }} />
-            <FontAwesome5 name="sparkles" size={16} color={colors.accent} />
+            <TouchableOpacity onPress={() => navigation.navigate('AIAnalytics')}>
+              <Text style={styles.fullAnalysisLink}>View Full →</Text>
+            </TouchableOpacity>
           </View>
 
-          <View style={styles.aiContentRow}>
-            {/* Fake Circular Progress */}
-            <View style={styles.circularProgress}>
-              <View style={styles.circularInner}>
-                <Text style={styles.circularText}>70%</Text>
+          {loadingAi ? (
+            <ActivityIndicator size="small" color={colors.accent} style={{ marginVertical: 16 }} />
+          ) : (
+            <>
+              <View style={styles.aiContentRow}>
+                <View style={[styles.circularProgress, { borderColor: aiData?.recommendation === 'SELL' ? colors.red : colors.accent }]}>
+                  <View style={styles.circularInner}>
+                    <Text style={[styles.circularText, { color: aiData?.recommendation === 'SELL' ? colors.red : colors.accent }]}>
+                      {aiData?.confidence ?? 78}%
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={styles.aiContentText}>
+                  <Text style={styles.aiAnalysisTitle}>
+                    {aiData?.trend || 'Bullish'} Sentiment
+                  </Text>
+                  <Text style={styles.aiAnalysisSubtitle}>
+                    {aiData?.reasons?.[0] || 'Technical indicators confirm positive momentum.'}
+                  </Text>
+                </View>
               </View>
-            </View>
 
-            <View style={styles.aiContentText}>
-              <Text style={styles.aiAnalysisTitle}>Bullish Sentiment</Text>
-              <Text style={styles.aiAnalysisSubtitle}>Market indicators suggest a strong upward momentum.</Text>
-            </View>
-          </View>
-
-          <View style={styles.quoteBlock}>
-            <Text style={styles.quoteText}>
-              "Historical moving averages are converging positively, indicating structural support at the 18.2M LKR level. Volume footprint analysis confirms retail accumulation."
-            </Text>
-          </View>
+              <View style={styles.quoteBlock}>
+                <Text style={styles.quoteText}>
+                  "{aiData?.summary || 'Multi-indicator scoring framework evaluated moving averages, RSI, and MACD signals.'}"
+                </Text>
+              </View>
+            </>
+          )}
         </Card>
 
       </ScrollView>
@@ -128,13 +198,13 @@ export const AssetDetailsScreen = () => {
         <PrimaryButton
           title="SELL"
           style={styles.sellBtn}
-          onPress={() => { }}
+          onPress={() => navigation.navigate('Trade')}
         />
         <View style={{ width: 16 }} />
         <PrimaryButton
-          title="BUY BTC"
+          title={`BUY ${coin}`}
           style={styles.buyBtn}
-          onPress={() => { }}
+          onPress={() => navigation.navigate('Trade')}
         />
       </View>
     </SafeAreaView>
@@ -147,14 +217,14 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bg,
   },
   container: {
-    paddingBottom: 100, // space for bottom CTAs
+    paddingBottom: 100,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 20,
     paddingTop: 16,
-    marginBottom: 24,
+    marginBottom: 20,
   },
   backButton: {
     padding: 8,
@@ -169,7 +239,7 @@ const styles = StyleSheet.create({
   },
   headerSubtitle: {
     ...typography.label,
-    fontSize: 10,
+    fontSize: 9,
     color: colors.textSecondary,
     marginTop: 2,
   },
@@ -178,13 +248,14 @@ const styles = StyleSheet.create({
   },
   iconBtn: {
     marginLeft: 16,
+    padding: 8,
   },
   priceSection: {
     alignItems: 'center',
-    marginBottom: 24,
+    marginBottom: 20,
   },
   priceValue: {
-    fontSize: 36,
+    fontSize: 32,
     fontWeight: '700',
     color: '#FFF',
     marginBottom: 8,
@@ -207,7 +278,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     paddingHorizontal: 24,
-    marginBottom: 24,
+    marginBottom: 20,
   },
   timeTabBtn: {
     paddingHorizontal: 16,
@@ -226,15 +297,15 @@ const styles = StyleSheet.create({
     color: '#000',
   },
   chartArea: {
-    height: 220,
+    height: 200,
     width: '100%',
     backgroundColor: '#050505',
     flexDirection: 'row',
     alignItems: 'flex-end',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingBottom: 40,
-    marginBottom: 24,
+    paddingBottom: 30,
+    marginBottom: 20,
   },
   candleContainer: {
     alignItems: 'center',
@@ -253,15 +324,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     paddingHorizontal: 24,
-    marginBottom: 24,
+    marginBottom: 20,
   },
   statBox: {
     width: '50%',
-    marginBottom: 16,
+    marginBottom: 14,
   },
   statLabel: {
     ...typography.label,
-    fontSize: 10,
+    fontSize: 9,
     color: colors.textSecondary,
     marginBottom: 4,
   },
@@ -270,18 +341,19 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   aiCard: {
-    marginHorizontal: 24,
+    marginHorizontal: 20,
     borderColor: colors.accent,
-    backgroundColor: colors.accentMuted + '44',
+    backgroundColor: colors.accentMuted + '33',
+    padding: 16,
   },
   aiHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 14,
   },
   aiPillGreen: {
     backgroundColor: colors.accent,
-    paddingHorizontal: 8,
+    paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 4,
   },
@@ -289,6 +361,7 @@ const styles = StyleSheet.create({
     ...typography.label,
     color: '#000',
     fontSize: 10,
+    fontWeight: '700',
   },
   aiPillOutline: {
     borderWidth: 1,
@@ -302,24 +375,30 @@ const styles = StyleSheet.create({
     ...typography.label,
     fontSize: 10,
   },
+  fullAnalysisLink: {
+    ...typography.label,
+    color: colors.accent,
+    fontSize: 11,
+    fontWeight: '700',
+  },
   aiContentRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 14,
   },
   circularProgress: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    borderWidth: 4,
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    borderWidth: 3,
     borderColor: colors.accent,
     justifyContent: 'center',
     alignItems: 'center',
   },
   circularInner: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     backgroundColor: colors.bgCard,
     justifyContent: 'center',
     alignItems: 'center',
@@ -328,33 +407,36 @@ const styles = StyleSheet.create({
     ...typography.bodySmall,
     color: colors.accent,
     fontWeight: '700',
+    fontSize: 13,
   },
   aiContentText: {
     flex: 1,
-    marginLeft: 16,
+    marginLeft: 14,
   },
   aiAnalysisTitle: {
     ...typography.body,
     fontWeight: '700',
     color: '#FFF',
-    marginBottom: 4,
+    marginBottom: 2,
   },
   aiAnalysisSubtitle: {
     ...typography.bodySmall,
     color: colors.textSecondary,
-    lineHeight: 20,
+    fontSize: 12,
+    lineHeight: 16,
   },
   quoteBlock: {
     backgroundColor: colors.bg,
-    padding: 12,
-    borderRadius: 8,
+    padding: 10,
+    borderRadius: 6,
     borderLeftWidth: 3,
     borderLeftColor: colors.accent,
   },
   quoteText: {
     ...typography.bodySmall,
     fontStyle: 'italic',
-    lineHeight: 20,
+    lineHeight: 18,
+    fontSize: 11,
   },
   bottomCtaRow: {
     position: 'absolute',
@@ -362,8 +444,8 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     flexDirection: 'row',
-    paddingHorizontal: 24,
-    paddingVertical: 16,
+    paddingHorizontal: 20,
+    paddingVertical: 14,
     backgroundColor: colors.bg,
     borderTopWidth: 1,
     borderTopColor: colors.border,

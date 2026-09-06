@@ -307,4 +307,53 @@ export const transactionService = {
   }
 };
 
+export const aiService = {
+  getRecommendations: async (interval: string = '1h') => {
+    try {
+      const response = await api.get('/ai/recommendations', {
+        params: { interval }
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching AI recommendations:', error);
+      throw error;
+    }
+  },
+  getRecommendation: async (symbol: string, interval: string = '1h') => {
+    try {
+      const response = await api.get(`/ai/recommendation/${symbol}`, {
+        params: { interval }
+      });
+      return response.data;
+    } catch (error) {
+      console.error(`Error fetching AI recommendation for ${symbol}:`, error);
+      throw error;
+    }
+  },
+  getHistory: async (symbol: string, limit: number = 10) => {
+    try {
+      const response = await api.get(`/ai/history/${symbol}`, {
+        params: { limit }
+      });
+      return response.data;
+    } catch (error) {
+      console.error(`Error fetching AI history for ${symbol}:`, error);
+      throw error;
+    }
+  },
+  chatWithSOMI: async (message: string, symbolContext?: string) => {
+    try {
+      const response = await api.post('/ai/chat', {
+        message,
+        symbolContext
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Error in SOMI AI chat:', error);
+      throw error;
+    }
+  }
+};
+
 export default api;
+
