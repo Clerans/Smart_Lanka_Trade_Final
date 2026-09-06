@@ -167,7 +167,7 @@ async function getLivePrices() {
              WHEN MATCHED THEN
                UPDATE SET m.price_usd = :priceUSD, m.price_lkr = :priceLKR, m.change_percent = :change24h, m.volume = :volume, m.last_updated = CURRENT_TIMESTAMP
              WHEN NOT MATCHED THEN
-               INSERT (SYMBOL, PRICE_USD, PRICE_LKR, CHANGE_PERCENT, VOLUME) VALUES (:symbol, :priceUSD, :priceLKR, :change24h, :volume)`,
+               INSERT (SYMBOL, PRICE_USD, PRICE_LKR, CHANGE_PERCENT, VOLUME, LAST_UPDATED) VALUES (:symbol, :priceUSD, :priceLKR, :change24h, :volume, CURRENT_TIMESTAMP)`,
             { symbol: item.symbol, priceUSD: item.priceUSD, priceLKR: item.priceLKR, change24h: item.change24h, volume: item.volume }
           );
         }
