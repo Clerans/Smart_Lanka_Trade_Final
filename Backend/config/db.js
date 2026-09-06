@@ -1,8 +1,8 @@
 const oracledb = require('oracledb');
 require('dotenv').config();
 
-// Enable auto-commit for development simplicity
-oracledb.autoCommit = true;
+// Transaction management: explicit commits/rollbacks
+oracledb.autoCommit = false;
 
 async function connectDB() {
   try {
