@@ -1,21 +1,19 @@
-const axios = require('axios');
+const request = require('supertest');
+const app = require('./server');
 
-async function testHttp() {
+async function testSupertest() {
   try {
-    const res = await axios.get('http://localhost:5000/api/market/klines/SOLUSDT?interval=15m&limit=25');
-    console.log('✅ HTTP API Status:', res.status);
-    console.log('Data:', {
-      success: res.data.success,
-      symbol: res.data.data.symbol,
-      interval: res.data.data.interval,
-      usdToLkr: res.data.data.usdToLkr,
-      candlesCount: res.data.data.candles.length,
-      rsi: res.data.data.indicators.rsi14,
-      macd: res.data.data.indicators.macd
+    const res = await request(app).get('/api/market/klines/BTCUSDT?interval=1h&limit=10');
+    console.log('✅ Supertest Status:', res.status);
+    console.log('Data summary:', {
+      success: res.body.success,
+      symbol: res.body.data?.symbol,
+      candlesCount: res.body.data?.candles?.length,
+      sampleCandle: res.body.data?.candles?.[0]
     });
   } catch (err) {
-    console.error('❌ HTTP API Error:', err.response?.data || err.message);
+    console.error('❌ Supertest Error:', err);
   }
 }
 
-testHttp();
+testSupertest();
