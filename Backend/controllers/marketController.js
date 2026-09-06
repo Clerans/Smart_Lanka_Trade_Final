@@ -73,3 +73,25 @@ exports.getLive = async (req, res) => {
     });
   }
 };
+
+exports.getKlines = async (req, res) => {
+  try {
+    const { getKlinesWithIndicators } = require("../services/marketDataService");
+    const symbol = req.params.symbol || req.query.symbol || "BTCUSDT";
+    const interval = req.query.interval || "1h";
+    const limit = parseInt(req.query.limit || "100", 10);
+
+    const data = await getKlinesWithIndicators(symbol, interval, limit);
+    res.json({
+      success: true,
+      data
+    });
+  } catch (error) {
+    console.error('getKlines Error:', error.message);
+    res.status(500).json({
+      success: false,
+      code: 'SERVER_ERROR',
+      message: error.message || 'Failed to fetch candlestick data'
+    });
+  }
+};
