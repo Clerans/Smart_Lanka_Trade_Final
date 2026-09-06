@@ -1,0 +1,91 @@
+# Target Database Architecture Specification
+
+---
+
+## 1. Oracle DDL Entity-Relationship Design
+
+```mermaid
+erDiagram
+    SL_USERS ||--|| WALLETS : owns
+    SL_USERS ||--o{ PORTFOLIOS : holds
+    SL_USERS ||--o{ TRANSACTIONS : executes
+    SL_USERS ||--o{ SL_ALERTS : configures
+    SL_USERS ||--o| SL_KYC_DOCUMENTS : submits
+    SL_USERS ||--o{ SL_AUDIT_LOGS : generates
+
+    SL_USERS {
+        VARCHAR2(64) USER_ID PK
+        VARCHAR2(255) EMAIL UK
+        VARCHAR2(255) PASSWORD_HASH
+        VARCHAR2(100) FULL_NAME
+        VARCHAR2(20) ROLE "INVESTOR / ADMIN"
+        VARCHAR2(20) KYC_STATUS "UNVERIFIED / VERIFIED"
+        TIMESTAMP CREATED_AT
+    }
+
+    WALLETS {
+        VARCHAR2(64) WALLET_ID PK
+        VARCHAR2(64) USER_ID FK
+        NUMBER BALANCE_LKR
+        NUMBER AVAILABLE_BALANCE
+        NUMBER USD_BALANCE
+        TIMESTAMP UPDATED_AT
+    }
+
+    PORTFOLIOS {
+        VARCHAR2(64) PORTFOLIO_ID PK
+        VARCHAR2(64) USER_ID FK
+        VARCHAR2(20) SYMBOL
+        NUMBER QUANTITY
+        NUMBER AVERAGE_BUY_PRICE
+        NUMBER TOTAL_INVESTED
+        TIMESTAMP UPDATED_AT
+    }
+
+    TRANSACTIONS {
+        VARCHAR2(64) TRANSACTION_ID PK
+        VARCHAR2(64) USER_ID FK
+        VARCHAR2(20) TYPE "BUY/SELL/DEPOSIT/WITHDRAW/CONVERT"
+        VARCHAR2(20) SYMBOL
+        NUMBER QUANTITY
+        NUMBER PRICE
+        NUMBER AMOUNT
+        VARCHAR2(20) STATUS
+        TIMESTAMP CREATED_AT
+    }
+
+    SL_KYC_DOCUMENTS {
+        VARCHAR2(64) DOC_ID PK
+        VARCHAR2(64) USER_ID FK
+        VARCHAR2(30) DOC_TYPE
+        VARCHAR2(30) NIC_NUMBER
+        VARCHAR2(150) FULL_NAME
+        VARCHAR2(20) DOB
+        VARCHAR2(10) GENDER
+        VARCHAR2(20) STATUS
+        VARCHAR2(1000) OCR_RAW_TEXT
+        TIMESTAMP VERIFIED_AT
+    }
+
+    SL_AUDIT_LOGS {
+        NUMBER AUDIT_ID PK
+        VARCHAR2(64) USER_ID
+        VARCHAR2(50) ACTION
+        VARCHAR2(50) ENTITY
+        VARCHAR2(64) ENTITY_ID
+        VARCHAR2(64) IP_ADDRESS
+        VARCHAR2(255) USER_AGENT
+        VARCHAR2(1000) DETAILS
+        VARCHAR2(20) STATUS
+        TIMESTAMP CREATED_AT
+    }
+```
+
+---
+
+## 2. Table Indexing & Performance Strategy
+
+1. **Unique Indices:** `SL_USERS(EMAIL)`, `WALLETS(USER_ID)`, `SL_KYC_DOCUMENTS(USER_ID)`.
+2. **Composite Lookup Indices:** `PORTFOLIOS(USER_ID, SYMBOL)`, `TRANSACTIONS(USER_ID, CREATED_AT)`.
+3. **Partitioning / Audit Index:** `SL_AUDIT_LOGS(CREATED_AT DESC)`.
+4. **Market Fast Cache:** `MARKET_CACHE(SYMBOL)` with memory-mapped in-process cache buffer for high-frequency price lookups.
