@@ -2,7 +2,7 @@ import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Configurable Backend Base URL with environment override and development fallback
-const BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://10.77.30.154:5000/api';
+const BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.8.109:5000/api';
 
 const api = axios.create({
   baseURL: BASE_URL,
@@ -361,8 +361,11 @@ export const kycService = {
     try {
       const response = await api.post('/kyc/verify', formData, {
         headers: {
+          'Accept': 'application/json',
           'Content-Type': 'multipart/form-data',
         },
+        transformRequest: (data) => data,
+        timeout: 90000, // 90s timeout for mobile OCR photo upload and recognition
       });
       return response.data;
     } catch (error: any) {

@@ -113,7 +113,7 @@ export const KYCVerificationScreen = () => {
       const type = match ? `image/${match[1]}` : 'image/jpeg';
 
       formData.append('document', {
-        uri: Platform.OS === 'ios' ? selectedImage.replace('file://', '') : selectedImage,
+        uri: selectedImage,
         name: filename,
         type: type,
       } as any);
