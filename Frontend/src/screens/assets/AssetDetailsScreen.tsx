@@ -268,52 +268,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     marginLeft: 6,
   },
-  timeTabs: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingHorizontal: 24,
-    marginBottom: 20,
-  },
-  timeTabBtn: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: layout.borderRadiusPill,
-    backgroundColor: colors.bgInput,
-  },
-  timeTabActive: {
-    backgroundColor: colors.accent,
-  },
-  timeTabText: {
-    ...typography.bodySmall,
-    fontWeight: '600',
-  },
-  timeTabTextActive: {
-    color: '#000',
-  },
-  chartArea: {
-    height: 200,
-    width: '100%',
-    backgroundColor: '#050505',
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingBottom: 30,
-    marginBottom: 20,
-  },
-  candleContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  candleWick: {
-    width: 2,
-    backgroundColor: colors.textSecondary,
-    position: 'absolute',
-  },
-  candleBody: {
-    width: 10,
-    borderRadius: 1,
-  },
   statsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
