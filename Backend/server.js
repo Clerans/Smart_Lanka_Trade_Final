@@ -20,6 +20,7 @@ app.use('/api/alerts', require('./routes/alertRoutes'));
 app.use('/api/trade', require('./routes/tradeRoutes'));
 app.use('/api/portfolio', require('./routes/portfolioRoutes'));
 app.use('/api/transactions', require('./routes/transactionRoutes'));
+app.use('/api/ai', require('./routes/aiRoutes'));
 app.get('/api/test-market', (req, res) => res.json({ message: "Market route test works" }));
 
 // Start Price Monitor
