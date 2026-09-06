@@ -2,21 +2,20 @@ import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 
-<<<<<<< HEAD
-// Configurable Backend Base URL with environment override and development fallback
-const BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.8.109:5000/api';
-=======
+// Dynamic Backend Base URL resolver with environment override and Expo hostUri detection
 const getBaseUrl = () => {
+  if (process.env.EXPO_PUBLIC_API_URL) {
+    return process.env.EXPO_PUBLIC_API_URL;
+  }
   const hostUri = Constants.expoConfig?.hostUri;
   if (hostUri) {
     const ip = hostUri.split(':')[0];
     return `http://${ip}:5000/api`;
   }
-  return 'http://10.63.164.154:5000/api';
+  return 'http://192.168.8.109:5000/api';
 };
 
 const BASE_URL = getBaseUrl();
->>>>>>> origin/Clerans
 
 const api = axios.create({
   baseURL: BASE_URL,
