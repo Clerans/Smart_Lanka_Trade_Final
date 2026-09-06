@@ -3,7 +3,7 @@ const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const userModel = require('../models/userModel');
 const verificationModel = require('../models/verificationModel');
-const { sendVerificationEmail } = require('./emailService');
+const { sendVerificationEmail, sendVerificationOTPEmail, sendPasswordResetOTPEmail } = require('./emailService');
 const { validatePassword } = require('../utils/validator');
 
 const createError = (code, message, status = 400) => {
@@ -36,11 +36,11 @@ exports.registerUser = async (name, email, password) => {
   await verificationModel.createEmailVerificationOTP(userId, otp, expiresAt);
 
   console.log(`\n=================================================`);
-  console.log(`📧 [SIMULATION] Email Verification OTP for ${email}: ${otp}`);
+  console.log(`📧 Email Verification OTP for ${email}: ${otp}`);
   console.log(`=================================================\n`);
 
-  // Optionally send verification email (async)
-  sendVerificationEmail(email, token);
+  // Send verification OTP email (async)
+  sendVerificationOTPEmail(email, otp);
 
   return { userId, otp };
 };
@@ -122,8 +122,10 @@ exports.sendVerificationOTP = async (email) => {
   await verificationModel.createEmailVerificationOTP(user.ID, otp, expiresAt);
 
   console.log(`\n=================================================`);
-  console.log(`📧 [SIMULATION] Sent Email Verification OTP to ${email}: ${otp}`);
+  console.log(`📧 Sent Email Verification OTP to ${email}: ${otp}`);
   console.log(`=================================================\n`);
+
+  sendVerificationOTPEmail(email, otp);
 
   return { otp };
 };
@@ -165,8 +167,10 @@ exports.resendVerificationOTP = async (email) => {
   await verificationModel.createEmailVerificationOTP(user.ID, otp, expiresAt);
 
   console.log(`\n=================================================`);
-  console.log(`📧 [SIMULATION] Resent Email Verification OTP to ${email}: ${otp}`);
+  console.log(`📧 Resent Email Verification OTP to ${email}: ${otp}`);
   console.log(`=================================================\n`);
+
+  sendVerificationOTPEmail(email, otp);
 
   return { otp };
 };
@@ -182,8 +186,10 @@ exports.forgotPassword = async (email) => {
   await verificationModel.createPasswordResetOTP(user.ID, otp, expiresAt);
 
   console.log(`\n=================================================`);
-  console.log(`🔑 [SIMULATION] Password Reset OTP for ${email}: ${otp}`);
+  console.log(`🔑 Password Reset OTP for ${email}: ${otp}`);
   console.log(`=================================================\n`);
+
+  sendPasswordResetOTPEmail(email, otp);
 
   return { otp };
 };
