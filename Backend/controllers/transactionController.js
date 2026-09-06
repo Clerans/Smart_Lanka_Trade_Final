@@ -7,17 +7,21 @@ const getTransactions = async (req, res) => {
     
     const formatted = transactions.map(tx => ({
       id: tx.TRANSACTION_ID,
-      coin: tx.SYMBOL ? tx.SYMBOL.replace('USDT', '') : 'LKR',
+      symbol: tx.SYMBOL || 'LKR',
+      asset: tx.SYMBOL || 'LKR',
       action: tx.TRANSACTION_TYPE,
-      quantity: parseFloat(tx.QUANTITY),
-      price: parseFloat(tx.PRICE),
-      total: parseFloat(tx.TOTAL_AMOUNT),
+      type: tx.TRANSACTION_TYPE,
+      quantity: parseFloat(tx.QUANTITY || 0.0),
+      price: parseFloat(tx.PRICE || 0.0),
+      total: parseFloat(tx.TOTAL_AMOUNT || 0.0),
+      amount: parseFloat(tx.TOTAL_AMOUNT || 0.0),
       date: tx.CREATED_AT,
       status: tx.STATUS
     }));
 
     res.json({
       success: true,
+      total: formatted.length,
       data: formatted
     });
   } catch (err) {

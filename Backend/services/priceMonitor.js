@@ -5,28 +5,22 @@ const emailService = require('./emailService');
 const notificationService = require('./notificationService');
 
 const startPriceMonitor = () => {
-  console.log('🚀 Price Monitor Service Started (Running every minute)');
+  console.log('🚀 Price Monitor Service Started for CSE Stock Market (Running every minute)');
 
   // Run every minute
   cron.schedule('* * * * *', async () => {
     try {
       const activeAlerts = await alertModel.getActiveAlerts();
-      if (activeAlerts.length === 0) return;
+      if (!activeAlerts || activeAlerts.length === 0) return;
 
-      console.log(`🔍 Checking ${activeAlerts.length} active alerts...`);
-
-      // Get unique symbols to minimize API calls
-      const symbols = [...new Set(activeAlerts.map(a => a.SYMBOL))];
-      
-      // Fetch current prices
-      const marketData = await marketService.getMultiplePricesInLKR(symbols);
-      const currentPrices = {};
-      marketData.prices.forEach(p => {
-        currentPrices[p.symbol] = p.priceLKR;
+      const quotes = await marketService.getAllStockQuotes();
+      const priceMap = {};
+      quotes.forEach(q => {
+        priceMap[q.symbol] = q.priceLKR;
       });
 
       for (const alert of activeAlerts) {
-        const currentPrice = currentPrices[alert.SYMBOL];
+        const currentPrice = priceMap[alert.SYMBOL];
         if (!currentPrice) continue;
 
         let triggered = false;
@@ -37,29 +31,31 @@ const startPriceMonitor = () => {
         }
 
         if (triggered) {
-          console.log(`🔔 ALERT TRIGGERED: ${alert.SYMBOL} hit ${alert.TARGET_PRICE} (Current: ${currentPrice})`);
-          
-          // 1. Send Email
-          await emailService.sendPriceAlertEmail(
-            alert.EMAIL, 
-            alert.SYMBOL, 
-            alert.TARGET_PRICE, 
-            currentPrice, 
-            alert.ALERT_TYPE
-          );
+          console.log(`🔔 CSE STOCK ALERT TRIGGERED: ${alert.SYMBOL} target=${alert.TARGET_PRICE}, current=${currentPrice}`);
 
-          // 2. Send Push Notification
-          if (alert.EXPO_PUSH_TOKEN) {
-            await notificationService.sendPushNotification(
-              alert.EXPO_PUSH_TOKEN,
-              '🚀 Price Alert Triggered!',
-              `${alert.SYMBOL} has reached your target of ${alert.TARGET_PRICE}. Current price: ${currentPrice.toFixed(2)} LKR`,
-              { symbol: alert.SYMBOL, price: currentPrice }
+          // 1. Mark as triggered immediately to prevent duplicate runs
+          await alertModel.markAlertTriggered(alert.ID);
+
+          // 2. Send Email
+          if (alert.EMAIL) {
+            await emailService.sendPriceAlertEmail(
+              alert.EMAIL, 
+              alert.SYMBOL, 
+              alert.TARGET_PRICE, 
+              currentPrice, 
+              alert.ALERT_TYPE
             );
           }
 
-          // 3. Mark as triggered (inactive)
-          await alertModel.markAlertTriggered(alert.ID);
+          // 3. Send Push Notification
+          if (alert.EXPO_PUSH_TOKEN) {
+            await notificationService.sendPushNotification(
+              alert.EXPO_PUSH_TOKEN,
+              '📈 CSE Price Alert Triggered!',
+              `${alert.SYMBOL} has reached your target of LKR ${alert.TARGET_PRICE}. Current price: LKR ${currentPrice.toFixed(2)}`,
+              { symbol: alert.SYMBOL, price: currentPrice }
+            );
+          }
         }
       }
     } catch (err) {
