@@ -1,10 +1,21 @@
-const express = require("express");
+const express = require('express');
 const router = express.Router();
-const { getPrice, getMultiplePrices, getAllPrices, getLive } = require("../controllers/marketController");
+const {
+  getAllQuotes,
+  getQuoteBySymbol,
+  getMultipleQuotes,
+  getCandles,
+  getForex,
+  getLive
+} = require('../controllers/marketController');
 
-router.get("/price-lkr", getPrice);
-router.get("/prices-lkr", getMultiplePrices);
-router.get("/all-prices-lkr", getAllPrices);
-router.get("/live", getLive);
+// CSE Stock Market Data Endpoints
+router.get('/all-prices-lkr', getAllQuotes);
+router.get('/price-lkr', getQuoteBySymbol);
+router.get('/prices-lkr', getMultipleQuotes);
+router.get('/live', getLive);
+router.get('/candles', getCandles);
+router.get('/candles/:symbol', getCandles);
+router.get('/forex', getForex);
 
 module.exports = router;
