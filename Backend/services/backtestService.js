@@ -158,9 +158,9 @@ async function runBacktest(config = {}) {
       else if (futureReturnPct < -threshold) actualDirection = 'DOWN';
 
       let isCorrect = false;
-      if (rec.action === 'BUY' && actualDirection === 'UP') isCorrect = true;
-      else if (rec.action === 'SELL' && actualDirection === 'DOWN') isCorrect = true;
-      else if (rec.action === 'HOLD' && actualDirection === 'NEUTRAL') isCorrect = true;
+      if (rec.recommendation === 'BUY' && actualDirection === 'UP') isCorrect = true;
+      else if (rec.recommendation === 'SELL' && actualDirection === 'DOWN') isCorrect = true;
+      else if (rec.recommendation === 'HOLD' && actualDirection === 'NEUTRAL') isCorrect = true;
 
       horizonOutcomes[h] = {
         futurePrice,
@@ -174,11 +174,11 @@ async function runBacktest(config = {}) {
       timestamp: currentCandle.timestamp,
       date: new Date(currentCandle.timestamp).toISOString(),
       price: currentPrice,
-      recommendation: rec.action,
+      recommendation: rec.recommendation,
       confidence: rec.confidence,
-      riskLevel: rec.riskLevel,
-      rsi: indicators.rsi,
-      macd: indicators.macd?.macd,
+      riskLevel: rec.risk,
+      rsi: features.rsi,
+      macd: features.macdData?.macd,
       outcomes: horizonOutcomes
     });
   }
