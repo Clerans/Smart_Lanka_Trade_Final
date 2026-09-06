@@ -601,6 +601,23 @@ const styles = StyleSheet.create({
     ...typography.bodySmall,
     color: colors.textSecondary,
   },
+  trendTogglePill: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    backgroundColor: colors.bgInput,
+  },
+  trendTogglePillActive: {
+    backgroundColor: colors.accent,
+  },
+  trendToggleText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: colors.textSecondary,
+  },
+  trendToggleTextActive: {
+    color: '#000',
+  },
   trendHeaderRight: {
     alignItems: 'flex-end',
   },
@@ -614,23 +631,9 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   candlestickPlaceholder: {
-    height: 150,
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    justifyContent: 'space-around',
-    paddingBottom: 20,
-  },
-  candleContainer: {
-    alignItems: 'center',
+    minHeight: 60,
     justifyContent: 'center',
-  },
-  candleWick: {
-    width: 2,
-    backgroundColor: colors.textSecondary,
-    position: 'absolute',
-  },
-  candleBody: {
-    width: 8,
-    borderRadius: 2,
+    alignItems: 'center',
+    marginTop: 8,
   },
 });
