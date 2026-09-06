@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, KeyboardAvoidingView, Platform, ActivityIndicator, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import { MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
 import Svg, { Path } from 'react-native-svg';
 import { colors, typography, layout } from '../../theme';
@@ -10,18 +10,19 @@ import { marketService, walletService, tradeService, transactionService, portfol
 
 export const DemoTradingScreen = () => {
   const navigation = useNavigation<any>();
-  const [selectedSymbol, setSelectedSymbol] = useState('BTCUSDT');
+  const route = useRoute<any>();
+  const [selectedSymbol, setSelectedSymbol] = useState(route.params?.symbol || 'JKH.N0000');
   const [tradeType, setTradeType] = useState<'BUY' | 'SELL'>('BUY');
   
   const [walletDetails, setWalletDetails] = useState<any>(null);
   const [portfolioSummary, setPortfolioSummary] = useState<any>(null);
   const [portfolioHoldings, setPortfolioHoldings] = useState<any[]>([]);
-  const [liveCoins, setLiveCoins] = useState<any[]>([]);
-  const [activeCoinPriceLKR, setActiveCoinPriceLKR] = useState<number>(0);
-  const [activeCoinChange, setActiveCoinChange] = useState<number>(0);
+  const [liveEquities, setLiveEquities] = useState<any[]>([]);
+  const [activeStockPriceLKR, setActiveStockPriceLKR] = useState<number>(205.50);
+  const [activeStockChange, setActiveStockChange] = useState<number>(0);
   
   const [amountLKR, setAmountLKR] = useState('');
-  const [quantityCoin, setQuantityCoin] = useState('');
+  const [quantityShares, setQuantityShares] = useState('');
   const [loading, setLoading] = useState(true);
   const [tradeLoading, setTradeLoading] = useState(false);
   const [txHistory, setTxHistory] = useState<any[]>([]);
@@ -47,24 +48,24 @@ export const DemoTradingScreen = () => {
     try {
       const [walletRes, marketRes, txRes, portfolioRes] = await Promise.all([
         walletService.getWalletDetails(),
-        marketService.getLivePrices(),
+        marketService.getAllPricesLKR(),
         transactionService.getTransactions(),
         portfolioService.getPortfolio()
       ]);
 
-      if (walletRes.success) setWalletDetails(walletRes);
-      if (txRes.success) setTxHistory(txRes.data.slice(0, 10)); // Show top 10 recent
-      if (portfolioRes.success) {
+      if (walletRes?.success) setWalletDetails(walletRes.data || walletRes);
+      if (txRes?.success) setTxHistory((txRes.data || []).slice(0, 10));
+      if (portfolioRes?.success) {
         setPortfolioSummary(portfolioRes.data.summary);
-        setPortfolioHoldings(portfolioRes.data.holdings);
+        setPortfolioHoldings(portfolioRes.data.holdings || []);
       }
 
-      if (marketRes.success) {
-        setLiveCoins(marketRes.data);
-        const active = marketRes.data.find((c: any) => c.symbol === selectedSymbol);
+      if (marketRes?.success && marketRes.data?.prices) {
+        setLiveEquities(marketRes.data.prices);
+        const active = marketRes.data.prices.find((c: any) => c.symbol === selectedSymbol);
         if (active) {
-          setActiveCoinPriceLKR(active.priceLKR);
-          setActiveCoinChange(active.change24h);
+          setActiveStockPriceLKR(active.priceLKR);
+          setActiveStockChange(active.changePercent);
         }
       }
       setIsNetworkError(false);
@@ -73,7 +74,7 @@ export const DemoTradingScreen = () => {
       if (error.code === 'NETWORK_ERROR') {
         setIsNetworkError(true);
       } else {
-        showToast('Failed to load live trading data.', 'error');
+        showToast('Failed to load live CSE trading data.', 'error');
       }
     } finally {
       setLoading(false);
@@ -82,29 +83,29 @@ export const DemoTradingScreen = () => {
 
   useEffect(() => {
     fetchTradingData();
-    const interval = setInterval(fetchTradingData, 10000); // 10s refresh rate
+    const interval = setInterval(fetchTradingData, 10000);
     return () => clearInterval(interval);
   }, [selectedSymbol]);
 
   // Handle amount and quantity updates
   const handleAmountLKRChange = (text: string) => {
     setAmountLKR(text);
-    if (!text || isNaN(parseFloat(text)) || activeCoinPriceLKR === 0) {
-      setQuantityCoin('');
+    if (!text || isNaN(parseFloat(text)) || activeStockPriceLKR === 0) {
+      setQuantityShares('');
       return;
     }
-    const val = parseFloat(text) / activeCoinPriceLKR;
-    setQuantityCoin(val.toFixed(6));
+    const val = Math.floor(parseFloat(text) / activeStockPriceLKR);
+    setQuantityShares(val > 0 ? val.toString() : '');
   };
 
-  const handleQuantityCoinChange = (text: string) => {
-    setQuantityCoin(text);
-    if (!text || isNaN(parseFloat(text)) || activeCoinPriceLKR === 0) {
+  const handleQuantitySharesChange = (text: string) => {
+    setQuantityShares(text);
+    if (!text || isNaN(parseInt(text, 10)) || activeStockPriceLKR === 0) {
       setAmountLKR('');
       return;
     }
-    const val = parseFloat(text) * activeCoinPriceLKR;
-    setAmountLKR(Math.round(val).toString());
+    const val = parseInt(text, 10) * activeStockPriceLKR;
+    setAmountLKR(val.toFixed(2));
   };
 
   const getOwnedQuantity = () => {
@@ -119,18 +120,19 @@ export const DemoTradingScreen = () => {
         showToast('Please enter a purchase amount in LKR', 'warning');
         return;
       }
-      if (walletDetails && buyAmt > walletDetails.availableBalance) {
+      const available = walletDetails?.availableBalance || walletDetails?.availableBalanceLKR || 0;
+      if (buyAmt > available) {
         showToast('Insufficient balance in virtual wallet.', 'warning');
         return;
       }
     } else {
-      const sellQty = parseFloat(quantityCoin);
+      const sellQty = parseInt(quantityShares, 10);
       if (!sellQty || sellQty <= 0) {
-        showToast('Please enter a sell quantity.', 'warning');
+        showToast('Please enter a sell quantity in shares.', 'warning');
         return;
       }
       if (sellQty > getOwnedQuantity()) {
-        showToast(`Insufficient asset holdings to sell.`, 'warning');
+        showToast(`Insufficient share holdings to sell (Owned: ${getOwnedQuantity()}).`, 'warning');
         return;
       }
     }
@@ -148,14 +150,16 @@ export const DemoTradingScreen = () => {
       if (tradeType === 'BUY') {
         res = await tradeService.buy(selectedSymbol, parseFloat(amountLKR));
       } else {
-        res = await tradeService.sell(selectedSymbol, parseFloat(quantityCoin));
+        res = await tradeService.sell(selectedSymbol, parseInt(quantityShares, 10));
       }
 
-      if (res.success) {
-        showToast(res.message || 'Trade executed successfully!', 'success');
+      if (res?.success) {
+        showToast(res.message || 'CSE Trade executed successfully!', 'success');
         setAmountLKR('');
-        setQuantityCoin('');
+        setQuantityShares('');
         await fetchTradingData();
+      } else {
+        showToast(res?.message || 'Trade execution failed.', 'error');
       }
     } catch (error: any) {
       if (error.code === 'NETWORK_ERROR') {
@@ -168,8 +172,8 @@ export const DemoTradingScreen = () => {
     }
   };
 
-  const filteredPickerCoins = liveCoins.filter(coin => 
-    coin.coin.toLowerCase().includes(pickerSearchQuery.toLowerCase())
+  const filteredPickerEquities = liveEquities.filter(item => 
+    item.symbol.toLowerCase().includes(pickerSearchQuery.toLowerCase())
   );
 
   return (
@@ -187,7 +191,7 @@ export const DemoTradingScreen = () => {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         {loading ? (
-          <View style={{ flex: 1, justifyContent: 'center' }}><ActivityIndicator color={colors.accent} size="large" /></View>
+          <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}><ActivityIndicator color={colors.accent} size="large" /></View>
         ) : (
           <View style={{ flex: 1 }}>
             {/* Header (Fixed at top) */}
@@ -196,23 +200,23 @@ export const DemoTradingScreen = () => {
                 <MaterialIcons name="arrow-back" size={24} color="#FFF" />
               </TouchableOpacity>
               <TouchableOpacity onPress={() => setPickerVisible(!pickerVisible)} style={styles.headerSelector}>
-                <Text style={styles.headerTitle}>{selectedSymbol.replace('USDT', '')} / LKR</Text>
+                <Text style={styles.headerTitle}>{selectedSymbol}</Text>
                 <MaterialIcons name={pickerVisible ? "keyboard-arrow-up" : "keyboard-arrow-down"} size={22} color={colors.accent} style={{ marginLeft: 4 }} />
               </TouchableOpacity>
               <View style={styles.demoBadge}>
                 <View style={styles.demoDot} />
-                <Text style={styles.demoBadgeText}>DEMO</Text>
+                <Text style={styles.demoBadgeText}>CSE DEMO</Text>
               </View>
             </View>
 
-            {/* Coin Picker Dropdown (Floating Overlay) */}
+            {/* Equities Picker Dropdown (Floating Overlay) */}
             {pickerVisible && (
               <View style={styles.pickerDropdownFloating}>
                 <View style={styles.pickerSearchContainer}>
                   <MaterialIcons name="search" size={20} color={colors.textSecondary} />
                   <TextInput
                     style={styles.pickerSearchInput}
-                    placeholder="Search symbols..."
+                    placeholder="Search CSE symbols (JKH, COMB, SAMP...)"
                     placeholderTextColor={colors.textSecondary}
                     value={pickerSearchQuery}
                     onChangeText={setPickerSearchQuery}
@@ -220,22 +224,22 @@ export const DemoTradingScreen = () => {
                   />
                 </View>
                 <ScrollView style={{ maxHeight: 240 }} keyboardShouldPersistTaps="handled">
-                  {filteredPickerCoins.map((coin) => (
+                  {filteredPickerEquities.map((item) => (
                     <TouchableOpacity
-                      key={coin.symbol}
+                      key={item.symbol}
                       style={styles.pickerItem}
                       onPress={() => {
-                        setSelectedSymbol(coin.symbol);
+                        setSelectedSymbol(item.symbol);
                         setPickerVisible(false);
                         setPickerSearchQuery('');
                         setLoading(true);
                       }}
                     >
-                      <Text style={[styles.pickerItemText, selectedSymbol === coin.symbol && { color: colors.accent }]}>
-                        {coin.coin} / LKR
+                      <Text style={[styles.pickerItemText, selectedSymbol === item.symbol && { color: colors.accent }]}>
+                        {item.symbol}
                       </Text>
                       <Text style={styles.pickerItemPrice}>
-                        Rs {coin.priceLKR.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        Rs {item.priceLKR?.toFixed(2)}
                       </Text>
                     </TouchableOpacity>
                   ))}
@@ -248,235 +252,173 @@ export const DemoTradingScreen = () => {
             {/* Virtual Balance Card */}
             <Card style={styles.balanceCard}>
               <View style={styles.balanceHeader}>
-                <Text style={styles.balanceLabel}>VIRTUAL BALANCE</Text>
-                <TouchableOpacity onPress={fetchTradingData}>
-                  <MaterialIcons name="refresh" size={20} color={colors.accent} />
-                </TouchableOpacity>
+                <Text style={styles.balanceLabel}>Virtual Demo Portfolio</Text>
+                <View style={styles.pnlBadge}>
+                  <Text style={[styles.pnlText, (portfolioSummary?.unrealizedProfitLoss || 0) >= 0 ? { color: colors.accent } : { color: colors.red }]}>
+                    {(portfolioSummary?.unrealizedProfitLoss || 0) >= 0 ? '+' : ''}{portfolioSummary?.profitLossPercent?.toFixed(2) || '0.00'}% PnL
+                  </Text>
+                </View>
               </View>
               <Text style={styles.balanceValue}>
-                LKR {walletDetails ? walletDetails.balanceLKR.toLocaleString(undefined, { minimumFractionDigits: 2 }) : '1,000,000.00'}
+                LKR {(portfolioSummary?.totalPortfolioValue || walletDetails?.availableBalance || 1000000).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </Text>
-              <Text style={[
-                styles.balanceSubtitle,
-                portfolioSummary && portfolioSummary.todaysProfit >= 0 ? { color: colors.accent } : { color: colors.red }
-              ]}>
-                PNL: {portfolioSummary && portfolioSummary.todaysProfit >= 0 ? '+' : ''}{portfolioSummary ? portfolioSummary.todaysProfit.toLocaleString(undefined, { maximumFractionDigits: 0 }) : '0'} LKR ({portfolioSummary ? (portfolioSummary.profitLossPercent >= 0 ? '+' : '') + portfolioSummary.profitLossPercent.toFixed(2) : '0.00'}%)
-              </Text>
+              <View style={styles.balanceFooter}>
+                <Text style={styles.balanceFooterLabel}>
+                  Available Cash: <Text style={{ color: '#FFF', fontWeight: '700' }}>LKR {(walletDetails?.availableBalance || walletDetails?.availableBalanceLKR || 1000000).toLocaleString()}</Text>
+                </Text>
+              </View>
             </Card>
 
-            {/* Live Price & Chart */}
-            <View style={styles.chartSection}>
+            {/* Active Equities Ticker Card */}
+            <Card style={styles.priceCard}>
               <View style={styles.priceRow}>
                 <View>
-                  <Text style={styles.livePrice}>
-                    Rs {activeCoinPriceLKR.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  <Text style={styles.stockSymbolTitle}>{selectedSymbol}</Text>
+                  <Text style={styles.stockSub}>Colombo Stock Exchange Regular Market</Text>
+                </View>
+                <View style={{ alignItems: 'flex-end' }}>
+                  <Text style={styles.stockPriceLarge}>Rs {activeStockPriceLKR.toFixed(2)}</Text>
+                  <Text style={[styles.stockChangeLarge, activeStockChange >= 0 ? { color: colors.accent } : { color: colors.red }]}>
+                    {activeStockChange >= 0 ? '+' : ''}{activeStockChange?.toFixed(2)}%
                   </Text>
-                  <Text style={[styles.liveChange, activeCoinChange >= 0 ? { color: colors.accent } : { color: colors.red }]}>
-                    {activeCoinChange >= 0 ? '+' : ''}{activeCoinChange.toFixed(2)}%
-                  </Text>
-                </View>
-                <View style={styles.timeFilter}>
-                  {['1H', '1D', '1W'].map(t => (
-                    <TouchableOpacity key={t} style={[styles.timeBtn, t === '1D' && styles.timeBtnActive]}>
-                      <Text style={[styles.timeText, t === '1D' && styles.timeTextActive]}>{t}</Text>
-                    </TouchableOpacity>
-                  ))}
                 </View>
               </View>
-
-              <View style={styles.chartContainer}>
-                <Svg height="120" width="100%" viewBox="0 0 300 120" preserveAspectRatio="none">
-                  <Path
-                    d={activeCoinChange >= 0 
-                      ? "M0 100 Q 50 80, 100 90 T 200 40 T 300 20"
-                      : "M0 20 Q 50 40, 100 30 T 200 80 T 300 100"
-                    }
-                    fill="none"
-                    stroke={activeCoinChange >= 0 ? colors.accent : colors.red}
-                    strokeWidth="2.5"
-                  />
-                </Svg>
-              </View>
-            </View>
-
-            {/* Trade Form Card */}
-            <Card style={styles.formCard}>
-              <View style={styles.tradeTabs}>
-                <TouchableOpacity
-                  style={[
-                    styles.tradeTab,
-                    tradeType === 'BUY' ? styles.tradeTabBuyActive : styles.tradeTabInactive
-                  ]}
-                  onPress={() => {
-                    setTradeType('BUY');
-                    setAmountLKR('');
-                    setQuantityCoin('');
-                  }}
-                >
-                  <Text style={[styles.tradeTabText, tradeType === 'BUY' && styles.tradeTabTextBuyActive]}>BUY</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[
-                    styles.tradeTab,
-                    tradeType === 'SELL' ? styles.tradeTabSellActive : styles.tradeTabInactive
-                  ]}
-                  onPress={() => {
-                    setTradeType('SELL');
-                    setAmountLKR('');
-                    setQuantityCoin('');
-                  }}
-                >
-                  <Text style={[styles.tradeTabText, tradeType === 'SELL' && styles.tradeTabTextSellActive]}>SELL</Text>
-                </TouchableOpacity>
-              </View>
-
-              <Text style={styles.inputLabel}>ORDER TYPE</Text>
-              <View style={styles.dropdownInput}>
-                <Text style={styles.inputText}>Market Order</Text>
-                <MaterialIcons name="keyboard-arrow-down" size={20} color={colors.textSecondary} />
-              </View>
-
-              <View style={styles.inputRow}>
-                <View style={styles.inputGroup}>
-                  <Text style={styles.inputLabel}>AMOUNT ({selectedSymbol.replace('USDT', '')})</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={quantityCoin}
-                    onChangeText={handleQuantityCoinChange}
-                    placeholder="0.00"
-                    keyboardType="numeric"
-                    placeholderTextColor={colors.textSecondary}
-                  />
-                </View>
-                <View style={{ width: 16 }} />
-                <View style={styles.inputGroup}>
-                  <Text style={styles.inputLabel}>TOTAL (LKR)</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={amountLKR}
-                    onChangeText={handleAmountLKRChange}
-                    placeholder="0"
-                    keyboardType="numeric"
-                    placeholderTextColor={colors.textSecondary}
-                  />
-                </View>
-              </View>
-
-              <View style={styles.balanceInfoRow}>
-                <Text style={styles.availableText}>
-                  {tradeType === 'BUY' 
-                    ? `Available: ${walletDetails ? walletDetails.availableBalance.toLocaleString(undefined, { maximumFractionDigits: 0 }) : '1,000,000'} LKR`
-                    : `Holding: ${getOwnedQuantity().toFixed(6)} ${selectedSymbol.replace('USDT', '')}`
-                  }
-                </Text>
-                <TouchableOpacity onPress={() => {
-                  if (tradeType === 'BUY') {
-                    if (walletDetails) {
-                      handleAmountLKRChange(walletDetails.availableBalance.toString());
-                    }
-                  } else {
-                    handleQuantityCoinChange(getOwnedQuantity().toString());
-                  }
-                }}>
-                  <Text style={styles.maxBuyText}>{tradeType === 'BUY' ? 'Max Buy' : 'Max Sell'}</Text>
-                </TouchableOpacity>
-              </View>
-
-              {tradeLoading ? (
-                <ActivityIndicator color={colors.accent} size="large" style={{ marginVertical: 16 }} />
-              ) : (
-                <PrimaryButton 
-                  title={tradeType === 'BUY' ? 'EXECUTE VIRTUAL BUY ⚡' : 'EXECUTE VIRTUAL SELL ⚡'} 
-                  onPress={handleOpenConfirmation} 
-                  style={tradeType === 'SELL' && { backgroundColor: colors.red }}
-                />
-              )}
             </Card>
 
-            {/* Virtual History */}
-            <View style={styles.historySection}>
-              <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>VIRTUAL HISTORY</Text>
-                <TouchableOpacity onPress={fetchTradingData}><Text style={styles.seeAllText}>Refresh</Text></TouchableOpacity>
+            {/* Trade Side Tabs (BUY / SELL) */}
+            <View style={styles.tradeTypeContainer}>
+              <TouchableOpacity
+                style={[styles.tradeTypeBtn, tradeType === 'BUY' && styles.tradeTypeBtnBuyActive]}
+                onPress={() => setTradeType('BUY')}
+              >
+                <Text style={[styles.tradeTypeBtnText, tradeType === 'BUY' && { color: '#000', fontWeight: '700' }]}>
+                  BUY {selectedSymbol.split('.')[0]}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.tradeTypeBtn, tradeType === 'SELL' && styles.tradeTypeBtnSellActive]}
+                onPress={() => setTradeType('SELL')}
+              >
+                <Text style={[styles.tradeTypeBtnText, tradeType === 'SELL' && { color: '#FFF', fontWeight: '700' }]}>
+                  SELL {selectedSymbol.split('.')[0]}
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Input Form */}
+            <Card style={styles.tradeFormCard}>
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>ORDER VALUE (LKR)</Text>
+                <TextInput
+                  style={styles.tradeInput}
+                  placeholder="0.00"
+                  placeholderTextColor={colors.textSecondary}
+                  keyboardType="numeric"
+                  value={amountLKR}
+                  onChangeText={handleAmountLKRChange}
+                />
               </View>
 
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>QUANTITY (INTEGER SHARES)</Text>
+                <TextInput
+                  style={styles.tradeInput}
+                  placeholder="0"
+                  placeholderTextColor={colors.textSecondary}
+                  keyboardType="numeric"
+                  value={quantityShares}
+                  onChangeText={handleQuantitySharesChange}
+                />
+                <Text style={styles.sharesOwnedNote}>
+                  Shares in Portfolio: {getOwnedQuantity().toLocaleString()}
+                </Text>
+              </View>
+
+              <View style={styles.actionBtnRow}>
+                <PrimaryButton
+                  title={tradeLoading ? "Executing CSE Order..." : `${tradeType} ${selectedSymbol.split('.')[0]}`}
+                  onPress={handleOpenConfirmation}
+                  disabled={tradeLoading}
+                  style={tradeType === 'SELL' ? { backgroundColor: colors.red } : undefined}
+                />
+              </View>
+            </Card>
+
+            {/* Recent Executed Demo Trades */}
+            <View style={{ marginTop: 24 }}>
+              <Text style={styles.sectionHeaderTitle}>Recent CSE Transactions</Text>
               {txHistory.length > 0 ? (
-                txHistory.map((tx) => (
-                  <View key={tx.id} style={styles.txRow}>
-                    <View style={styles.txLeft}>
-                      <View style={[
-                        styles.txIconContainer,
-                        tx.action === 'BUY' || tx.action === 'DEPOSIT' ? styles.txBgGreen : styles.txBgRed
-                      ]}>
-                        <MaterialIcons 
-                          name={tx.action === 'BUY' || tx.action === 'DEPOSIT' ? 'call-received' : 'call-made'} 
-                          size={20} 
-                          color={tx.action === 'BUY' || tx.action === 'DEPOSIT' ? colors.accent : colors.red} 
-                        />
-                      </View>
-                      <View>
-                        <Text style={styles.txPair}>{tx.action} {tx.coin}</Text>
-                        <Text style={styles.txTime}>{new Date(tx.date).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })}</Text>
-                      </View>
+                txHistory.map((tx, idx) => (
+                  <View key={idx} style={styles.txRow}>
+                    <View>
+                      <Text style={styles.txSymbol}>{tx.TYPE || tx.type} · {tx.SYMBOL || tx.symbol || 'CSE'}</Text>
+                      <Text style={styles.txDate}>{new Date(tx.CREATED_AT || tx.createdAt || Date.now()).toLocaleDateString()}</Text>
                     </View>
-                    <View style={styles.txRight}>
-                      <Text style={[
-                        styles.txAmount,
-                        tx.action === 'BUY' || tx.action === 'DEPOSIT' ? styles.txAmountGreen : styles.txAmountRed
-                      ]}>
-                        {tx.action === 'BUY' || tx.action === 'DEPOSIT' ? '+' : '-'}{tx.quantity.toFixed(4)} {tx.coin}
-                      </Text>
-                      <Text style={styles.txTotalVal}>LKR {tx.total.toLocaleString(undefined, { maximumFractionDigits: 0 })}</Text>
-                    </View>
+                    <Text style={[styles.txValue, (tx.TYPE === 'BUY' || tx.type === 'BUY') ? { color: colors.accent } : { color: colors.red }]}>
+                      LKR {Number(tx.AMOUNT || tx.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                    </Text>
                   </View>
                 ))
               ) : (
-                <View style={styles.emptyHistory}>
-                  <Text style={styles.emptyText}>No virtual trading history yet.</Text>
-                </View>
+                <Text style={{ color: colors.textSecondary, fontSize: 12, marginVertical: 8 }}>
+                  No demo trades executed yet. Place an order above.
+                </Text>
               )}
             </View>
 
+            <View style={{ height: 60 }} />
           </ScrollView>
-        </View>
-      )}
-    </KeyboardAvoidingView>
+          </View>
+        )}
+      </KeyboardAvoidingView>
 
       {/* Confirmation Modal */}
-      <Modal
-        visible={confirmModalVisible}
-        transparent={true}
-        animationType="fade"
-        onRequestClose={() => setConfirmModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Confirm Simulated Order</Text>
-            <Text style={styles.modalText}>
-              Are you sure you want to {tradeType === 'BUY' ? 'buy' : 'sell'}{' '}
-              <Text style={{ fontWeight: '700', color: colors.accent }}>
-                {parseFloat(quantityCoin).toFixed(6)} {selectedSymbol.replace('USDT', '')}
-              </Text>{' '}
-              for{' '}
-              <Text style={{ fontWeight: '700', color: colors.accent }}>
-                LKR {parseFloat(amountLKR).toLocaleString()}
-              </Text>?
-            </Text>
-            <View style={styles.modalButtons}>
-              <TouchableOpacity 
-                style={styles.modalCancelBtn} 
+      <Modal visible={confirmModalVisible} transparent animationType="fade">
+        <View style={styles.modalBackdrop}>
+          <Card style={styles.confirmModalCard}>
+            <Text style={styles.modalTitle}>Confirm CSE {tradeType} Order</Text>
+            <Text style={styles.modalSub}>Colombo Stock Exchange Paper Trading Engine</Text>
+
+            <View style={styles.confirmDetailRow}>
+              <Text style={styles.confirmLabel}>EQUITY:</Text>
+              <Text style={styles.confirmValue}>{selectedSymbol}</Text>
+            </View>
+            <View style={styles.confirmDetailRow}>
+              <Text style={styles.confirmLabel}>SIDE:</Text>
+              <Text style={[styles.confirmValue, { color: tradeType === 'BUY' ? colors.accent : colors.red }]}>{tradeType}</Text>
+            </View>
+            <View style={styles.confirmDetailRow}>
+              <Text style={styles.confirmLabel}>EXECUTION PRICE:</Text>
+              <Text style={styles.confirmValue}>Rs {activeStockPriceLKR.toFixed(2)}</Text>
+            </View>
+            <View style={styles.confirmDetailRow}>
+              <Text style={styles.confirmLabel}>QUANTITY:</Text>
+              <Text style={styles.confirmValue}>{quantityShares} Shares</Text>
+            </View>
+            <View style={styles.confirmDetailRow}>
+              <Text style={styles.confirmLabel}>TOTAL VALUE:</Text>
+              <Text style={styles.confirmValue}>LKR {parseFloat(amountLKR).toLocaleString(undefined, { minimumFractionDigits: 2 })}</Text>
+            </View>
+
+            <View style={styles.modalBtnRow}>
+              <TouchableOpacity
+                style={styles.cancelBtn}
                 onPress={() => setConfirmModalVisible(false)}
+                disabled={tradeLoading}
               >
-                <Text style={styles.modalCancelText}>Cancel</Text>
+                <Text style={styles.cancelBtnText}>Cancel</Text>
               </TouchableOpacity>
-              <TouchableOpacity 
-                style={[styles.modalConfirmBtn, tradeType === 'SELL' && { backgroundColor: colors.red }]} 
+              <TouchableOpacity
+                style={[styles.confirmBtn, tradeType === 'SELL' && { backgroundColor: colors.red }]}
                 onPress={handleExecuteTrade}
+                disabled={tradeLoading}
               >
-                <Text style={styles.modalConfirmText}>Confirm</Text>
+                <Text style={[styles.confirmBtnText, tradeType === 'SELL' && { color: '#FFF' }]}>
+                  {tradeLoading ? "Executing..." : `Confirm ${tradeType}`}
+                </Text>
               </TouchableOpacity>
             </View>
-          </View>
+          </Card>
         </View>
       </Modal>
     </SafeAreaView>
@@ -491,15 +433,15 @@ const styles = StyleSheet.create({
   keyboardAvoiding: {
     flex: 1,
   },
-  container: {
-    paddingBottom: 40,
-  },
   header: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 24,
-    paddingTop: 20,
-    marginBottom: 24,
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
   },
   backButton: {
     padding: 8,
@@ -508,377 +450,291 @@ const styles = StyleSheet.create({
   headerSelector: {
     flexDirection: 'row',
     alignItems: 'center',
-    flex: 1,
-    marginLeft: 8,
   },
   headerTitle: {
-    ...typography.body,
-    fontWeight: '700',
+    ...typography.h3,
     color: '#FFF',
   },
   demoBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.accentMuted,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
   },
   demoDot: {
     width: 6,
     height: 6,
     borderRadius: 3,
     backgroundColor: colors.accent,
-    marginRight: 6,
+    marginRight: 4,
   },
   demoBadgeText: {
-    ...typography.label,
-    fontSize: 10,
-  },
-  balanceCard: {
-    marginHorizontal: 24,
-    marginBottom: 32,
-    backgroundColor: '#161616',
-    padding: 24,
-  },
-  balanceHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  balanceLabel: {
-    ...typography.label,
+    fontSize: 9,
+    fontWeight: '700',
     color: colors.accent,
-  },
-  balanceValue: {
-    ...typography.price,
-    marginBottom: 8,
-  },
-  balanceSubtitle: {
-    ...typography.bodySmall,
-    fontWeight: '600',
-  },
-  chartSection: {
-    paddingHorizontal: 24,
-    marginBottom: 32,
-  },
-  priceRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 16,
-  },
-  livePrice: {
-    ...typography.h2,
-    fontSize: 28,
-  },
-  liveChange: {
-    ...typography.body,
-    fontWeight: '700',
-    marginTop: 4,
-  },
-  timeFilter: {
-    flexDirection: 'row',
-    backgroundColor: colors.bgInput,
-    borderRadius: layout.borderRadiusPill,
-    padding: 4,
-  },
-  timeBtn: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: layout.borderRadiusPill,
-  },
-  timeBtnActive: {
-    backgroundColor: colors.accent,
-  },
-  timeText: {
-    ...typography.bodySmall,
-    fontWeight: '600',
-  },
-  timeTextActive: {
-    color: '#000',
-  },
-  chartContainer: {
-    height: 120,
-    width: '100%',
-    marginVertical: 16,
-  },
-  formCard: {
-    marginHorizontal: 24,
-    marginBottom: 32,
-    padding: 24,
-  },
-  tradeTabs: {
-    flexDirection: 'row',
-    marginBottom: 24,
-    backgroundColor: colors.bgInput,
-    borderRadius: layout.borderRadiusPill,
-    padding: 4,
-  },
-  tradeTab: {
-    flex: 1,
-    paddingVertical: 12,
-    alignItems: 'center',
-    borderRadius: layout.borderRadiusPill,
-  },
-  tradeTabInactive: {
-    backgroundColor: 'transparent',
-  },
-  tradeTabBuyActive: {
-    backgroundColor: colors.accent,
-  },
-  tradeTabSellActive: {
-    backgroundColor: colors.red,
-  },
-  tradeTabText: {
-    ...typography.body,
-    fontWeight: '700',
-    color: colors.textSecondary,
-  },
-  tradeTabTextBuyActive: {
-    color: '#000',
-  },
-  tradeTabTextSellActive: {
-    color: '#FFF',
-  },
-  dropdownInput: {
-    height: 48,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: colors.bgInput,
-    borderRadius: layout.borderRadiusSmall,
-    paddingHorizontal: 16,
-    marginBottom: 16,
-  },
-  inputText: {
-    ...typography.body,
-    color: colors.textPrimary,
-  },
-  inputRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 16,
-  },
-  inputGroup: {
-    flex: 1,
-  },
-  inputLabel: {
-    ...typography.label,
-    marginBottom: 8,
-    color: colors.textSecondary,
-  },
-  input: {
-    ...typography.body,
-    height: 48,
-    backgroundColor: colors.bgInput,
-    borderRadius: layout.borderRadiusSmall,
-    color: colors.textPrimary,
-    paddingHorizontal: 16,
-    fontWeight: '600',
-  },
-  balanceInfoRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 24,
-  },
-  availableText: {
-    ...typography.bodySmall,
-    color: colors.textSecondary,
-  },
-  maxBuyText: {
-    ...typography.bodySmall,
-    color: colors.accent,
-    fontWeight: '600',
-  },
-  historySection: {
-    paddingHorizontal: 24,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  sectionTitle: {
-    ...typography.label,
-    color: colors.textSecondary,
-    letterSpacing: 1.5,
-  },
-  seeAllText: {
-    ...typography.bodySmall,
-    color: colors.accent,
-    fontWeight: '600',
-  },
-  txRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  txLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  txIconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  txBgGreen: { backgroundColor: colors.accentMuted },
-  txBgRed: { backgroundColor: colors.red + '22' },
-  txPair: {
-    ...typography.body,
-    fontWeight: '700',
-    marginBottom: 4,
-  },
-  txTime: {
-    ...typography.bodySmall,
-    fontSize: 12,
-    color: colors.textSecondary,
-  },
-  txRight: {
-    alignItems: 'flex-end',
-  },
-  txAmount: {
-    ...typography.body,
-    fontWeight: '700',
-    marginBottom: 4,
-  },
-  txAmountGreen: { color: colors.accent },
-  txAmountRed: { color: colors.red },
-  txTotalVal: {
-    ...typography.bodySmall,
-    fontSize: 11,
-    color: colors.textSecondary,
-  },
-  emptyHistory: {
-    paddingVertical: 32,
-    alignItems: 'center',
-  },
-  emptyText: {
-    ...typography.bodySmall,
-    color: colors.textSecondary,
-  },
-  pickerDropdown: {
-    marginHorizontal: 24,
-    backgroundColor: colors.bgCard,
-    borderRadius: 16,
-    padding: 8,
-    marginBottom: 24,
-    borderWidth: 1,
-    borderColor: colors.border,
   },
   pickerDropdownFloating: {
     position: 'absolute',
-    top: 70,
-    left: 24,
-    right: 24,
+    top: 60,
+    left: 20,
+    right: 20,
     backgroundColor: colors.bgCard,
     borderRadius: 16,
-    padding: 8,
+    padding: 12,
     borderWidth: 1,
     borderColor: colors.border,
     zIndex: 999,
     elevation: 10,
   },
-  pickerItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  pickerItemText: {
-    ...typography.body,
-    fontWeight: '600',
-    color: colors.textPrimary,
-  },
-  pickerItemPrice: {
-    ...typography.bodySmall,
-    color: colors.textSecondary,
-    fontSize: 12,
-  },
   pickerSearchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.bgInput,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    margin: 8,
-    height: 40,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    marginBottom: 8,
   },
   pickerSearchInput: {
-    ...typography.bodySmall,
     flex: 1,
-    marginLeft: 8,
-    color: colors.textPrimary,
-  },
-  // Modal Styles
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.85)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 24,
-  },
-  modalContent: {
-    backgroundColor: colors.bgCard,
-    borderRadius: 20,
-    width: '100%',
-    padding: 24,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  modalTitle: {
-    ...typography.h3,
-    marginBottom: 16,
+    paddingVertical: 8,
     color: '#FFF',
-    textAlign: 'center',
+    fontSize: 13,
+    marginLeft: 6,
   },
-  modalText: {
-    ...typography.body,
+  pickerItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  pickerItemText: {
+    fontSize: 13,
+    color: '#FFF',
+    fontWeight: '600',
+  },
+  pickerItemPrice: {
+    fontSize: 13,
     color: colors.textSecondary,
-    textAlign: 'center',
-    lineHeight: 24,
-    marginBottom: 28,
   },
-  modalButtons: {
+  container: {
+    paddingHorizontal: 20,
+    paddingTop: 16,
+  },
+  balanceCard: {
+    padding: 16,
+    marginBottom: 16,
+  },
+  balanceHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  balanceLabel: {
+    ...typography.label,
+    color: colors.textSecondary,
+  },
+  pnlBadge: {
+    backgroundColor: colors.bgInput,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+  },
+  pnlText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  balanceValue: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#FFF',
+    marginBottom: 8,
+  },
+  balanceFooter: {
     flexDirection: 'row',
     justifyContent: 'space-between',
   },
-  modalCancelBtn: {
-    flex: 1,
-    paddingVertical: 14,
+  balanceFooterLabel: {
+    fontSize: 12,
+    color: colors.textSecondary,
+  },
+  priceCard: {
+    padding: 16,
+    marginBottom: 16,
+  },
+  priceRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
+  },
+  stockSymbolTitle: {
+    ...typography.h3,
+    color: '#FFF',
+  },
+  stockSub: {
+    fontSize: 11,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  stockPriceLarge: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#FFF',
+  },
+  stockChangeLarge: {
+    fontSize: 12,
+    fontWeight: '700',
+    marginTop: 2,
+  },
+  tradeTypeContainer: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 16,
+  },
+  tradeTypeBtn: {
+    flex: 1,
+    paddingVertical: 12,
     borderRadius: 12,
-    marginRight: 8,
+    backgroundColor: colors.bgCard,
+    alignItems: 'center',
     borderWidth: 1,
     borderColor: colors.border,
   },
-  modalCancelText: {
+  tradeTypeBtnBuyActive: {
+    backgroundColor: colors.accent,
+    borderColor: colors.accent,
+  },
+  tradeTypeBtnSellActive: {
+    backgroundColor: colors.red,
+    borderColor: colors.red,
+  },
+  tradeTypeBtnText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.textSecondary,
+  },
+  tradeFormCard: {
+    padding: 18,
+  },
+  inputGroup: {
+    marginBottom: 14,
+  },
+  inputLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: colors.textSecondary,
+    marginBottom: 6,
+  },
+  tradeInput: {
+    backgroundColor: colors.bgInput,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    color: '#FFF',
+    fontSize: 16,
+    fontWeight: '700',
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  sharesOwnedNote: {
+    fontSize: 11,
+    color: colors.textSecondary,
+    marginTop: 4,
+  },
+  actionBtnRow: {
+    marginTop: 8,
+  },
+  sectionHeaderTitle: {
     ...typography.body,
+    fontWeight: '700',
+    color: '#FFF',
+    marginBottom: 12,
+  },
+  txRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  txSymbol: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#FFF',
+  },
+  txDate: {
+    fontSize: 10,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  txValue: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+  },
+  confirmModalCard: {
+    padding: 20,
+  },
+  modalTitle: {
+    ...typography.h3,
+    color: '#FFF',
+    marginBottom: 4,
+  },
+  modalSub: {
+    fontSize: 11,
+    color: colors.textSecondary,
+    marginBottom: 16,
+  },
+  confirmDetailRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  confirmLabel: {
+    fontSize: 11,
     color: colors.textSecondary,
     fontWeight: '600',
   },
-  modalConfirmBtn: {
-    flex: 1,
-    paddingVertical: 14,
-    alignItems: 'center',
-    borderRadius: 12,
-    marginLeft: 8,
-    backgroundColor: colors.accent,
+  confirmValue: {
+    fontSize: 12,
+    color: '#FFF',
+    fontWeight: '700',
   },
-  modalConfirmText: {
-    ...typography.body,
+  modalBtnRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 18,
+  },
+  cancelBtn: {
+    flex: 1,
+    backgroundColor: colors.bgInput,
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  cancelBtnText: {
+    color: colors.textSecondary,
+    fontWeight: '600',
+  },
+  confirmBtn: {
+    flex: 2,
+    backgroundColor: colors.accent,
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  confirmBtnText: {
     color: '#000',
     fontWeight: '700',
   },
