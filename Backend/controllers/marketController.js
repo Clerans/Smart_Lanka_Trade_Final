@@ -74,12 +74,35 @@ exports.getLive = async (req, res) => {
   }
 };
 
+const ALLOWED_SYMBOLS = ['BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'SOLUSDT', 'ADAUSDT', 'XRPUSDT', 'DOGEUSDT'];
+const ALLOWED_INTERVALS = ['1m', '5m', '15m', '30m', '1h', '4h', '1d'];
+
 exports.getKlines = async (req, res) => {
   try {
     const { getKlinesWithIndicators } = require("../services/marketDataService");
-    const symbol = req.params.symbol || req.query.symbol || "BTCUSDT";
-    const interval = req.query.interval || "1h";
-    const limit = parseInt(req.query.limit || "100", 10);
+    let symbol = (req.params.symbol || req.query.symbol || "BTCUSDT").toUpperCase().trim();
+    let interval = (req.query.interval || "1h").toLowerCase().trim();
+    let limit = parseInt(req.query.limit || "100", 10);
+
+    if (!ALLOWED_SYMBOLS.includes(symbol)) {
+      return res.status(400).json({
+        success: false,
+        code: 'INVALID_SYMBOL',
+        message: `Invalid symbol '${symbol}'. Allowed symbols: ${ALLOWED_SYMBOLS.join(', ')}`
+      });
+    }
+
+    if (!ALLOWED_INTERVALS.includes(interval)) {
+      return res.status(400).json({
+        success: false,
+        code: 'INVALID_INTERVAL',
+        message: `Invalid interval '${interval}'. Supported intervals: ${ALLOWED_INTERVALS.join(', ')}`
+      });
+    }
+
+    if (isNaN(limit) || limit < 5 || limit > 500) {
+      limit = Math.min(Math.max(limit || 100, 5), 500);
+    }
 
     const data = await getKlinesWithIndicators(symbol, interval, limit);
     res.json({
