@@ -298,3 +298,23 @@ exports.googleLoginUser = async (email, name) => {
     }
   };
 };
+
+exports.changePasswordUser = async (userId, currentPassword, newPassword) => {
+  const user = await userModel.findById(userId);
+  if (!user) {
+    throw createError('USER_NOT_FOUND', 'User not found.', 404);
+  }
+
+  const isMatch = await bcrypt.compare(currentPassword, user.PASSWORD);
+  if (!isMatch) {
+    throw createError('INVALID_CREDENTIALS', 'Incorrect current password.', 400);
+  }
+
+  if (!validatePassword(newPassword)) {
+    throw createError('PASSWORD_TOO_WEAK', 'New password must be at least 8 characters, containing uppercase, lowercase, numbers, and special characters.', 422);
+  }
+
+  const hashedPassword = await bcrypt.hash(newPassword, 10);
+  await userModel.updatePassword(userId, hashedPassword);
+  return { message: 'Password changed successfully.' };
+};
