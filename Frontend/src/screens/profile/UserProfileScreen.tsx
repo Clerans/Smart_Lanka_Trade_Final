@@ -16,7 +16,7 @@ import {
   Platform
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
+import { MaterialIcons } from '@expo/vector-icons';
 import { useNavigation, useIsFocused } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -65,21 +65,18 @@ export const UserProfileScreen = () => {
 
   const loadUserProfile = async () => {
     try {
-      // 1. Load cached user data from AsyncStorage
       const userData = await AsyncStorage.getItem('userData');
       if (userData) {
-        const parsed = JSON.parse(userData);
-        setUser(parsed);
+        setUser(JSON.parse(userData));
       }
 
-      // 2. Fetch fresh profile from API backend
       const res = await authService.getProfile();
       if (res?.user) {
         setUser(res.user);
         await AsyncStorage.setItem('userData', JSON.stringify(res.user));
       }
     } catch (err) {
-      // Offline or using cached profile
+      // Offline fallback
     }
 
     const bio = await AsyncStorage.getItem('@pref_biometric');
@@ -102,7 +99,7 @@ export const UserProfileScreen = () => {
           setKycStatus(res.data.status);
         }
       } catch (e) {
-        // user not authenticated or offline
+        // Not authenticated or offline
       } finally {
         setLoadingKyc(false);
       }
@@ -739,8 +736,8 @@ const styles = StyleSheet.create({
   },
   iconBtn: {
     padding: 8,
-    backgroundColor: colors.card,
-    borderRadius: layout.borderRadius.sm,
+    backgroundColor: colors.bgCard,
+    borderRadius: layout.borderRadiusSmall,
   },
   userCard: {
     marginHorizontal: 24,
@@ -782,7 +779,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 2,
-    borderColor: colors.card,
+    borderColor: colors.bgCard,
   },
   userDetails: {
     flex: 1,
@@ -838,18 +835,18 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: layout.borderRadius.sm,
+    borderRadius: layout.borderRadiusSmall,
     marginTop: 2,
   },
   tierText: {
-    ...typography.caption,
+    ...typography.bodySmall,
     fontWeight: '700',
     marginLeft: 4,
   },
   preferencesSection: {
-    backgroundColor: colors.card,
+    backgroundColor: colors.bgCard,
     marginHorizontal: 24,
-    borderRadius: layout.borderRadius.md,
+    borderRadius: layout.borderRadius,
     paddingHorizontal: 16,
     paddingVertical: 8,
     marginBottom: 24,
@@ -886,9 +883,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.border,
   },
   menuSection: {
-    backgroundColor: colors.card,
+    backgroundColor: colors.bgCard,
     marginHorizontal: 24,
-    borderRadius: layout.borderRadius.md,
+    borderRadius: layout.borderRadius,
     paddingHorizontal: 16,
     marginBottom: 24,
   },
@@ -908,7 +905,7 @@ const styles = StyleSheet.create({
   menuIconBg: {
     width: 36,
     height: 36,
-    borderRadius: layout.borderRadius.sm,
+    borderRadius: layout.borderRadiusSmall,
     backgroundColor: colors.bgInput,
     justifyContent: 'center',
     alignItems: 'center',
@@ -924,8 +921,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginHorizontal: 24,
     paddingVertical: 16,
-    backgroundColor: colors.card,
-    borderRadius: layout.borderRadius.md,
+    backgroundColor: colors.bgCard,
+    borderRadius: layout.borderRadius,
     borderWidth: 1,
     borderColor: colors.redMuted,
   },
@@ -933,7 +930,8 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   logoutText: {
-    ...typography.button,
+    ...typography.body,
+    fontWeight: '700',
     color: colors.red,
   },
   // Modal Styling
@@ -944,7 +942,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
   },
   modalContent: {
-    backgroundColor: colors.card,
+    backgroundColor: colors.bgCard,
     borderRadius: 16,
     padding: 20,
     borderWidth: 1,
@@ -1003,7 +1001,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 2,
-    borderColor: colors.card,
+    borderColor: colors.bgCard,
   },
   imageBtnRow: {
     flexDirection: 'row',
@@ -1073,7 +1071,7 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   modalCancelBtnText: {
-    ...typography.button,
+    ...typography.body,
     color: colors.textSecondary,
     fontWeight: '600',
   },
@@ -1085,7 +1083,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   modalSaveBtnText: {
-    ...typography.button,
+    ...typography.body,
     color: '#000',
     fontWeight: '700',
   },
@@ -1123,9 +1121,8 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   feeTitle: {
-    ...typography.caption,
+    ...typography.label,
     color: colors.accent,
-    fontWeight: '700',
     marginBottom: 10,
   },
   feeRow: {
@@ -1223,7 +1220,7 @@ const styles = StyleSheet.create({
     marginTop: 16,
   },
   modalDoneBtnText: {
-    ...typography.button,
+    ...typography.body,
     color: '#000',
     fontWeight: '700',
   },
