@@ -137,12 +137,12 @@ async function runBacktest(config = {}) {
     const currentCandle = validCandles[t];
     const currentPrice = currentCandle.close;
 
-    // Calculate technical indicators using ONLY data up to T
-    const indicators = calculateIndicators(historicalSlice);
-    if (!indicators || !indicators.rsi) continue;
+    // Calculate technical indicators and features using ONLY data up to T
+    const features = extractFeatures(historicalSlice);
+    if (!features || !features.rsi) continue;
 
     // Generate AI Recommendation at timestamp T
-    const rec = evaluateTechnicalSignals(indicators, currentPrice, symbol);
+    const rec = evaluateSignals(features);
     if (!rec) continue;
 
     // Evaluate future outcomes across each horizon

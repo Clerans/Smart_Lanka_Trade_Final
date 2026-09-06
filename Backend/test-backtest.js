@@ -9,8 +9,7 @@ const {
   runBacktest,
   HORIZON_THRESHOLDS
 } = require('./services/backtestService');
-const { calculateIndicators } = require('./services/technicalIndicators');
-const { evaluateTechnicalSignals } = require('./services/aiRecommendationService');
+const { extractFeatures, evaluateSignals } = require('./services/aiRecommendationService');
 
 function generateSyntheticCandles(count = 100, trend = 'up') {
   const candles = [];
@@ -93,17 +92,17 @@ async function runAllTests() {
   test('Test 4: Technical indicator calculation on isolated slice', () => {
     const candles = generateSyntheticCandles(60, 'up');
     const { validCandles } = validateAndSanitizeCandles(candles);
-    const indicators = calculateIndicators(validCandles.slice(0, 50));
-    assert.ok(indicators !== null);
-    assert.ok(typeof indicators.rsi === 'number');
-    assert.ok(indicators.rsi >= 0 && indicators.rsi <= 100);
+    const features = extractFeatures(validCandles.slice(0, 50));
+    assert.ok(features !== null);
+    assert.ok(typeof features.rsi === 'number');
+    assert.ok(features.rsi >= 0 && features.rsi <= 100);
   });
 
   test('Test 5: Recommendation generation on isolated indicator state', () => {
     const candles = generateSyntheticCandles(60, 'up');
     const { validCandles } = validateAndSanitizeCandles(candles);
-    const indicators = calculateIndicators(validCandles.slice(0, 50));
-    const rec = evaluateTechnicalSignals(indicators, validCandles[49].close, 'BTCUSDT');
+    const features = extractFeatures(validCandles.slice(0, 50));
+    const rec = evaluateSignals(features);
     assert.ok(rec !== null);
     assert.ok(['BUY', 'HOLD', 'SELL'].includes(rec.action));
     assert.ok(rec.confidence >= 0 && rec.confidence <= 100);
