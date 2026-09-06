@@ -320,19 +320,20 @@ export const UserProfileScreen = () => {
                 <Image source={{ uri: user.profileImage }} style={styles.avatarImage} />
               ) : (
                 <View style={styles.avatarLarge}>
-                  <MaterialIcons name="person" size={40} color={colors.accent} />
+                  <MaterialIcons name="person" size={38} color={colors.accent} />
                 </View>
               )}
               <View style={styles.avatarEditBadge}>
-                <MaterialIcons name="edit" size={12} color="#FFF" />
+                <MaterialIcons name="camera-alt" size={10} color="#000" />
               </View>
             </TouchableOpacity>
 
             <View style={styles.userDetails}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+              <View style={styles.userNameHeaderRow}>
                 <Text style={styles.userName} numberOfLines={1}>{user?.name || 'SmartLanka Trader'}</Text>
-                <TouchableOpacity onPress={handleOpenEditModal} style={styles.editPencilBtn}>
-                  <MaterialIcons name="edit" size={16} color={colors.accent} />
+                <TouchableOpacity onPress={handleOpenEditModal} style={styles.editPillBtn}>
+                  <MaterialIcons name="edit" size={12} color={colors.accent} />
+                  <Text style={styles.editPillText}>Edit</Text>
                 </TouchableOpacity>
               </View>
               <Text style={styles.userEmail} numberOfLines={1}>{user?.email || 'trader@smartlanka.com'}</Text>
@@ -342,15 +343,11 @@ export const UserProfileScreen = () => {
                   <Text style={styles.userPhoneText}>{user.phoneNumber}</Text>
                 </View>
               ) : null}
-              {getTierBadge()}
+              <View style={{ marginTop: 4 }}>
+                {getTierBadge()}
+              </View>
             </View>
           </View>
-
-          <TouchableOpacity style={styles.editProfileBannerBtn} onPress={handleOpenEditModal}>
-            <MaterialIcons name="badge" size={16} color={colors.accent} />
-            <Text style={styles.editProfileBannerText}>Edit Profile Information</Text>
-            <MaterialIcons name="chevron-right" size={16} color={colors.accent} />
-          </TouchableOpacity>
         </Card>
 
         {/* Preferences Toggle Row */}
@@ -406,21 +403,34 @@ export const UserProfileScreen = () => {
                     color={item.id === 'kyc' ? colors.accent : colors.textPrimary} 
                   />
                 </View>
-                <Text style={[styles.menuTitle, item.id === 'kyc' && { fontWeight: '700' }]}>
+                <Text style={[styles.menuTitle, item.id === 'kyc' && { fontWeight: '700' }]} numberOfLines={1}>
                   {item.title}
                 </Text>
               </View>
-              {item.id === 'kyc' && (
-                <Text style={{ fontSize: 11, color: kycStatus === 'VERIFIED' ? colors.accent : colors.yellow, marginRight: 8, fontWeight: '600' }}>
-                  {kycStatus === 'VERIFIED' ? 'Verified' : kycStatus === 'PENDING' ? 'Pending' : 'Required'}
-                </Text>
-              )}
-              {item.id === '4' && (
-                <Text style={{ fontSize: 11, color: colors.accent, marginRight: 8, fontWeight: '600' }}>
-                  2 Active
-                </Text>
-              )}
-              <MaterialIcons name="chevron-right" size={24} color={colors.textSecondary} />
+
+              <View style={styles.menuRight}>
+                {item.id === 'kyc' && (
+                  <View style={[
+                    styles.menuBadgePill, 
+                    { backgroundColor: kycStatus === 'VERIFIED' ? colors.accentMuted : colors.yellow + '22' }
+                  ]}>
+                    <Text style={[
+                      styles.menuBadgeText, 
+                      { color: kycStatus === 'VERIFIED' ? colors.accent : colors.yellow }
+                    ]}>
+                      {kycStatus === 'VERIFIED' ? 'Verified' : kycStatus === 'PENDING' ? 'Pending' : 'Required'}
+                    </Text>
+                  </View>
+                )}
+                {item.id === '4' && (
+                  <View style={[styles.menuBadgePill, { backgroundColor: colors.accentMuted }]}>
+                    <Text style={[styles.menuBadgeText, { color: colors.accent }]}>
+                      2 Active
+                    </Text>
+                  </View>
+                )}
+                <MaterialIcons name="chevron-right" size={20} color={colors.textSecondary} />
+              </View>
             </TouchableOpacity>
           ))}
         </View>
@@ -901,6 +911,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
+    marginRight: 10,
   },
   menuIconBg: {
     width: 36,
@@ -909,11 +920,26 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bgInput,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 16,
+    marginRight: 14,
   },
   menuTitle: {
     ...typography.body,
     color: colors.textPrimary,
+    flexShrink: 1,
+  },
+  menuRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  menuBadgePill: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    marginRight: 6,
+  },
+  menuBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
   },
   logoutBtn: {
     flexDirection: 'row',
