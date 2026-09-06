@@ -12,7 +12,8 @@ const {
   verifyResetOTP,
   resetPassword,
   validateToken,
-  googleLogin
+  googleLogin,
+  changePassword
 } = require('../controllers/authController');
 const { protect } = require('../middleware/authMiddleware');
 
@@ -29,6 +30,7 @@ router.post('/resend-verification', resendVerification);
 router.post('/forgot-password', forgotPassword);
 router.post('/verify-reset-otp', verifyResetOTP);
 router.post('/reset-password', resetPassword);
+router.post('/change-password', protect, changePassword);
 
 // Token check endpoint
 router.get('/validate-token', protect, validateToken);
