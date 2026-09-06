@@ -120,6 +120,11 @@ function calculateNameSimilarity(registeredName, extractedName) {
 
   const tokenScore = (totalTokenMatchScore * 2) / (regTokens.length + extTokens.length);
 
+  // If no tokens matched with sufficient similarity, the names are completely different
+  if (tokenScore === 0 || usedExtIndices.size === 0) {
+    return 0.0;
+  }
+
   // Also compute full-string normalized similarity
   const maxFullLen = Math.max(regClean.length, extClean.length);
   const fullDist = levenshteinDistance(regClean, extClean);

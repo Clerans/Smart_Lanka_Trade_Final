@@ -233,15 +233,21 @@ function cleanAndNormalizeName(rawName) {
   // Collapse multiple spaces
   cleaned = cleaned.replace(/\s+/g, ' ').trim();
 
-  // Filter out system header keywords
-  const ignoredKeywords = [
-    'SRI LANKA', 'NATIONAL', 'IDENTITY', 'CARD', 'REPUBLIC', 'DEMOCRATIC',
-    'SOCIALIST', 'DEPARTMENT', 'REGISTRATION', 'PERSONS', 'MINISTRY',
-    'OFFICIAL', 'COMMISSION', 'HOLDER', 'SIGNATURE', 'MALE', 'FEMALE',
-    'DATE OF BIRTH', 'SEX', 'GENDER', 'NAME', 'FULL NAME'
+  // Filter out system header keywords and phrases
+  const ignoredPhrases = [
+    'SRI LANKA', 'NATIONAL IDENTITY', 'IDENTITY CARD', 'REPUBLIC',
+    'DEMOCRATIC', 'SOCIALIST', 'DEPARTMENT', 'REGISTRATION OF PERSONS',
+    'REGISTRATION', 'PERSONS', 'MINISTRY', 'OFFICIAL', 'COMMISSION',
+    'HOLDER', 'SIGNATURE', 'MALE', 'FEMALE', 'DATE OF BIRTH', 'DATE OF ISSUE'
   ];
 
-  if (cleaned.length < 3 || ignoredKeywords.includes(cleaned)) {
+  for (const phrase of ignoredPhrases) {
+    if (cleaned.includes(phrase)) {
+      return null;
+    }
+  }
+
+  if (cleaned.length < 3) {
     return null;
   }
 
