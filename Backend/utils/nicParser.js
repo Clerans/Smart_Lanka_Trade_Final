@@ -3,7 +3,7 @@
  * 
  * Supports:
  * - OLD NIC: 9 numeric digits + 'V' or 'X' (e.g., 921450239V, 856450239X)
- * - NEW NIC: 12 numeric digits (e.g., 199204502391, 200012345678)
+ * - NEW NIC: 12 numeric digits (e.g., 199204502391, 200012345678, 200024103235)
  * 
  * Mathematical Demographics Derivation:
  * - OLD format:
@@ -203,99 +203,6 @@ function fixOCRNICConfusions(token) {
 }
 
 /**
- * Extracts NIC number, demographic details, and cardholder name from raw OCR text
- * @param {string} ocrText 
- * @returns {{ documentType: string, nicNumber: string|null, extractedName: string|null, dob: string|null, gender: string|null, parsedNIC: object|null }}
- */
-function extractFromOCRText(ocrText) {
-  if (!ocrText || typeof ocrText !== 'string') {
-    return {
-      documentType: 'UNKNOWN',
-      nicNumber: null,
-      extractedName: null,
-      dob: null,
-      gender: null,
-      parsedNIC: null
-    };
-  }
-
-  const cleanText = ocrText.replace(/\r/g, '\n');
-  const lines = cleanText.split('\n').map(l => l.trim()).filter(l => l.length > 0);
-
-  let detectedNIC = null;
-  let parsedNIC = null;
-
-  // 1. Scan for direct regex matches
-  const oldNicRegex = /\b([0-9]{9}[vVxX])\b/g;
-  const newNicRegex = /\b([0-9]{12})\b/g;
-
-  const oldMatches = cleanText.match(oldNicRegex);
-  if (oldMatches && oldMatches.length > 0) {
-    for (const match of oldMatches) {
-      const parsed = parseNICDetails(match);
-      if (parsed) {
-        detectedNIC = parsed.nicNumber;
-        parsedNIC = parsed;
-        break;
-      }
-    }
-  }
-
-  if (!detectedNIC) {
-    const newMatches = cleanText.match(newNicRegex);
-    if (newMatches && newMatches.length > 0) {
-      for (const match of newMatches) {
-        const parsed = parseNICDetails(match);
-        if (parsed) {
-          detectedNIC = parsed.nicNumber;
-          parsedNIC = parsed;
-          break;
-        }
-      }
-    }
-  }
-
-  // 2. Scan line-by-line with OCR confusion correction
-  if (!detectedNIC) {
-    for (const line of lines) {
-      const tokens = line.split(/[\s,;:|/]+/);
-      for (const token of tokens) {
-        const fixedToken = fixOCRNICConfusions(token);
-        const parsed = parseNICDetails(fixedToken);
-        if (parsed) {
-          detectedNIC = parsed.nicNumber;
-          parsedNIC = parsed;
-          break;
-        }
-      }
-      if (detectedNIC) break;
-    }
-  }
-
-  // 3. Scan stripped continuous text for embedded NICs
-  if (!detectedNIC) {
-    const stripped = cleanText.replace(/[\s\-_.:,;/\\|()]/g, '');
-    const altOld = stripped.match(/([0-9]{9}[vVxXuU])/i);
-    if (altOld) {
-      const fixed = fixOCRNICConfusions(altOld[1]);
-      const parsed = parseNICDetails(fixed);
-      if (parsed) {
-        detectedNIC = parsed.nicNumber;
-        parsedNIC = parsed;
-      }
-    } else {
-      const altNew = stripped.match(/([0-9]{12})/);
-      if (altNew) {
-        const parsed = parseNICDetails(altNew[1]);
-        if (parsed) {
-          detectedNIC = parsed.nicNumber;
-          parsedNIC = parsed;
-        }
-      }
-    }
-  }
-
-/**
  * Cleans, removes field labels, and normalizes cardholder name extracted from OCR
  * @param {string} rawName 
  * @returns {string|null}
@@ -305,7 +212,7 @@ function cleanAndNormalizeName(rawName) {
 
   let cleaned = rawName.toUpperCase();
 
-  // Strip leading labels and prefixes
+  // Strip leading labels and prefixes (case-insensitive)
   const labelPatterns = [
     /^\s*(?:FULL\s*NAME|NAME\s*IN\s*FULL|GIVEN\s*NAME|SAMPURNA\s*NAMA|NAM\s*E|NAME|NAMA)\s*[:\-\.]*\s*/i,
     /^\s*(?:NIC\s*NO|NIC\s*NUMBER|IDENTITY\s*NO|CARD\s*NO|DOC\s*NO|NO)\s*[:\-\.]*\s*/i,
