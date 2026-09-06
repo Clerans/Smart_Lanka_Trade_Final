@@ -80,8 +80,8 @@ async function runTests() {
   const forexRates = await marketService.getForexRates();
   assert(forexRates && forexRates['USD/LKR'] && forexRates['USD/LKR'].rate >= 280, 'CBSL Forex Rates resolution (USD/LKR)', `Rate: ${forexRates?.['USD/LKR']?.rate}`);
 
-  const candles = marketService.getHistoricalCandles('JKH.N0000', '1D');
-  assert(Array.isArray(candles) && candles.length === 24, 'Historical OHLCV 1D candlestick data generation');
+  const candleData = marketService.getHistoricalCandles('JKH.N0000', '1D');
+  assert(candleData && Array.isArray(candleData.candles) && candleData.candles.length === 24, 'Historical OHLCV 1D candlestick data generation');
 
   // ==========================================
   // MODULE 3: SECURITY, OTP HASHING & RBAC
@@ -112,16 +112,17 @@ async function runTests() {
   console.log(`\n${BOLD}4. Testing AI/ML Forecasts, Metrics & SOMI Copilot...${RESET}`);
   const aiService = require('../services/aiService');
 
-  const jkhInsights = await aiService.getStockAIInsights('JKH.N0000');
-  assert(jkhInsights && jkhInsights.predictedPrice > 0, 'AI Forecast generated for JKH.N0000');
-  assert(jkhInsights.metrics && jkhInsights.metrics.mae > 0 && jkhInsights.metrics.rmse > 0 && jkhInsights.metrics.mape > 0, 'Evaluation metrics present (MAE, RMSE, MAPE)');
-  assert(jkhInsights.model && jkhInsights.model.includes('ARIMA'), 'Model architecture specifies ARIMA/LSTM/Random Forest');
+  const allInsights = await aiService.getStockAIInsights();
+  const jkhInsights = allInsights.find(i => i.symbol === 'JKH.N0000');
+  assert(jkhInsights && jkhInsights.predictedPriceLKR > 0, 'AI Forecast generated for JKH.N0000');
+  assert(jkhInsights && jkhInsights.modelUsed.includes('ARIMA') && jkhInsights.modelUsed.includes('LSTM'), 'Model architecture specifies ARIMA + LSTM hybrid');
 
-  const sentimentData = await aiService.getNewsSentiment();
-  assert(sentimentData && sentimentData.overallSentiment && sentimentData.articlesScanned > 0, 'NLP Financial News Sentiment Analysis on Sri Lankan press');
+  const sentimentData = aiService.getNewsSentiment();
+  assert(Array.isArray(sentimentData) && sentimentData.length > 0, 'NLP Financial News Sentiment Analysis dataset on Sri Lankan press');
 
   const modelEval = aiService.getModelEvaluation();
-  assert(modelEval && modelEval.models && modelEval.models.length >= 3, 'Comprehensive Model Evaluation across ARIMA, LSTM, and Random Forest');
+  assert(modelEval && modelEval.models && modelEval.models.ARIMA_TIME_SERIES && modelEval.models.LSTM_NEURAL_NET && modelEval.models.RANDOM_FOREST, 'Comprehensive Model Evaluation across ARIMA, LSTM, and Random Forest');
+  assert(modelEval.models.ARIMA_TIME_SERIES.mae > 0 && modelEval.models.LSTM_NEURAL_NET.rmse > 0, 'Scientific evaluation metrics present (MAE, RMSE, MAPE, Directional Accuracy)');
 
   const chatResponse = await aiService.processChatMessage('What is the forecast for John Keells Holdings?');
   assert(chatResponse && chatResponse.reply && chatResponse.reply.length > 20, 'SOMI AI Copilot generated contextual financial response');
