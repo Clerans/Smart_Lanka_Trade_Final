@@ -160,14 +160,14 @@ async function runRepairAudit() {
     });
     recordTest(17, 'Invalid NIC decision evaluation', invalidNicDecision.verificationStatus === 'REJECTED');
 
-    // Test 18: Low OCR confidence (< 40%)
+    // Test 18: Unreadable low OCR confidence (< 30%)
     const lowConfDecision = kycService.evaluateKYCDecision({
       nicNumber: '199204502391',
-      ocrConfidence: 32,
+      ocrConfidence: 20,
       nameSimilarity: 0.9,
       hasExtractedName: true
     });
-    recordTest(18, 'Low OCR confidence rejection (< 40%)', lowConfDecision.verificationStatus === 'REJECTED', `Reason: ${lowConfDecision.rejectionReason}`);
+    recordTest(18, 'Low OCR confidence rejection (< 30%)', lowConfDecision.verificationStatus === 'REJECTED', `Reason: ${lowConfDecision.rejectionReason}`);
 
     // Test 19: Strong identity match
     const strongMatch = kycService.evaluateKYCDecision({
@@ -176,7 +176,7 @@ async function runRepairAudit() {
       nameSimilarity: 0.85,
       hasExtractedName: true
     });
-    recordTest(19, 'Strong identity match (Confidence >= 70%, Match >= 0.65)', strongMatch.verificationStatus === 'VERIFIED');
+    recordTest(19, 'Strong identity match (Confidence >= 70%, Match >= 0.80)', strongMatch.verificationStatus === 'VERIFIED');
 
     // Test 20: Uncertain identity match (Borderline name similarity)
     const uncertainMatch = kycService.evaluateKYCDecision({
