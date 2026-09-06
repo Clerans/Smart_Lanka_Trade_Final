@@ -93,6 +93,50 @@ export const LoginScreen = () => {
     }
   };
 
+  const handleBiometricLogin = async () => {
+    try {
+      const hasHardware = await LocalAuthentication.hasHardwareAsync();
+      const isEnrolled = await LocalAuthentication.isEnrolledAsync();
+
+      if (!hasHardware || !isEnrolled) {
+        Alert.alert(
+          'Biometrics Not Set Up',
+          'Biometric hardware or enrolled fingerprint/Face ID was not detected on this device. Please log in with your email and password first, then enable it in Security Settings.'
+        );
+        return;
+      }
+
+      const result = await LocalAuthentication.authenticateAsync({
+        promptMessage: 'Authenticate with Fingerprint or Face ID to Login',
+        fallbackLabel: 'Use Password',
+        disableDeviceFallback: false,
+      });
+
+      if (result.success) {
+        const storedToken = await AsyncStorage.getItem('userToken');
+        const storedUser = await AsyncStorage.getItem('userData');
+
+        if (storedToken && storedUser) {
+          showToast('Biometric verified! Signing in...', 'success');
+          setTimeout(() => {
+            navigation.replace('MainApp');
+          }, 600);
+        } else if (email && password) {
+          handleLogin();
+        } else {
+          showToast('Biometrics verified! Sign in once with password to link your account.', 'success');
+        }
+      } else {
+        if (result.error !== 'user_cancel' && result.error !== 'system_cancel') {
+          showToast('Biometric authentication failed. Please use your password.', 'error');
+        }
+      }
+    } catch (err: any) {
+      console.error('Biometric auth error:', err);
+      showToast('Biometric authentication encountered an error.', 'error');
+    }
+  };
+
   return (
     <SafeAreaView style={styles.safeArea}>
       {isNetworkError && (
@@ -177,7 +221,11 @@ export const LoginScreen = () => {
             </TouchableOpacity>
 
             {/* Biometrics Button */}
-            <TouchableOpacity style={styles.biometricsButton}>
+            <TouchableOpacity 
+              style={styles.biometricsButton} 
+              activeOpacity={0.7} 
+              onPress={handleBiometricLogin}
+            >
               <MaterialIcons name="fingerprint" size={20} color={colors.accent} />
               <Text style={styles.biometricsText}>Use Biometrics</Text>
             </TouchableOpacity>
