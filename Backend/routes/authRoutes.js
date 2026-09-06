@@ -13,7 +13,9 @@ const {
   resetPassword,
   validateToken,
   googleLogin,
-  changePassword
+  changePassword,
+  getProfile,
+  updateProfile
 } = require('../controllers/authController');
 const { protect } = require('../middleware/authMiddleware');
 
@@ -31,6 +33,10 @@ router.post('/forgot-password', forgotPassword);
 router.post('/verify-reset-otp', verifyResetOTP);
 router.post('/reset-password', resetPassword);
 router.post('/change-password', protect, changePassword);
+
+// User Profile management endpoints
+router.get('/profile', protect, getProfile);
+router.put('/profile', protect, updateProfile);
 
 // Token check endpoint
 router.get('/validate-token', protect, validateToken);
