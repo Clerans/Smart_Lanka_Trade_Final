@@ -47,12 +47,11 @@ export const AssetDetailsScreen = () => {
     loadAiAndPrice(selectedInterval);
   }, [symbol, selectedInterval, loadAiAndPrice]);
 
-  const handlePriceUpdate = (priceInfo: { priceLKR: number; priceUSD: number; changePercent: number }) => {
+  const handlePriceUpdate = (latestPriceLKR: number, change24h: number) => {
     setPriceData((prev: any) => ({
       ...prev,
-      priceLKR: priceInfo.priceLKR,
-      priceUSD: priceInfo.priceUSD,
-      changePercent: priceInfo.changePercent,
+      priceLKR: latestPriceLKR,
+      changePercent: change24h,
     }));
   };
 
