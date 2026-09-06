@@ -104,7 +104,7 @@ async function runAllTests() {
     const features = extractFeatures(validCandles.slice(0, 50));
     const rec = evaluateSignals(features);
     assert.ok(rec !== null);
-    assert.ok(['BUY', 'HOLD', 'SELL'].includes(rec.action));
+    assert.ok(['BUY', 'HOLD', 'SELL'].includes(rec.recommendation));
     assert.ok(rec.confidence >= 0 && rec.confidence <= 100);
   });
 
