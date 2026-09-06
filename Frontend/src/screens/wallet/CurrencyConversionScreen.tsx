@@ -1,38 +1,52 @@
 import * as React from 'react';
 const { useState, useEffect } = React;
-import { View, Text, StyleSheet, TouchableOpacity, TextInput, KeyboardAvoidingView, Platform, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, TextInput, KeyboardAvoidingView, Platform, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { colors, typography, layout } from '../../theme';
 import { PrimaryButton, Card } from '../../components';
-import { marketService } from '../../services/apiService';
+import { marketService, walletService } from '../../services/apiService';
 
 export const CurrencyConversionScreen = () => {
   const navigation = useNavigation<any>();
   const [fromAmount, setFromAmount] = useState('150000');
   const [toAmount, setToAmount] = useState('0');
-  const [rate, setRate] = useState(0);
+  const [rate, setRate] = useState(310.50);
   const [loading, setLoading] = useState(true);
+  const [converting, setConverting] = useState(false);
   const [isLkrToUsd, setIsLkrToUsd] = useState(true);
+  const [lkrBalance, setLkrBalance] = useState<number>(1000000);
+  const [usdBalance, setUsdBalance] = useState<number>(2500);
+
+  const loadData = async () => {
+    try {
+      setLoading(true);
+      const [forexRes, walletRes] = await Promise.all([
+        marketService.getForexRates(),
+        walletService.getOverview()
+      ]);
+
+      if (forexRes?.success && forexRes?.data?.rates?.USD_LKR) {
+        const liveRate = forexRes.data.rates.USD_LKR;
+        setRate(liveRate);
+        const initialTo = (150000 / liveRate).toFixed(2);
+        setToAmount(initialTo);
+      }
+
+      if (walletRes?.success && walletRes?.data) {
+        setLkrBalance(walletRes.data.availableBalanceLKR || walletRes.data.cashBalanceLKR || 1000000);
+        setUsdBalance(walletRes.data.usdBalance || 2500);
+      }
+    } catch (error) {
+      console.error('Failed to fetch conversion rate/balances:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchRate = async () => {
-      try {
-        const response = await marketService.getPriceLKR('BTCUSDT'); // We just need the usdToLkr rate
-        if (response.success) {
-          setRate(response.data.usdToLkr);
-          // Initial calculation
-          const initialTo = (150000 / response.data.usdToLkr).toFixed(2);
-          setToAmount(initialTo);
-        }
-      } catch (error) {
-        console.error('Failed to fetch rate:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchRate();
+    loadData();
   }, []);
 
   const handleFromChange = (value: string) => {
@@ -50,9 +64,60 @@ export const CurrencyConversionScreen = () => {
   };
 
   const toggleDirection = () => {
-    setIsLkrToUsd(!isLkrToUsd);
-    setFromAmount(toAmount);
-    setToAmount(fromAmount);
+    const nextIsLkrToUsd = !isLkrToUsd;
+    setIsLkrToUsd(nextIsLkrToUsd);
+    const prevTo = toAmount;
+    setFromAmount(prevTo);
+    const num = parseFloat(prevTo);
+    if (!isNaN(num) && rate > 0) {
+      if (nextIsLkrToUsd) {
+        setToAmount((num / rate).toFixed(2));
+      } else {
+        setToAmount((num * rate).toFixed(2));
+      }
+    } else {
+      setToAmount('0');
+    }
+  };
+
+  const handleConvert = async () => {
+    const amount = parseFloat(fromAmount);
+    if (isNaN(amount) || amount <= 0) {
+      Alert.alert('Invalid Amount', 'Please enter a valid amount to convert.');
+      return;
+    }
+
+    const available = isLkrToUsd ? lkrBalance : usdBalance;
+    const fromCur = isLkrToUsd ? 'LKR' : 'USD';
+    const toCur = isLkrToUsd ? 'USD' : 'LKR';
+
+    if (amount > available) {
+      Alert.alert('Insufficient Balance', `You have ${available.toLocaleString()} ${fromCur} available.`);
+      return;
+    }
+
+    try {
+      setConverting(true);
+      const res = await walletService.convertCurrency({
+        fromCurrency: fromCur,
+        toCurrency: toCur,
+        amount
+      });
+
+      if (res?.success) {
+        Alert.alert(
+          'Conversion Successful',
+          `Successfully converted ${amount.toLocaleString()} ${fromCur} to ${res.data.convertedAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${toCur} at rate ${res.data.exchangeRate.toFixed(2)}.`
+        );
+        loadData();
+      } else {
+        Alert.alert('Conversion Failed', res?.message || 'Could not complete currency conversion.');
+      }
+    } catch (error: any) {
+      Alert.alert('Error', error.response?.data?.message || error.message || 'Currency conversion request failed.');
+    } finally {
+      setConverting(false);
+    }
   };
 
   return (
@@ -67,14 +132,16 @@ export const CurrencyConversionScreen = () => {
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
             <MaterialIcons name="arrow-back" size={24} color="#FFF" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Currency Converter</Text>
-          <TouchableOpacity style={styles.iconBtn}>
-            <MaterialIcons name="settings" size={24} color={colors.textPrimary} />
+          <Text style={styles.headerTitle}>LKR / USD Forex Hub</Text>
+          <TouchableOpacity onPress={loadData} style={styles.iconBtn}>
+            <MaterialIcons name="refresh" size={24} color={colors.accent} />
           </TouchableOpacity>
         </View>
 
         {loading ? (
-          <View style={{ flex: 1, justifyContent: 'center' }}><ActivityIndicator color={colors.accent} /></View>
+          <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+            <ActivityIndicator size="large" color={colors.accent} />
+          </View>
         ) : (
           <View style={styles.content}>
 
@@ -88,7 +155,6 @@ export const CurrencyConversionScreen = () => {
                   <View style={styles.currencyPill}>
                     <View style={[styles.flagCircle, { backgroundColor: isLkrToUsd ? '#1A5BFF' : '#26A17B' }]} />
                     <Text style={styles.currencyCode}>{isLkrToUsd ? 'LKR' : 'USD'}</Text>
-                    <MaterialIcons name="arrow-drop-down" size={20} color="#FFF" />
                   </View>
                 </View>
                 <TextInput
@@ -96,8 +162,12 @@ export const CurrencyConversionScreen = () => {
                   value={fromAmount}
                   onChangeText={handleFromChange}
                   keyboardType="numeric"
+                  placeholder="0.00"
+                  placeholderTextColor={colors.textSecondary}
                 />
-                <Text style={styles.balanceText}>Balance: {isLkrToUsd ? '245,000.00 LKR' : '1,250.00 USD'}</Text>
+                <Text style={styles.balanceText}>
+                  Available: {isLkrToUsd ? `${lkrBalance.toLocaleString(undefined, { minimumFractionDigits: 2 })} LKR` : `${usdBalance.toLocaleString(undefined, { minimumFractionDigits: 2 })} USD`}
+                </Text>
               </View>
 
               {/* Swap Button Wrapper */}
@@ -114,7 +184,6 @@ export const CurrencyConversionScreen = () => {
                   <View style={styles.currencyPill}>
                     <View style={[styles.flagCircle, { backgroundColor: isLkrToUsd ? '#26A17B' : '#1A5BFF' }]} />
                     <Text style={styles.currencyCode}>{isLkrToUsd ? 'USD' : 'LKR'}</Text>
-                    <MaterialIcons name="arrow-drop-down" size={20} color="#FFF" />
                   </View>
                 </View>
                 <TextInput
@@ -123,7 +192,7 @@ export const CurrencyConversionScreen = () => {
                   editable={false}
                 />
                 <Text style={styles.balanceText}>
-                  1 {isLkrToUsd ? 'LKR' : 'USD'} ≈ {isLkrToUsd ? (1 / rate).toFixed(6) : rate.toFixed(2)} {isLkrToUsd ? 'USD' : 'LKR'}
+                  1 {isLkrToUsd ? 'USD' : 'LKR'} = {isLkrToUsd ? `Rs ${rate.toFixed(2)}` : `$${(1 / rate).toFixed(6)}`}
                 </Text>
               </View>
             </View>
@@ -131,12 +200,10 @@ export const CurrencyConversionScreen = () => {
             {/* Rate Pill */}
             <View style={styles.ratePillContainer}>
               <View style={styles.ratePill}>
-                <MaterialIcons name="trending-up" size={16} color={colors.textSecondary} />
-                <Text style={styles.ratePillText}>LIVE RATE: 1 USD = Rs {rate.toFixed(2)}</Text>
+                <MaterialIcons name="trending-up" size={16} color={colors.accent} />
+                <Text style={styles.ratePillText}>CBSL BENCHMARK: 1 USD = Rs {rate.toFixed(2)}</Text>
               </View>
             </View>
-
-            <View style={styles.fakeChartArea} />
 
           </View>
         )}
@@ -145,17 +212,18 @@ export const CurrencyConversionScreen = () => {
         <View style={styles.bottomSection}>
           <Card style={styles.confirmCard}>
             <View style={styles.confirmHeader}>
-              <MaterialIcons name="check-circle" size={24} color={colors.accent} />
-              <Text style={styles.confirmTitle}>Conversion Ready</Text>
+              <MaterialIcons name="verified-user" size={22} color={colors.accent} />
+              <Text style={styles.confirmTitle}>Zero-Fee Institutional Rate</Text>
             </View>
             <Text style={styles.confirmDesc}>
-              Convert {parseFloat(fromAmount).toLocaleString()} {isLkrToUsd ? 'LKR' : 'USD'} to your {isLkrToUsd ? 'USD' : 'LKR'} wallet instantly.
+              Instant conversion between Sri Lankan Rupee (LKR) and US Dollar (USD) for international portfolio diversification.
             </Text>
           </Card>
 
           <PrimaryButton
-            title="Convert Now"
-            onPress={() => { }}
+            title={converting ? "Converting..." : `Convert to ${isLkrToUsd ? 'USD' : 'LKR'}`}
+            onPress={handleConvert}
+            disabled={converting || loading}
           />
         </View>
 
@@ -179,7 +247,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 20,
     paddingTop: 16,
-    marginBottom: 32,
+    marginBottom: 24,
   },
   backButton: {
     padding: 8,
@@ -187,6 +255,7 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     ...typography.h3,
+    color: '#FFF',
   },
   iconBtn: {
     padding: 8,
@@ -198,31 +267,27 @@ const styles = StyleSheet.create({
   },
   converterContainer: {
     position: 'relative',
-    marginBottom: 32,
+    gap: 16,
   },
   fromCard: {
     backgroundColor: colors.bgCard,
+    borderRadius: 20,
+    padding: 20,
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 24,
-    padding: 24,
-    paddingBottom: 40,
   },
   toCard: {
-    backgroundColor: colors.bgInput,
+    backgroundColor: colors.bgCard,
+    borderRadius: 20,
+    padding: 20,
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 24,
-    padding: 24,
-    paddingTop: 40,
-    marginTop: -20,
-    zIndex: -1,
   },
   cardTopRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 12,
   },
   label: {
     ...typography.label,
@@ -231,30 +296,28 @@ const styles = StyleSheet.create({
   currencyPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.bgElevated,
+    backgroundColor: colors.bgInput,
     paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: layout.borderRadiusPill,
-    borderWidth: 1,
-    borderColor: colors.border,
+    paddingVertical: 6,
+    borderRadius: 16,
   },
   flagCircle: {
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    marginRight: 8,
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    marginRight: 6,
   },
   currencyCode: {
     ...typography.body,
     fontWeight: '700',
-    marginRight: 4,
+    color: '#FFF',
   },
   amountInput: {
-    fontSize: 40,
+    fontSize: 32,
     fontWeight: '700',
     color: '#FFF',
+    marginBottom: 8,
     padding: 0,
-    marginBottom: 12,
   },
   amountInputGreen: {
     color: colors.accent,
@@ -264,69 +327,62 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
   },
   swapButtonWrapper: {
-    position: 'absolute',
-    top: '50%',
-    left: '50%',
-    marginLeft: -28,
-    marginTop: -28,
-    zIndex: 10,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: colors.bg,
     alignItems: 'center',
-    justifyContent: 'center',
+    marginVertical: -24,
+    zIndex: 10,
   },
   swapButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     backgroundColor: colors.accent,
     justifyContent: 'center',
     alignItems: 'center',
+    borderWidth: 4,
+    borderColor: colors.bg,
   },
   ratePillContainer: {
     alignItems: 'center',
-    marginBottom: 24,
+    marginTop: 24,
   },
   ratePill: {
     flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: colors.bgCard,
     paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: layout.borderRadiusPill,
+    paddingVertical: 10,
+    borderRadius: 20,
     borderWidth: 1,
     borderColor: colors.border,
   },
   ratePillText: {
     ...typography.label,
-    color: colors.textSecondary,
+    color: colors.accent,
     marginLeft: 8,
-  },
-  fakeChartArea: {
-    flex: 1,
-    // Add blurred chart background in future implementation
+    fontWeight: '700',
   },
   bottomSection: {
     paddingHorizontal: 24,
-    paddingBottom: 40,
+    paddingBottom: 24,
   },
   confirmCard: {
-    marginBottom: 24,
+    marginBottom: 16,
+    padding: 16,
   },
   confirmHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 8,
   },
   confirmTitle: {
     ...typography.body,
     fontWeight: '700',
-    color: colors.accent,
+    color: '#FFF',
     marginLeft: 8,
   },
   confirmDesc: {
     ...typography.bodySmall,
-    lineHeight: 22,
+    color: colors.textSecondary,
+    lineHeight: 18,
   },
 });

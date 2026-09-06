@@ -1,89 +1,133 @@
 import * as React from 'react';
 const { useState, useEffect } = React;
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
 import { colors, typography, layout } from '../../theme';
 import { marketService } from '../../services/apiService';
-
-const filters = ['All Assets', 'Crypto', 'Stocks', 'Indices'];
-
-const assetMeta: any = {
-  'BTCUSDT': { name: 'Bitcoin', icon: 'bitcoin', color: '#F7931A' },
-  'ETHUSDT': { name: 'Ethereum', icon: 'ethereum', color: '#627EEA' },
-  'BNBUSDT': { name: 'Binance Coin', icon: 'coins', color: '#F3BA2F' },
-  'SOLUSDT': { name: 'Solana', icon: 'sun', color: '#14F195' },
-  'ADAUSDT': { name: 'Cardano', icon: 'layer-group', color: '#0033AD' },
-  'XRPUSDT': { name: 'XRP', icon: 'bolt', color: '#23292F' },
-  'DOGEUSDT': { name: 'Dogecoin', icon: 'dog', color: '#C2A633' },
-  'DOTUSDT': { name: 'Polkadot', icon: 'circle', color: '#E6007A' },
-  'TRXUSDT': { name: 'TRON', icon: 'play-circle', color: '#FF0013' },
-  'MATICUSDT': { name: 'Polygon', icon: 'vector-square', color: '#8247E5' },
-};
-
 import { useNavigation } from '@react-navigation/native';
+
+const filters = ['All Equities', 'Banking', 'Conglomerate', 'Beverage & Tobacco', 'Telecom & Tech'];
+
+const cseMetadata: Record<string, { name: string; sector: string; icon: string; color: string }> = {
+  'JKH.N0000': { name: 'John Keells Holdings', sector: 'Conglomerate', icon: 'building', color: '#1A5BFF' },
+  'COMB.N0000': { name: 'Commercial Bank of Ceylon', sector: 'Banking', icon: 'university', color: '#0080FF' },
+  'SAMP.N0000': { name: 'Sampath Bank PLC', sector: 'Banking', icon: 'money-check-alt', color: '#FF9900' },
+  'HNB.N0000': { name: 'Hatton National Bank', sector: 'Banking', icon: 'landmark', color: '#009933' },
+  'DIAL.N0000': { name: 'Dialog Axiata PLC', sector: 'Telecom & Tech', icon: 'signal', color: '#E60000' },
+  'CTC.N0000': { name: 'Ceylon Tobacco Company', sector: 'Beverage & Tobacco', icon: 'industry', color: '#888888' },
+  'LOLC.N0000': { name: 'LOLC Holdings PLC', sector: 'Conglomerate', icon: 'chart-pie', color: '#9933FF' },
+  'MELS.N0000': { name: 'Melstacorp PLC', sector: 'Conglomerate', icon: 'wine-bottle', color: '#CC6600' },
+  'BIL.N0000': { name: 'Browns Investments PLC', sector: 'Conglomerate', icon: 'cubes', color: '#00CCCC' },
+  'DIST.N0000': { name: 'Distilleries Company', sector: 'Beverage & Tobacco', icon: 'glass-whiskey', color: '#FF3366' },
+  'HAYL.N0000': { name: 'Hayleys PLC', sector: 'Conglomerate', icon: 'boxes', color: '#3399FF' },
+  'CARG.N0000': { name: 'Cargills (Ceylon) PLC', sector: 'Beverage & Tobacco', icon: 'shopping-cart', color: '#FF3333' },
+};
 
 export const MarketWatchScreen = () => {
   const navigation = useNavigation<any>();
-  const [activeFilter, setActiveFilter] = useState('All Assets');
-  const [assets, setAssets] = useState<any[]>([]);
+  const [activeFilter, setActiveFilter] = useState('All Equities');
+  const [stocks, setStocks] = useState<any[]>([]);
+  const [marketStatus, setMarketStatus] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
-  const filteredAssets = assets.filter(asset => {
-    // Search query filter
-    const matchesSearch = asset.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      asset.ticker.toLowerCase().includes(searchQuery.toLowerCase());
+  const fetchMarketData = async () => {
+    try {
+      setLoading(true);
+      const [marketRes, statusRes] = await Promise.all([
+        marketService.getAllPricesLKR(),
+        marketService.getMarketStatus()
+      ]);
 
-    // Category filter
-    let matchesCategory = true;
-    if (activeFilter === 'Crypto') {
-      matchesCategory = true;
-    } else if (activeFilter === 'Stocks' || activeFilter === 'Indices') {
-      matchesCategory = false;
+      if (marketRes?.success && marketRes.data?.prices) {
+        const formatted = marketRes.data.prices.map((p: any) => {
+          const meta = cseMetadata[p.symbol] || {
+            name: p.symbol,
+            sector: 'Equities',
+            icon: 'chart-line',
+            color: '#888',
+          };
+
+          return {
+            symbol: p.symbol,
+            name: meta.name,
+            sector: meta.sector,
+            icon: meta.icon,
+            color: meta.color,
+            price: p.priceLKR,
+            changePercent: p.changePercent,
+            high24h: p.high24h,
+            low24h: p.low24h,
+            volume: p.volume,
+          };
+        });
+        setStocks(formatted);
+      }
+
+      if (statusRes?.success) {
+        setMarketStatus(statusRes.data);
+      }
+    } catch (error) {
+      console.error('Failed to fetch CSE market data:', error);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
     }
-
-    return matchesSearch && matchesCategory;
-  });
+  };
 
   useEffect(() => {
-    const fetchMarketData = async () => {
-      try {
-        const response = await marketService.getAllPricesLKR();
-        if (response.success) {
-          const formatted = response.data.prices.map((p: any, index: number) => ({
-            id: index,
-            name: assetMeta[p.symbol]?.name || p.symbol.replace('USDT', ''),
-            ticker: p.symbol.replace('USDT', ''),
-            price: p.priceLKR.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
-            change: `${p.changePercent >= 0 ? '+' : ''}${p.changePercent.toFixed(2)}%`,
-            isPositive: p.changePercent >= 0,
-            color: assetMeta[p.symbol]?.color || '#888',
-            icon: assetMeta[p.symbol]?.icon || 'chart-line',
-          }));
-          setAssets(formatted);
-        }
-      } catch (error) {
-        console.error('Failed to fetch market data:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
     fetchMarketData();
-    const interval = setInterval(fetchMarketData, 30000);
+    const interval = setInterval(fetchMarketData, 20000);
     return () => clearInterval(interval);
   }, []);
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    fetchMarketData();
+  };
+
+  const filteredStocks = stocks.filter(stock => {
+    const matchesSearch = stock.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      stock.symbol.toLowerCase().includes(searchQuery.toLowerCase());
+
+    if (!matchesSearch) return false;
+    if (activeFilter === 'All Equities') return true;
+    return stock.sector === activeFilter;
+  });
 
   return (
     <SafeAreaView style={styles.safeArea}>
 
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Market Watch</Text>
-        <TouchableOpacity style={styles.filterIconBtn}>
-          <MaterialIcons name="tune" size={24} color={colors.accent} />
+        <View>
+          <Text style={styles.headerTitle}>Colombo Stock Exchange</Text>
+          <View style={styles.statusRow}>
+            <View style={[styles.marketDot, { backgroundColor: marketStatus?.isOpen ? colors.accent : colors.red }]} />
+            <Text style={styles.marketStatusText}>
+              CSE REGULAR MARKET: {marketStatus?.isOpen ? 'OPEN (09:30 - 14:30 SLT)' : 'CLOSED (PRE-OPEN)'}
+            </Text>
+          </View>
+        </View>
+        <TouchableOpacity style={styles.filterIconBtn} onPress={onRefresh}>
+          <MaterialIcons name="refresh" size={22} color={colors.accent} />
         </TouchableOpacity>
+      </View>
+
+      {/* Market Indices Card */}
+      <View style={styles.indicesContainer}>
+        <View style={styles.indexBox}>
+          <Text style={styles.indexTitle}>ASPI INDEX</Text>
+          <Text style={styles.indexValue}>13,245.80</Text>
+          <Text style={[styles.indexChange, { color: colors.accent }]}>+0.84% (+110.2)</Text>
+        </View>
+        <View style={styles.indexBox}>
+          <Text style={styles.indexTitle}>S&P SL20</Text>
+          <Text style={styles.indexValue}>3,980.50</Text>
+          <Text style={[styles.indexChange, { color: colors.accent }]}>+1.12% (+44.1)</Text>
+        </View>
       </View>
 
       {/* Search */}
@@ -91,7 +135,7 @@ export const MarketWatchScreen = () => {
         <MaterialIcons name="search" size={20} color={colors.textSecondary} style={styles.searchIcon} />
         <TextInput
           style={styles.searchInput}
-          placeholder="Search BTC, LOLC, etc."
+          placeholder="Search JKH, COMB, SAMP, DIAL, etc."
           placeholderTextColor={colors.textSecondary}
           value={searchQuery}
           onChangeText={setSearchQuery}
@@ -118,55 +162,57 @@ export const MarketWatchScreen = () => {
         </ScrollView>
       </View>
 
-      {/* Asset List */}
-      {loading ? (
+      {/* Equities List */}
+      {loading && !refreshing ? (
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
           <ActivityIndicator size="large" color={colors.accent} />
         </View>
       ) : (
-        <ScrollView contentContainerStyle={styles.listContainer}>
-          {filteredAssets.length > 0 ? (
-            filteredAssets.map((asset) => (
-              <View key={asset.id}>
-                <TouchableOpacity
-                  style={styles.assetRow}
-                  onPress={() => navigation.navigate('Market', {
-                    screen: 'TradingTerminal',
-                    params: { symbol: assets.find(a => a.id === asset.id)?.ticker + 'USDT' }
-                  })}
-                >
+        <ScrollView
+          contentContainerStyle={styles.listContainer}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.accent} />}
+        >
+          {filteredStocks.length > 0 ? (
+            filteredStocks.map((stock) => {
+              const isPositive = stock.changePercent >= 0;
+              return (
+                <View key={stock.symbol}>
+                  <TouchableOpacity
+                    style={styles.assetRow}
+                    onPress={() => navigation.navigate('TradingTerminal', { symbol: stock.symbol })}
+                  >
 
-                  <View style={styles.assetRowLeft}>
-                    <View style={[styles.assetIcon, { backgroundColor: asset.color + '22' }]}>
-                      <FontAwesome5 name={asset.icon} size={20} color={asset.color} />
+                    <View style={styles.assetRowLeft}>
+                      <View style={[styles.assetIcon, { backgroundColor: stock.color + '22' }]}>
+                        <FontAwesome5 name={stock.icon} size={18} color={stock.color} />
+                      </View>
+                      <View>
+                        <Text style={styles.assetName}>{stock.name}</Text>
+                        <Text style={styles.assetTicker}>{stock.symbol} · {stock.sector}</Text>
+                      </View>
                     </View>
-                    <View>
-                      <Text style={styles.assetName}>{asset.name}</Text>
-                      <Text style={styles.assetTicker}>{asset.ticker}</Text>
-                    </View>
-                  </View>
 
-                  <View style={styles.assetRowRight}>
-                    <Text style={styles.assetPrice}>Rs {asset.price}</Text>
-                    <View style={[styles.changePill, asset.isPositive ? styles.changePositiveBg : styles.changeNegativeBg]}>
-                      <Text style={[styles.assetChange, asset.isPositive ? styles.changePositiveTxt : styles.changeNegativeTxt]}>
-                        {asset.change}
-                      </Text>
+                    <View style={styles.assetRowRight}>
+                      <Text style={styles.assetPrice}>Rs {stock.price?.toFixed(2)}</Text>
+                      <View style={[styles.changePill, isPositive ? styles.changePositiveBg : styles.changeNegativeBg]}>
+                        <Text style={[styles.assetChange, isPositive ? styles.changePositiveTxt : styles.changeNegativeTxt]}>
+                          {isPositive ? '+' : ''}{stock.changePercent?.toFixed(2)}%
+                        </Text>
+                      </View>
                     </View>
-                  </View>
 
-                </TouchableOpacity>
-                <View style={styles.divider} />
-              </View>
-            ))
+                  </TouchableOpacity>
+                  <View style={styles.divider} />
+                </View>
+              );
+            })
           ) : (
             <View style={styles.emptyContainer}>
-              <MaterialIcons name="search-off" size={64} color={colors.textMuted} />
-              <Text style={styles.emptyText}>No assets found in this category.</Text>
+              <MaterialIcons name="search-off" size={56} color={colors.textMuted} />
+              <Text style={styles.emptyText}>No CSE equities found for this category.</Text>
             </View>
           )}
-          {/* Fill bottom space corresponding to tab bar */}
-          <View style={{ height: 80 }} />
+          <View style={{ height: 90 }} />
         </ScrollView>
       )}
 
@@ -184,60 +230,111 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 24,
-    paddingTop: 20,
-    marginBottom: 24,
+    paddingTop: 16,
+    marginBottom: 16,
   },
   headerTitle: {
-    ...typography.h1,
+    ...typography.h3,
+    color: '#FFF',
+  },
+  statusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  marketDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    marginRight: 6,
+  },
+  marketStatusText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: colors.textSecondary,
+    letterSpacing: 0.5,
   },
   filterIconBtn: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: colors.bgInput,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.bgCard,
     justifyContent: 'center',
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  indicesContainer: {
+    flexDirection: 'row',
+    gap: 12,
+    paddingHorizontal: 24,
+    marginBottom: 16,
+  },
+  indexBox: {
+    flex: 1,
+    backgroundColor: colors.bgCard,
+    borderRadius: 14,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  indexTitle: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: colors.textSecondary,
+  },
+  indexValue: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#FFF',
+    marginVertical: 2,
+  },
+  indexChange: {
+    fontSize: 11,
+    fontWeight: '600',
   },
   searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.bgCard,
     marginHorizontal: 24,
-    marginBottom: 24,
-    position: 'relative',
-    justifyContent: 'center',
+    paddingHorizontal: 14,
+    borderRadius: 14,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   searchIcon: {
-    position: 'absolute',
-    left: 16,
-    zIndex: 1,
+    marginRight: 8,
   },
   searchInput: {
-    ...typography.body,
-    height: 50,
-    backgroundColor: colors.bgInput,
-    borderRadius: layout.borderRadiusPill,
-    paddingLeft: 48,
-    paddingRight: 16,
-    color: colors.textPrimary,
+    flex: 1,
+    paddingVertical: 10,
+    color: '#FFF',
+    fontSize: 13,
   },
   filtersWrapper: {
-    marginBottom: 16,
+    marginBottom: 12,
   },
   filtersScroll: {
     paddingHorizontal: 24,
+    gap: 8,
   },
   filterPill: {
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: layout.borderRadiusPill,
-    backgroundColor: colors.bgInput,
-    marginRight: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 18,
+    backgroundColor: colors.bgCard,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   filterPillActive: {
     backgroundColor: colors.accent,
+    borderColor: colors.accent,
   },
   filterText: {
-    ...typography.bodySmall,
+    fontSize: 12,
     color: colors.textSecondary,
-    fontWeight: '600',
   },
   filterTextActive: {
     color: '#000',
@@ -250,29 +347,31 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 16,
+    paddingVertical: 14,
   },
   assetRowLeft: {
     flexDirection: 'row',
     alignItems: 'center',
+    flex: 1,
   },
   assetIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 16,
+    marginRight: 12,
   },
   assetName: {
     ...typography.body,
     fontWeight: '700',
-    marginBottom: 4,
+    color: '#FFF',
   },
   assetTicker: {
-    ...typography.label,
-    fontSize: 10,
-    color: colors.accent,
+    ...typography.bodySmall,
+    color: colors.textSecondary,
+    fontSize: 11,
+    marginTop: 2,
   },
   assetRowRight: {
     alignItems: 'flex-end',
@@ -280,12 +379,13 @@ const styles = StyleSheet.create({
   assetPrice: {
     ...typography.body,
     fontWeight: '700',
-    marginBottom: 6,
+    color: '#FFF',
+    marginBottom: 4,
   },
   changePill: {
     paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
+    paddingVertical: 3,
+    borderRadius: 6,
   },
   changePositiveBg: {
     backgroundColor: colors.accentMuted,
@@ -294,8 +394,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.red + '22',
   },
   assetChange: {
-    ...typography.bodySmall,
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '700',
   },
   changePositiveTxt: {
@@ -310,13 +409,11 @@ const styles = StyleSheet.create({
   },
   emptyContainer: {
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingTop: 100,
+    paddingVertical: 40,
   },
   emptyText: {
-    ...typography.body,
-    color: colors.textMuted,
-    marginTop: 16,
-    textAlign: 'center',
+    ...typography.bodySmall,
+    color: colors.textSecondary,
+    marginTop: 10,
   },
 });
