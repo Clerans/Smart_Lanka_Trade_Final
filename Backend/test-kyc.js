@@ -114,6 +114,9 @@ async function runKYCTests() {
   console.log('\n--- 4. Testing Oracle DB Model Operations ---');
 
   try {
+    const connectDB = require('./config/db');
+    await connectDB();
+
     const docId = await kycModel.createKYCDocument({
       userId: 1,
       documentType: 'NIC',
