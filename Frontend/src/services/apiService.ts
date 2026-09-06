@@ -226,6 +226,17 @@ export const marketService = {
       throw error;
     }
   },
+  getKlines: async (symbol: string = 'BTCUSDT', interval: string = '1h', limit: number = 60) => {
+    try {
+      const response = await api.get(`/market/klines/${symbol}`, {
+        params: { interval, limit }
+      });
+      return response.data;
+    } catch (error) {
+      console.error(`Error fetching klines for ${symbol} (${interval}):`, error);
+      throw error;
+    }
+  },
 };
 
 export const walletService = {
