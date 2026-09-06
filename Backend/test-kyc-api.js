@@ -1,27 +1,68 @@
+process.env.NODE_ENV = 'test';
+
 const axios = require('axios');
 const jwt = require('jsonwebtoken');
 const fs = require('fs');
 const path = require('path');
 const FormData = require('form-data');
+const http = require('http');
+const connectDB = require('./config/db');
+const userModel = require('./models/userModel');
+const oracledb = require('oracledb');
 require('dotenv').config();
+
+const app = require('./server');
 
 async function testKYCEndpoints() {
   console.log('--- Testing Backend KYC Endpoints ---');
-  const BASE = 'http://localhost:5000/api';
 
-  // Create JWT token for user ID 1
+  await connectDB();
+
+  // Create in-process test server
+  const server = http.createServer(app);
+  await new Promise((resolve) => server.listen(0, resolve));
+  const port = server.address().port;
+  const BASE = `http://localhost:${port}/api`;
+
+  // Ensure test users exist
+  let testUser = await userModel.findByEmail('testuser_api@smartlanka.com');
+  let testUserId;
+  if (!testUser) {
+    testUserId = await userModel.createUser('API TEST USER', 'testuser_api@smartlanka.com', 'Pass123!@#', 'tok_api');
+  } else {
+    testUserId = testUser.ID;
+  }
+
+  let adminUser = await userModel.findByEmail('admin_api@smartlanka.com');
+  let adminUserId;
+  if (!adminUser) {
+    adminUserId = await userModel.createUser('API ADMIN', 'admin_api@smartlanka.com', 'Pass123!@#', 'tok_admin_api');
+    const conn = await oracledb.getConnection();
+    await conn.execute(`UPDATE SL_USERS SET ROLE = 'ADMIN', IS_VERIFIED = 1 WHERE ID = :id`, [adminUserId]);
+    await conn.commit();
+    await conn.close();
+  } else {
+    adminUserId = adminUser.ID;
+  }
+
   const token = jwt.sign(
-    { id: 1, email: 'test@smartlanka.com' },
+    { id: testUserId, email: 'testuser_api@smartlanka.com', role: 'USER' },
+    process.env.JWT_SECRET || 'smartlanka_super_secret_key_2024',
+    { expiresIn: '1d' }
+  );
+
+  const adminToken = jwt.sign(
+    { id: adminUserId, email: 'admin_api@smartlanka.com', role: 'ADMIN' },
     process.env.JWT_SECRET || 'smartlanka_super_secret_key_2024',
     { expiresIn: '1d' }
   );
 
   const authHeader = { Authorization: `Bearer ${token}` };
+  const adminAuthHeader = { Authorization: `Bearer ${adminToken}` };
 
   // 1. Create a valid test image for testing upload
   const testImagePath = path.join(__dirname, 'test_nic_sample.png');
   if (!fs.existsSync(testImagePath)) {
-    // Valid 1x1 PNG base64 buffer
     const validPngBuffer = Buffer.from(
       'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
       'base64'
@@ -72,7 +113,7 @@ async function testKYCEndpoints() {
 
     // 6. Test Admin GET /api/admin/kyc/pending
     console.log('\n5. Testing GET /api/admin/kyc/pending');
-    const adminRes = await axios.get(`${BASE}/admin/kyc/pending`, { headers: authHeader });
+    const adminRes = await axios.get(`${BASE}/admin/kyc/pending`, { headers: adminAuthHeader });
     console.log('Status:', adminRes.status);
     console.log('Pending applications:', adminRes.data.count);
 
@@ -81,6 +122,7 @@ async function testKYCEndpoints() {
     console.error('❌ KYC API Test Error:', error.response?.data || error.message);
     process.exit(1);
   } finally {
+    server.close();
     if (fs.existsSync(testImagePath)) {
       try { fs.unlinkSync(testImagePath); } catch (e) {}
     }
