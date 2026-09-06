@@ -60,11 +60,14 @@ async function runTests() {
   assert(rsiFlat === 50, `RSI for flat series should be 50 (got ${rsiFlat})`);
 
   // 1.5 MACD Calculation
-  const macdResult = technicalIndicators.calculateMACD(bullishPrices, 12, 26, 9);
+  const macdPrices = Array.from({ length: 50 }, (_, i) => 100 + (i * 5));
+  const macdResult = technicalIndicators.calculateMACD(macdPrices, 12, 26, 9);
   assert(macdResult !== null, 'MACD calculation should return result object');
-  assert(typeof macdResult.macd === 'number', `MACD line should be a number (got ${macdResult?.macd})`);
-  assert(typeof macdResult.signal === 'number', `Signal line should be a number (got ${macdResult?.signal})`);
-  assert(typeof macdResult.histogram === 'number', `Histogram should be a number (got ${macdResult?.histogram})`);
+  if (macdResult) {
+    assert(typeof macdResult.macd === 'number', `MACD line should be a number (got ${macdResult.macd})`);
+    assert(typeof macdResult.signal === 'number', `Signal line should be a number (got ${macdResult.signal})`);
+    assert(typeof macdResult.histogram === 'number', `Histogram should be a number (got ${macdResult.histogram})`);
+  }
 
   // 1.6 Bollinger Bands
   const bb = technicalIndicators.calculateBollingerBands(testPrices, 5, 2);
