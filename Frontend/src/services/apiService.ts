@@ -1,7 +1,22 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import Constants from 'expo-constants';
 
-const BASE_URL = 'http://192.168.8.108:5000/api';
+<<<<<<< HEAD
+// Configurable Backend Base URL with environment override and development fallback
+const BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.8.109:5000/api';
+=======
+const getBaseUrl = () => {
+  const hostUri = Constants.expoConfig?.hostUri;
+  if (hostUri) {
+    const ip = hostUri.split(':')[0];
+    return `http://${ip}:5000/api`;
+  }
+  return 'http://10.63.164.154:5000/api';
+};
+
+const BASE_URL = getBaseUrl();
+>>>>>>> origin/Clerans
 
 const api = axios.create({
   baseURL: BASE_URL,
@@ -131,6 +146,14 @@ export const authService = {
         await AsyncStorage.setItem('userToken', response.data.token);
         await AsyncStorage.setItem('userData', JSON.stringify(response.data.user));
       }
+      return response.data;
+    } catch (error: any) {
+      throw error;
+    }
+  },
+  changePassword: async (currentPassword: string, newPassword: string) => {
+    try {
+      const response = await api.post('/auth/change-password', { currentPassword, newPassword });
       return response.data;
     } catch (error: any) {
       throw error;
@@ -307,4 +330,90 @@ export const transactionService = {
   }
 };
 
+export const aiService = {
+  getRecommendations: async (interval: string = '1h') => {
+    try {
+      const response = await api.get('/ai/recommendations', {
+        params: { interval }
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching AI recommendations:', error);
+      throw error;
+    }
+  },
+  getRecommendation: async (symbol: string, interval: string = '1h') => {
+    try {
+      const response = await api.get(`/ai/recommendation/${symbol}`, {
+        params: { interval }
+      });
+      return response.data;
+    } catch (error) {
+      console.error(`Error fetching AI recommendation for ${symbol}:`, error);
+      throw error;
+    }
+  },
+  getHistory: async (symbol: string, limit: number = 10) => {
+    try {
+      const response = await api.get(`/ai/history/${symbol}`, {
+        params: { limit }
+      });
+      return response.data;
+    } catch (error) {
+      console.error(`Error fetching AI history for ${symbol}:`, error);
+      throw error;
+    }
+  },
+  chatWithSOMI: async (message: string, symbolContext?: string) => {
+    try {
+      const response = await api.post('/ai/chat', {
+        message,
+        symbolContext
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Error in SOMI AI chat:', error);
+      throw error;
+    }
+  }
+};
+
+export const kycService = {
+  submitKYC: async (formData: FormData) => {
+    try {
+      const response = await api.post('/kyc/verify', formData, {
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'multipart/form-data',
+        },
+        transformRequest: (data) => data,
+        timeout: 90000, // 90s timeout for mobile OCR photo upload and recognition
+      });
+      return response.data;
+    } catch (error: any) {
+      console.error('Error submitting KYC document:', error);
+      throw error;
+    }
+  },
+  getKYCStatus: async () => {
+    try {
+      const response = await api.get('/kyc/status');
+      return response.data;
+    } catch (error: any) {
+      console.error('Error fetching KYC status:', error);
+      throw error;
+    }
+  },
+  getKYCHistory: async () => {
+    try {
+      const response = await api.get('/kyc/history');
+      return response.data;
+    } catch (error: any) {
+      console.error('Error fetching KYC history:', error);
+      throw error;
+    }
+  }
+};
+
 export default api;
+

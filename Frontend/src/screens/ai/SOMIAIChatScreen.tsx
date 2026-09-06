@@ -1,12 +1,98 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
+import React, { useState, useRef, useEffect } from 'react';
+import { 
+  View, 
+  Text, 
+  StyleSheet, 
+  TouchableOpacity, 
+  TextInput, 
+  ScrollView, 
+  KeyboardAvoidingView, 
+  Platform,
+  ActivityIndicator
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
 import { colors, typography, layout } from '../../theme';
+import { aiService } from '../../services/apiService';
+
+interface ChatMessage {
+  id: string;
+  sender: 'user' | 'ai';
+  text: string;
+  time: string;
+}
+
+const QUICK_PROMPTS = [
+  '📊 What do you think about BTC?',
+  '📈 Is now a good time to buy ETH?',
+  '⚡ Give me analysis on SOL',
+  '💼 Analyze my portfolio',
+  '🎯 What is the current market trend?'
+];
 
 export const SOMIAIChatScreen = () => {
   const navigation = useNavigation<any>();
+  const scrollViewRef = useRef<ScrollView>(null);
+  const [inputMessage, setInputMessage] = useState('');
+  const [isTyping, setIsTyping] = useState(false);
+  const [messages, setMessages] = useState<ChatMessage[]>([
+    {
+      id: '1',
+      sender: 'ai',
+      text: "Hello! I'm SOMI, your SmartLanka Trade AI assistant. I can analyze real-time market indicators, moving averages, and technical momentum for you. Ask me about any cryptocurrency!",
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    }
+  ]);
+
+  const scrollToBottom = () => {
+    setTimeout(() => {
+      scrollViewRef.current?.scrollToEnd({ animated: true });
+    }, 100);
+  };
+
+  const handleSend = async (textToSend?: string) => {
+    const text = (textToSend || inputMessage).trim();
+    if (!text || isTyping) return;
+
+    const userMsg: ChatMessage = {
+      id: Date.now().toString(),
+      sender: 'user',
+      text,
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    };
+
+    setMessages(prev => [...prev, userMsg]);
+    setInputMessage('');
+    setIsTyping(true);
+    scrollToBottom();
+
+    try {
+      const response = await aiService.chatWithSOMI(text);
+      const aiReply = response?.data?.reply || "I've analyzed the market data. Please verify technical indicators in the AI Insights screen.";
+
+      const aiMsg: ChatMessage = {
+        id: (Date.now() + 1).toString(),
+        sender: 'ai',
+        text: aiReply,
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      };
+
+      setMessages(prev => [...prev, aiMsg]);
+    } catch (err: any) {
+      console.error('AI chat error:', err);
+      const errorMsg: ChatMessage = {
+        id: (Date.now() + 1).toString(),
+        sender: 'ai',
+        text: "I'm having trouble connecting to the live market recommendation engine right now. Please check your network or try again.",
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      };
+      setMessages(prev => [...prev, errorMsg]);
+    } finally {
+      setIsTyping(false);
+      scrollToBottom();
+    }
+  };
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -18,103 +104,106 @@ export const SOMIAIChatScreen = () => {
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.iconBtn}>
-            <MaterialIcons name="menu" size={24} color="#FFF" />
+            <MaterialIcons name="arrow-back" size={24} color="#FFF" />
           </TouchableOpacity>
           <View style={styles.headerTitleContainer}>
-            <Text style={styles.headerTitle}>SOMI - AI Helpdesk</Text>
+            <Text style={styles.headerTitle}>SOMI - AI Trading Assistant</Text>
             <View style={styles.statusRow}>
               <View style={styles.onlineDot} />
-              <Text style={styles.statusText}>ONLINE</Text>
+              <Text style={styles.statusText}>ENGINE ACTIVE</Text>
             </View>
           </View>
-          <TouchableOpacity style={styles.iconBtn}>
-            <MaterialIcons name="more-vert" size={24} color="#FFF" />
+          <TouchableOpacity style={styles.iconBtn} onPress={() => navigation.navigate('AIAnalytics')}>
+            <MaterialIcons name="insights" size={24} color={colors.accent} />
           </TouchableOpacity>
         </View>
 
         {/* Chat Area */}
-        <ScrollView contentContainerStyle={styles.chatScroll} showsVerticalScrollIndicator={false}>
-
-          {/* AI Message */}
-          <View style={styles.messageRow}>
-            <View style={styles.aiAvatar}>
-              <FontAwesome5 name="robot" size={14} color="#000" />
-            </View>
-            <View style={styles.messageBubbleAi}>
-              <Text style={styles.messageLabelText}>SOMI AI</Text>
-              <Text style={styles.messageTextWhite}>
-                Hello! I'm SOMI, your financial assistant. How can I help you manage your assets today?
-              </Text>
-              <Text style={styles.messageTimestamp}>10:00 AM</Text>
-            </View>
-          </View>
-
-          {/* User Message */}
-          <View style={[styles.messageRow, styles.messageRowUser]}>
-            <View style={styles.messageBubbleUser}>
-              <Text style={styles.messageLabelTextUser}>YOU</Text>
-              <Text style={styles.messageTextBlack}>
-                Can you analyze my portfolio's performance for this month?
-              </Text>
-              <Text style={styles.messageTimestampUser}>10:01 AM</Text>
-            </View>
-          </View>
-
-          {/* AI Message */}
-          <View style={styles.messageRow}>
-            <View style={styles.aiAvatar}>
-              <FontAwesome5 name="robot" size={14} color="#000" />
-            </View>
-            <View style={styles.messageBubbleAi}>
-              <Text style={styles.messageLabelText}>SOMI AI</Text>
-              <Text style={styles.messageTextWhite}>
-                Certainly. Your portfolio is up <Text style={styles.highlightText}>4.2%</Text> this month, largely driven by tech stocks and your recent Ethereum position. Would you like a detailed breakdown?
-              </Text>
-              <Text style={styles.messageTimestamp}>10:01 AM</Text>
-            </View>
-          </View>
+        <ScrollView 
+          ref={scrollViewRef}
+          contentContainerStyle={styles.chatScroll} 
+          showsVerticalScrollIndicator={false}
+          onContentSizeChange={scrollToBottom}
+        >
+          {messages.map((msg) => {
+            const isUser = msg.sender === 'user';
+            return (
+              <View 
+                key={msg.id} 
+                style={[styles.messageRow, isUser && styles.messageRowUser]}
+              >
+                {!isUser && (
+                  <View style={styles.aiAvatar}>
+                    <FontAwesome5 name="robot" size={14} color="#000" />
+                  </View>
+                )}
+                <View style={isUser ? styles.messageBubbleUser : styles.messageBubbleAi}>
+                  <Text style={isUser ? styles.messageLabelTextUser : styles.messageLabelText}>
+                    {isUser ? 'YOU' : 'SOMI AI'}
+                  </Text>
+                  <Text style={isUser ? styles.messageTextBlack : styles.messageTextWhite}>
+                    {msg.text}
+                  </Text>
+                  <Text style={isUser ? styles.messageTimestampUser : styles.messageTimestamp}>
+                    {msg.time}
+                  </Text>
+                </View>
+              </View>
+            );
+          })}
 
           {/* Typing Indicator */}
-          <View style={styles.messageRow}>
-            <View style={styles.aiAvatar}>
-              <FontAwesome5 name="robot" size={14} color="#000" />
+          {isTyping && (
+            <View style={styles.messageRow}>
+              <View style={styles.aiAvatar}>
+                <FontAwesome5 name="robot" size={14} color="#000" />
+              </View>
+              <View style={[styles.messageBubbleAi, styles.typingBubble]}>
+                <ActivityIndicator size="small" color={colors.accent} style={{ marginRight: 8 }} />
+                <Text style={styles.typingText}>SOMI is analyzing indicators...</Text>
+              </View>
             </View>
-            <View style={[styles.messageBubbleAi, styles.typingBubble]}>
-              <View style={styles.typingDot} />
-              <View style={styles.typingDot} />
-              <View style={styles.typingDot} />
-            </View>
-          </View>
+          )}
         </ScrollView>
 
         {/* Bottom Section */}
         <View style={styles.bottomSection}>
 
+          {/* Quick Prompts */}
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.quickRepliesScroll}>
-            <TouchableOpacity style={styles.quickReplyPill}>
-              <Text style={styles.quickReplyText}>↗ Explain this prediction</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.quickReplyPill}>
-              <Text style={styles.quickReplyText}>🛒 Is now a good time to buy</Text>
-            </TouchableOpacity>
+            {QUICK_PROMPTS.map((prompt, idx) => (
+              <TouchableOpacity 
+                key={idx} 
+                style={styles.quickReplyPill}
+                onPress={() => handleSend(prompt)}
+              >
+                <Text style={styles.quickReplyText}>{prompt}</Text>
+              </TouchableOpacity>
+            ))}
           </ScrollView>
 
+          {/* Text Input Row */}
           <View style={styles.inputRow}>
-            <TouchableOpacity style={styles.plusBtn}>
-              <MaterialIcons name="add" size={24} color={colors.textPrimary} />
-            </TouchableOpacity>
             <TextInput
               style={styles.chatInput}
-              placeholder="Ask SOMI anything..."
+              placeholder="Ask SOMI about BTC, ETH, SOL..."
               placeholderTextColor={colors.textSecondary}
+              value={inputMessage}
+              onChangeText={setInputMessage}
+              onSubmitEditing={() => handleSend()}
+              returnKeyType="send"
             />
-            <TouchableOpacity style={styles.sendBtn}>
+            <TouchableOpacity 
+              style={[styles.sendBtn, !inputMessage.trim() && { opacity: 0.6 }]} 
+              onPress={() => handleSend()}
+              disabled={!inputMessage.trim() || isTyping}
+            >
               <MaterialIcons name="arrow-upward" size={20} color="#000" />
             </TouchableOpacity>
           </View>
 
           <Text style={styles.disclaimerText}>
-            SOMI can make mistakes. Check important info.
+            Demo & Research AI Engine. Not financial advice.
           </Text>
         </View>
 
@@ -166,17 +255,18 @@ const styles = StyleSheet.create({
   statusText: {
     ...typography.label,
     color: colors.accent,
-    fontSize: 10,
+    fontSize: 9,
+    fontWeight: '700',
   },
   chatScroll: {
     paddingHorizontal: 16,
-    paddingVertical: 24,
+    paddingVertical: 20,
   },
   messageRow: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    marginBottom: 24,
-    maxWidth: '85%',
+    marginBottom: 18,
+    maxWidth: '88%',
   },
   messageRowUser: {
     alignSelf: 'flex-end',
@@ -189,91 +279,97 @@ const styles = StyleSheet.create({
     backgroundColor: colors.accent,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
+    marginRight: 10,
   },
   messageBubbleAi: {
     backgroundColor: colors.bgCard,
-    padding: 16,
-    borderRadius: 20,
+    padding: 14,
+    borderRadius: 18,
     borderBottomLeftRadius: 4,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   messageBubbleUser: {
     backgroundColor: colors.accent,
-    padding: 16,
-    borderRadius: 20,
+    padding: 14,
+    borderRadius: 18,
     borderBottomRightRadius: 4,
   },
   messageLabelText: {
     ...typography.label,
-    color: colors.textSecondary,
-    marginBottom: 6,
+    color: colors.accent,
+    fontSize: 9,
+    fontWeight: '700',
+    marginBottom: 4,
   },
   messageLabelTextUser: {
     ...typography.label,
     color: '#00000080',
-    marginBottom: 6,
+    fontSize: 9,
+    fontWeight: '700',
+    marginBottom: 4,
   },
   messageTextWhite: {
     ...typography.body,
     color: '#FFF',
-    lineHeight: 22,
+    lineHeight: 20,
+    fontSize: 13,
   },
   messageTextBlack: {
     ...typography.body,
     color: '#000',
-    lineHeight: 22,
-  },
-  highlightText: {
-    color: colors.accent,
-    fontWeight: '700',
+    lineHeight: 20,
+    fontSize: 13,
   },
   messageTimestamp: {
     ...typography.bodySmall,
-    fontSize: 10,
-    color: colors.textMuted,
-    marginTop: 8,
+    fontSize: 9,
+    color: colors.textSecondary,
+    marginTop: 6,
     alignSelf: 'flex-end',
   },
   messageTimestampUser: {
     ...typography.bodySmall,
-    fontSize: 10,
+    fontSize: 9,
     color: '#00000099',
-    marginTop: 8,
+    marginTop: 6,
     alignSelf: 'flex-end',
   },
   typingBubble: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
   },
-  typingDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: colors.accent,
-    marginHorizontal: 2,
+  typingText: {
+    ...typography.bodySmall,
+    color: colors.textSecondary,
+    fontSize: 11,
   },
   bottomSection: {
     paddingHorizontal: 16,
     paddingTop: 8,
-    paddingBottom: 24,
+    paddingBottom: 16,
     backgroundColor: colors.bg,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
   },
   quickRepliesScroll: {
     flexDirection: 'row',
-    marginBottom: 16,
+    marginBottom: 10,
   },
   quickReplyPill: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
     borderRadius: layout.borderRadiusPill,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.bgInput,
-    marginRight: 12,
+    marginRight: 8,
   },
   quickReplyText: {
     ...typography.bodySmall,
+    fontSize: 11,
     color: colors.textPrimary,
   },
   inputRow: {
@@ -281,33 +377,30 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: colors.bgInput,
     borderRadius: layout.borderRadiusPill,
-    paddingLeft: 8,
-    paddingRight: 8,
-    height: 56,
-    marginBottom: 12,
-  },
-  plusBtn: {
-    padding: 8,
+    paddingLeft: 14,
+    paddingRight: 6,
+    height: 48,
+    marginBottom: 8,
   },
   chatInput: {
     ...typography.body,
     flex: 1,
     height: '100%',
     color: colors.textPrimary,
-    paddingHorizontal: 12,
+    fontSize: 13,
   },
   sendBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: colors.accent,
     justifyContent: 'center',
     alignItems: 'center',
   },
   disclaimerText: {
-    ...typography.bodySmall,
-    fontSize: 10,
+    ...typography.label,
+    fontSize: 9,
     textAlign: 'center',
-    color: colors.textMuted,
+    color: colors.textSecondary,
   },
 });

@@ -280,3 +280,28 @@ exports.googleLogin = async (req, res) => {
     });
   }
 };
+
+exports.changePassword = async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+    if (!currentPassword || !newPassword) {
+      return res.status(422).json({
+        success: false,
+        code: 'MISSING_FIELDS',
+        message: 'Current password and new password are required.'
+      });
+    }
+
+    const result = await authService.changePasswordUser(req.user.id, currentPassword, newPassword);
+    res.json({
+      success: true,
+      message: result.message
+    });
+  } catch (err) {
+    res.status(err.status || 500).json({
+      success: false,
+      code: err.code || 'SERVER_ERROR',
+      message: err.message
+    });
+  }
+};

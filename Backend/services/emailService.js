@@ -1,20 +1,96 @@
 const nodemailer = require('nodemailer');
 require('dotenv').config();
 
-// Gmail Configuration
+// SMTP Transporter Configuration
 const transporter = nodemailer.createTransport({
-  service: 'gmail',
+  host: process.env.SMTP_HOST || 'smtp.gmail.com',
+  port: parseInt(process.env.SMTP_PORT || '587', 10),
+  secure: process.env.SMTP_PORT === '465',
   auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS // Your 16-character App Password
+    user: process.env.SMTP_USER || process.env.EMAIL_USER,
+    pass: process.env.SMTP_PASS || process.env.EMAIL_PASS
   }
 });
+
+const getFromAddress = () => {
+  return process.env.EMAIL_FROM || `"SMARTLANKA TRADE" <${process.env.SMTP_USER || process.env.EMAIL_USER}>`;
+};
+
+// Send OTP for Email Verification
+const sendVerificationOTPEmail = async (email, otp) => {
+  const mailOptions = {
+    from: getFromAddress(),
+    to: email,
+    subject: 'SmartLanka - Email Verification Code',
+    html: `
+      <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 25px; border: 1px solid #e0e0e0; border-radius: 12px; background-color: #ffffff;">
+        <div style="text-align: center; margin-bottom: 25px;">
+          <h1 style="color: #00C853; margin: 0; font-size: 26px;">SmartLanka Trade</h1>
+          <p style="color: #666; font-size: 14px; margin-top: 5px;">Your Trusted Crypto & Trading Platform</p>
+        </div>
+        <div style="background: #f8fafc; border-radius: 8px; padding: 20px; text-align: center; margin-bottom: 25px;">
+          <p style="font-size: 15px; color: #333; margin: 0 0 15px 0;">Use the verification code below to complete your registration:</p>
+          <div style="font-size: 32px; font-weight: 700; letter-spacing: 6px; color: #00C853; padding: 12px 24px; background: #e8f5e9; border-radius: 8px; display: inline-block;">
+            ${otp}
+          </div>
+          <p style="font-size: 13px; color: #888; margin-top: 15px;">⏱️ This code is valid for <strong>5 minutes</strong>.</p>
+        </div>
+        <p style="font-size: 13px; color: #777; line-height: 1.5;">If you did not request this verification code, please ignore this email or contact support if you suspect unauthorized activity.</p>
+        <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
+        <p style="font-size: 12px; color: #aaa; text-align: center;">&copy; ${new Date().getFullYear()} SmartLanka Trade. All rights reserved.</p>
+      </div>
+    `
+  };
+
+  try {
+    const info = await transporter.sendMail(mailOptions);
+    console.log(`✅ Verification OTP sent to ${email} (Message ID: ${info.messageId})`);
+    return info;
+  } catch (error) {
+    console.error(`❌ Failed to send verification OTP to ${email}:`, error.message);
+  }
+};
+
+// Send OTP for Password Reset
+const sendPasswordResetOTPEmail = async (email, otp) => {
+  const mailOptions = {
+    from: getFromAddress(),
+    to: email,
+    subject: 'SmartLanka - Password Reset Code',
+    html: `
+      <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 25px; border: 1px solid #e0e0e0; border-radius: 12px; background-color: #ffffff;">
+        <div style="text-align: center; margin-bottom: 25px;">
+          <h1 style="color: #00C853; margin: 0; font-size: 26px;">SmartLanka Trade</h1>
+          <p style="color: #666; font-size: 14px; margin-top: 5px;">Security Verification</p>
+        </div>
+        <div style="background: #f8fafc; border-radius: 8px; padding: 20px; text-align: center; margin-bottom: 25px;">
+          <p style="font-size: 15px; color: #333; margin: 0 0 15px 0;">You requested to reset your password. Use the code below:</p>
+          <div style="font-size: 32px; font-weight: 700; letter-spacing: 6px; color: #FF5722; padding: 12px 24px; background: #fbe9e7; border-radius: 8px; display: inline-block;">
+            ${otp}
+          </div>
+          <p style="font-size: 13px; color: #888; margin-top: 15px;">⏱️ This code will expire in <strong>5 minutes</strong>.</p>
+        </div>
+        <p style="font-size: 13px; color: #777; line-height: 1.5;">If you did not request a password reset, please secure your account immediately.</p>
+        <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
+        <p style="font-size: 12px; color: #aaa; text-align: center;">&copy; ${new Date().getFullYear()} SmartLanka Trade. All rights reserved.</p>
+      </div>
+    `
+  };
+
+  try {
+    const info = await transporter.sendMail(mailOptions);
+    console.log(`✅ Password Reset OTP sent to ${email} (Message ID: ${info.messageId})`);
+    return info;
+  } catch (error) {
+    console.error(`❌ Failed to send reset OTP to ${email}:`, error.message);
+  }
+};
 
 const sendVerificationEmail = async (email, token) => {
   const url = `${process.env.BASE_URL}/api/auth/verify/${token}`;
   
   const mailOptions = {
-    from: `"SmartLankaTrade" <${process.env.EMAIL_USER}>`,
+    from: getFromAddress(),
     to: email,
     subject: 'Verify Your SmartLanka Account',
     html: `
@@ -35,15 +111,15 @@ const sendVerificationEmail = async (email, token) => {
 
   try {
     await transporter.sendMail(mailOptions);
-    console.log(`✅ Verification email sent to ${email} via Gmail`);
+    console.log(`✅ Verification email sent to ${email}`);
   } catch (error) {
-    console.error('❌ Gmail Send Error:', error.message);
+    console.error('❌ Email Send Error:', error.message);
   }
 };
 
 const sendPriceAlertEmail = async (email, symbol, targetPrice, currentPrice, alertType) => {
   const mailOptions = {
-    from: `"SmartLankaTrade" <${process.env.EMAIL_USER}>`,
+    from: getFromAddress(),
     to: email,
     subject: `🚀 Price Alert: ${symbol} hit ${targetPrice}`,
     html: `
@@ -72,4 +148,9 @@ const sendPriceAlertEmail = async (email, symbol, targetPrice, currentPrice, ale
   }
 };
 
-module.exports = { sendVerificationEmail, sendPriceAlertEmail };
+module.exports = { 
+  sendVerificationOTPEmail, 
+  sendPasswordResetOTPEmail, 
+  sendVerificationEmail, 
+  sendPriceAlertEmail 
+};

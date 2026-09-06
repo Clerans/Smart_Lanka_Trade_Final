@@ -5,11 +5,26 @@ exports.findByEmail = async (email) => {
   try {
     connection = await oracledb.getConnection();
     const result = await connection.execute(
-      `SELECT ID, NAME, EMAIL, PASSWORD, IS_VERIFIED, FAILED_ATTEMPTS, ACCOUNT_LOCKED_UNTIL, LAST_LOGIN FROM SL_USERS WHERE EMAIL = :email`,
+      `SELECT ID, NAME, EMAIL, PASSWORD, IS_VERIFIED, ROLE, KYC_STATUS, NIC_NUMBER, FAILED_ATTEMPTS, ACCOUNT_LOCKED_UNTIL, LAST_LOGIN FROM SL_USERS WHERE EMAIL = :email`,
       [email],
       { outFormat: oracledb.OUT_FORMAT_OBJECT }
     );
     return result.rows[0];
+  } finally {
+    if (connection) await connection.close();
+  }
+};
+
+exports.findById = async (id) => {
+  let connection;
+  try {
+    connection = await oracledb.getConnection();
+    const result = await connection.execute(
+      `SELECT ID, NAME, EMAIL, PASSWORD, IS_VERIFIED, ROLE, KYC_STATUS, NIC_NUMBER, CREATED_AT FROM SL_USERS WHERE ID = :id`,
+      [id],
+      { outFormat: oracledb.OUT_FORMAT_OBJECT }
+    );
+    return result.rows[0] || null;
   } finally {
     if (connection) await connection.close();
   }

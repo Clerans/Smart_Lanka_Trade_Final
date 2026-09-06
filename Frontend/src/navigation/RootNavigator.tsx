@@ -10,7 +10,8 @@ import {
     SOMIAIChatScreen,
     DemoTradingScreen,
     CurrencyConversionScreen,
-    SecuritySettingsScreen
+    SecuritySettingsScreen,
+    KYCVerificationScreen
 } from '../screens';
 
 const Stack = createStackNavigator();
@@ -36,6 +37,7 @@ export const RootNavigator = () => {
                 <Stack.Screen name="DemoTrading" component={DemoTradingScreen} />
                 <Stack.Screen name="CurrencyConversion" component={CurrencyConversionScreen} />
                 <Stack.Screen name="SecuritySettings" component={SecuritySettingsScreen} />
+                <Stack.Screen name="KYCVerification" component={KYCVerificationScreen} />
             </Stack.Navigator>
         </NavigationContainer>
     );

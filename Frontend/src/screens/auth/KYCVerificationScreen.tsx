@@ -1,104 +1,349 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { 
+  View, 
+  Text, 
+  StyleSheet, 
+  TouchableOpacity, 
+  ScrollView, 
+  Image, 
+  ActivityIndicator, 
+  Alert,
+  TextInput,
+  Platform 
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
-import { MaterialIcons } from '@expo/vector-icons';
+import { MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import { colors, typography, layout } from '../../theme';
 import { PrimaryButton, Card } from '../../components';
+import { kycService } from '../../services/apiService';
 
 export const KYCVerificationScreen = () => {
   const navigation = useNavigation<any>();
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [manualNIC, setManualNIC] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [verificationResult, setVerificationResult] = useState<any>(null);
+  const [existingStatus, setExistingStatus] = useState<any>(null);
+
+  useEffect(() => {
+    // Check if user already has a KYC record
+    async function checkStatus() {
+      try {
+        const res = await kycService.getKYCStatus();
+        if (res?.data?.document) {
+          setExistingStatus(res.data.document);
+          setVerificationResult({
+            verificationStatus: res.data.document.VERIFICATION_STATUS || res.data.status,
+            extractedData: {
+              documentType: res.data.document.DOCUMENT_TYPE || 'NIC',
+              nicNumber: res.data.document.DOCUMENT_NUMBER,
+              name: res.data.document.EXTRACTED_NAME,
+              dateOfBirth: res.data.document.EXTRACTED_DOB,
+              gender: res.data.document.EXTRACTED_GENDER,
+              ocrConfidence: `${res.data.document.OCR_CONFIDENCE || 0}%`
+            },
+            rejectionReason: res.data.document.REJECTION_REASON
+          });
+        }
+      } catch (err) {
+        // User not logged in yet or no prior KYC
+      }
+    }
+    checkStatus();
+  }, []);
+
+  const takePhoto = async () => {
+    try {
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Denied', 'Camera access is required to capture identity documents.');
+        return;
+      }
+
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        setSelectedImage(result.assets[0].uri);
+      }
+    } catch (err: any) {
+      Alert.alert('Camera Error', err.message || 'Could not open camera.');
+    }
+  };
+
+  const pickImage = async () => {
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Denied', 'Gallery access is required to select document photos.');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        setSelectedImage(result.assets[0].uri);
+      }
+    } catch (err: any) {
+      Alert.alert('Gallery Error', err.message || 'Could not open photo gallery.');
+    }
+  };
+
+  const handleVerify = async () => {
+    if (!selectedImage) {
+      Alert.alert('No Image Selected', 'Please take a photo or select an image of your Sri Lankan NIC.');
+      return;
+    }
+
+    try {
+      setLoading(true);
+
+      const formData = new FormData();
+      const filename = selectedImage.split('/').pop() || 'nic_document.jpg';
+      const match = /\.(\w+)$/.exec(filename);
+      const type = match ? `image/${match[1]}` : 'image/jpeg';
+
+      formData.append('document', {
+        uri: selectedImage,
+        name: filename,
+        type: type,
+      } as any);
+
+      if (manualNIC.trim()) {
+        formData.append('manualNIC', manualNIC.trim());
+      }
+
+      const response = await kycService.submitKYC(formData);
+      if (response && response.data) {
+        setVerificationResult(response.data);
+      }
+    } catch (err: any) {
+      console.error('KYC submission error:', err);
+      Alert.alert(
+        'Verification Failed',
+        err.message || 'Failed to communicate with OCR identity verification server.'
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const status = verificationResult?.verificationStatus || 'NOT_SUBMITTED';
+  const isVerified = status === 'VERIFIED';
+  const isPending = status === 'PENDING';
+  const isRejected = status === 'REJECTED';
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <ScrollView contentContainerStyle={styles.container}>
+      <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
 
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
             <MaterialIcons name="arrow-back" size={24} color="#FFF" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Identity Verification</Text>
+          <Text style={styles.headerTitle}>Identity Verification (KYC)</Text>
           <View style={{ width: 24 }} />
         </View>
 
         {/* Status Tracker */}
         <View style={styles.trackerContainer}>
-          <Text style={styles.stepText}>Step 1 of 3</Text>
+          <Text style={styles.stepText}>Sri Lankan NIC OCR Pipeline</Text>
           <View style={styles.progressBarBg}>
-            <View style={styles.progressBarFill} />
+            <View style={[
+              styles.progressBarFill, 
+              isVerified ? { width: '100%', backgroundColor: colors.accent } : 
+              isPending ? { width: '66%', backgroundColor: colors.yellow } : 
+              { width: '33%', backgroundColor: colors.accent }
+            ]} />
           </View>
-          <Text style={styles.stepLabel}>Document Capture</Text>
+          <Text style={styles.stepLabel}>
+            {isVerified ? 'Verification Complete' : isPending ? 'Pending Review' : 'Document Capture & OCR'}
+          </Text>
         </View>
 
-        {/* Viewfinder */}
+        {/* Viewfinder / Image Preview */}
         <View style={styles.viewfinderContainer}>
-          {/* Faked blur background for aesthetic */}
-          <View style={styles.viewfinderBg}>
-            <View style={styles.frameOverlay}>
-              <View style={[styles.corner, styles.topLeft]} />
-              <View style={[styles.corner, styles.topRight]} />
-              <View style={[styles.corner, styles.bottomLeft]} />
-              <View style={[styles.corner, styles.bottomRight]} />
-              <Text style={styles.frameText}>Position your NIC or Passport within the frame</Text>
+          {selectedImage ? (
+            <View style={styles.imagePreviewContainer}>
+              <Image source={{ uri: selectedImage }} style={styles.previewImage} resizeMode="cover" />
+              <TouchableOpacity style={styles.retakePill} onPress={() => setSelectedImage(null)}>
+                <MaterialIcons name="refresh" size={16} color="#FFF" />
+                <Text style={styles.retakeText}>Retake Photo</Text>
+              </TouchableOpacity>
             </View>
-          </View>
+          ) : (
+            <View style={styles.viewfinderBg}>
+              <View style={styles.frameOverlay}>
+                <View style={[styles.corner, styles.topLeft]} />
+                <View style={[styles.corner, styles.topRight]} />
+                <View style={[styles.corner, styles.bottomLeft]} />
+                <View style={[styles.corner, styles.bottomRight]} />
+                <FontAwesome5 name="id-card" size={40} color={colors.accent} style={{ marginBottom: 12 }} />
+                <Text style={styles.frameText}>Position your Sri Lankan NIC (Old or New format) within the frame</Text>
+              </View>
+            </View>
+          )}
         </View>
 
-        {/* Live Extraction Data Card */}
-        <Card style={styles.extractionCard}>
-          <View style={styles.cardHeader}>
-            <Text style={styles.cardTitle}>Live Extraction</Text>
-            <View style={styles.statusBadge}>
-              <MaterialIcons name="pending-actions" size={12} color="#FFF" />
-              <Text style={styles.statusText}>Pending</Text>
+        {/* Camera & Gallery Action Buttons */}
+        {!selectedImage && (
+          <View style={styles.actionRow}>
+            <TouchableOpacity style={styles.captureOptionBtn} onPress={takePhoto}>
+              <MaterialIcons name="camera-alt" size={24} color={colors.accent} />
+              <Text style={styles.captureOptionText}>Take Photo</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.captureOptionBtn} onPress={pickImage}>
+              <MaterialIcons name="photo-library" size={24} color={colors.accent} />
+              <Text style={styles.captureOptionText}>From Gallery</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Optional Manual NIC Input if OCR needs assistance */}
+        {selectedImage && !verificationResult && (
+          <View style={styles.inputContainer}>
+            <Text style={styles.inputLabel}>NIC Number (Optional Confirmation)</Text>
+            <TextInput
+              style={styles.textInput}
+              placeholder="e.g. 199204502391 or 921450239V"
+              placeholderTextColor={colors.textSecondary}
+              value={manualNIC}
+              onChangeText={setManualNIC}
+              autoCapitalize="characters"
+            />
+          </View>
+        )}
+
+        {/* Loading Spinner during OCR */}
+        {loading && (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={colors.accent} />
+            <Text style={styles.loadingTitle}>Processing Tesseract OCR...</Text>
+            <Text style={styles.loadingSubtitle}>Extracting NIC digits, Date of Birth, and Name</Text>
+          </View>
+        )}
+
+        {/* Live Extracted Data Card */}
+        {verificationResult && !loading && (
+          <Card style={styles.extractionCard}>
+            <View style={styles.cardHeader}>
+              <Text style={styles.cardTitle}>OCR Extraction Results</Text>
+              <View style={[
+                styles.statusBadge, 
+                isVerified ? { backgroundColor: colors.accentMuted } : 
+                isRejected ? { backgroundColor: colors.red + '33' } : 
+                { backgroundColor: colors.yellow + '33' }
+              ]}>
+                <MaterialIcons 
+                  name={isVerified ? "verified" : isRejected ? "cancel" : "pending-actions"} 
+                  size={14} 
+                  color={isVerified ? colors.accent : isRejected ? colors.red : colors.yellow} 
+                />
+                <Text style={[
+                  styles.statusText, 
+                  isVerified ? { color: colors.accent } : 
+                  isRejected ? { color: colors.red } : 
+                  { color: colors.yellow }
+                ]}>
+                  {status}
+                </Text>
+              </View>
             </View>
-          </View>
-          <Text style={styles.cardSubtitle}>OCR Preview</Text>
 
-          <View style={styles.dataRow}>
-            <Text style={styles.dataLabel}>FULL NAME:</Text>
-            <Text style={styles.dataValue}>JANITH MADUSHANKA DE SILVA</Text>
-          </View>
+            <View style={styles.dataRow}>
+              <Text style={styles.dataLabel}>DOCUMENT TYPE:</Text>
+              <Text style={styles.dataValue}>
+                {verificationResult.extractedData?.documentType || 'Sri Lankan NIC'}
+              </Text>
+            </View>
 
-          <View style={styles.dataRow}>
-            <Text style={styles.dataLabel}>ID NUMBER:</Text>
-            <Text style={styles.dataValue}>199204502391</Text>
-          </View>
+            <View style={styles.dataRow}>
+              <Text style={styles.dataLabel}>NIC NUMBER:</Text>
+              <Text style={[styles.dataValue, { color: colors.accent }]}>
+                {verificationResult.extractedData?.nicNumber || 'Not Detected'}
+              </Text>
+            </View>
 
-          <View style={styles.dataRow}>
-            <Text style={styles.dataLabel}>DATE OF BIRTH:</Text>
-            <Text style={styles.dataValue}>14/02/1992</Text>
-          </View>
-        </Card>
+            <View style={styles.dataRow}>
+              <Text style={styles.dataLabel}>EXTRACTED NAME:</Text>
+              <Text style={styles.dataValue}>
+                {verificationResult.extractedData?.name || '---'}
+              </Text>
+            </View>
 
-        {/* Upload Button Alternative */}
-        <TouchableOpacity style={styles.uploadBtn}>
-          <MaterialIcons name="upload-file" size={20} color={colors.textPrimary} />
-          <Text style={styles.uploadBtnText}>Upload NIC/Passport instead</Text>
-        </TouchableOpacity>
+            <View style={styles.dataRow}>
+              <Text style={styles.dataLabel}>DATE OF BIRTH (DERIVED):</Text>
+              <Text style={styles.dataValue}>
+                {verificationResult.extractedData?.dateOfBirth || '---'}
+              </Text>
+            </View>
 
-        {/* Camera Controls */}
-        <View style={styles.cameraControls}>
-          <TouchableOpacity style={styles.iconBtn}>
-            <MaterialIcons name="photo-library" size={28} color={colors.textPrimary} />
-          </TouchableOpacity>
+            <View style={styles.dataRow}>
+              <Text style={styles.dataLabel}>GENDER (DERIVED):</Text>
+              <Text style={styles.dataValue}>
+                {verificationResult.extractedData?.gender || '---'}
+              </Text>
+            </View>
 
-          <TouchableOpacity style={styles.shutterBtn}>
-            <View style={styles.shutterInner} />
-          </TouchableOpacity>
+            <View style={styles.dataRow}>
+              <Text style={styles.dataLabel}>OCR CONFIDENCE:</Text>
+              <Text style={styles.dataValue}>
+                {verificationResult.extractedData?.ocrConfidence || 'N/A'}
+              </Text>
+            </View>
 
-          <TouchableOpacity style={styles.iconBtn}>
-            <MaterialIcons name="flash-on" size={28} color={colors.textPrimary} />
-          </TouchableOpacity>
-        </View>
+            {verificationResult.rejectionReason && (
+              <View style={styles.rejectionBox}>
+                <MaterialIcons name="info" size={16} color={isRejected ? colors.red : colors.yellow} />
+                <Text style={[styles.rejectionText, isRejected ? { color: colors.red } : { color: colors.yellow }]}>
+                  {verificationResult.rejectionReason}
+                </Text>
+              </View>
+            )}
+          </Card>
+        )}
 
         {/* Action Button */}
-        <PrimaryButton
-          title="Continue to Verification →"
-          onPress={() => navigation.navigate('MainApp')}
-        />
+        {selectedImage && !verificationResult && !loading && (
+          <PrimaryButton
+            title="Submit for OCR Verification →"
+            onPress={handleVerify}
+            style={{ marginTop: 8 }}
+          />
+        )}
 
+        {verificationResult && (
+          <PrimaryButton
+            title={isVerified ? "Continue to Trading Dashboard →" : "Done"}
+            onPress={() => navigation.navigate('MainApp')}
+            style={{ marginTop: 8 }}
+          />
+        )}
+
+        {isRejected && (
+          <TouchableOpacity 
+            style={styles.retryBtn} 
+            onPress={() => {
+              setSelectedImage(null);
+              setVerificationResult(null);
+            }}
+          >
+            <Text style={styles.retryBtnText}>Resubmit Identity Document</Text>
+          </TouchableOpacity>
+        )}
+
+        <View style={{ height: 40 }} />
       </ScrollView>
     </SafeAreaView>
   );
@@ -111,14 +356,14 @@ const styles = StyleSheet.create({
   },
   container: {
     flexGrow: 1,
-    paddingHorizontal: 24,
-    paddingVertical: 20,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 24,
+    marginBottom: 16,
   },
   backButton: {
     padding: 8,
@@ -126,44 +371,77 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     ...typography.body,
-    fontWeight: '600',
+    fontWeight: '700',
+    color: '#FFF',
   },
   trackerContainer: {
-    marginBottom: 24,
+    marginBottom: 20,
   },
   stepText: {
     ...typography.label,
-    marginBottom: 8,
+    fontSize: 10,
+    marginBottom: 6,
+    color: colors.textSecondary,
   },
   progressBarBg: {
     height: 6,
     backgroundColor: colors.bgInput,
     borderRadius: 3,
-    marginBottom: 8,
+    marginBottom: 6,
     overflow: 'hidden',
   },
   progressBarFill: {
-    width: '33%',
     height: '100%',
-    backgroundColor: colors.accent,
   },
   stepLabel: {
     ...typography.bodySmall,
-    color: colors.textSecondary,
+    color: colors.accent,
+    fontSize: 11,
+    fontWeight: '600',
     textAlign: 'right',
   },
   viewfinderContainer: {
     height: 220,
     width: '100%',
-    borderRadius: 24,
+    borderRadius: 20,
     overflow: 'hidden',
-    marginBottom: 24,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   viewfinderBg: {
     flex: 1,
-    backgroundColor: '#1E2320', // subtle green tint for fake camera
+    backgroundColor: '#131915',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  imagePreviewContainer: {
+    flex: 1,
+    position: 'relative',
+  },
+  previewImage: {
+    width: '100%',
+    height: '100%',
+  },
+  retakePill: {
+    position: 'absolute',
+    bottom: 12,
+    alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.75)',
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: layout.borderRadiusPill,
+    borderWidth: 1,
+    borderColor: colors.accent,
+  },
+  retakeText: {
+    ...typography.bodySmall,
+    color: '#FFF',
+    fontSize: 11,
+    marginLeft: 6,
+    fontWeight: '600',
   },
   frameOverlay: {
     width: '85%',
@@ -173,133 +451,177 @@ const styles = StyleSheet.create({
   },
   corner: {
     position: 'absolute',
-    width: 32,
-    height: 32,
+    width: 28,
+    height: 28,
     borderColor: colors.accent,
   },
   topLeft: {
     top: 0,
     left: 0,
-    borderTopWidth: 4,
-    borderLeftWidth: 4,
-    borderTopLeftRadius: 16,
+    borderTopWidth: 3,
+    borderLeftWidth: 3,
+    borderTopLeftRadius: 12,
   },
   topRight: {
     top: 0,
     right: 0,
-    borderTopWidth: 4,
-    borderRightWidth: 4,
-    borderTopRightRadius: 16,
+    borderTopWidth: 3,
+    borderRightWidth: 3,
+    borderTopRightRadius: 12,
   },
   bottomLeft: {
     bottom: 0,
     left: 0,
-    borderBottomWidth: 4,
-    borderLeftWidth: 4,
-    borderBottomLeftRadius: 16,
+    borderBottomWidth: 3,
+    borderLeftWidth: 3,
+    borderBottomLeftRadius: 12,
   },
   bottomRight: {
     bottom: 0,
     right: 0,
-    borderBottomWidth: 4,
-    borderRightWidth: 4,
-    borderBottomRightRadius: 16,
+    borderBottomWidth: 3,
+    borderRightWidth: 3,
+    borderBottomRightRadius: 12,
   },
   frameText: {
     ...typography.bodySmall,
-    color: colors.textPrimary,
+    color: colors.textSecondary,
     textAlign: 'center',
-    maxWidth: '70%',
+    maxWidth: '80%',
+    fontSize: 11,
+    lineHeight: 16,
+  },
+  actionRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 20,
+  },
+  captureOptionBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.bgInput,
+    paddingVertical: 14,
+    borderRadius: layout.borderRadius,
+    marginHorizontal: 4,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  captureOptionText: {
+    ...typography.bodySmall,
+    fontWeight: '700',
+    color: '#FFF',
+    marginLeft: 8,
+  },
+  inputContainer: {
+    marginBottom: 16,
+  },
+  inputLabel: {
+    ...typography.label,
+    fontSize: 10,
+    color: colors.textSecondary,
+    marginBottom: 6,
+  },
+  textInput: {
+    backgroundColor: colors.bgInput,
+    borderRadius: layout.borderRadius,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    color: '#FFF',
+    borderWidth: 1,
+    borderColor: colors.border,
+    fontSize: 13,
+  },
+  loadingContainer: {
+    alignItems: 'center',
+    padding: 24,
+    backgroundColor: colors.bgCard,
+    borderRadius: layout.borderRadius,
+    marginBottom: 16,
+  },
+  loadingTitle: {
+    ...typography.body,
+    fontWeight: '700',
+    color: colors.accent,
+    marginTop: 12,
+  },
+  loadingSubtitle: {
+    ...typography.bodySmall,
+    fontSize: 11,
+    color: colors.textSecondary,
+    marginTop: 4,
   },
   extractionCard: {
-    marginBottom: 24,
+    marginBottom: 20,
+    padding: 16,
   },
   cardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    paddingBottom: 10,
   },
   cardTitle: {
     ...typography.body,
     fontWeight: '700',
+    color: '#FFF',
   },
   statusBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.yellow + '33', // amber transparent
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 16,
   },
   statusText: {
-    color: colors.yellow,
-    fontSize: 12,
-    fontWeight: '600',
+    fontSize: 11,
+    fontWeight: '700',
     marginLeft: 4,
   },
-  cardSubtitle: {
-    ...typography.bodySmall,
-    marginBottom: 16,
-  },
   dataRow: {
-    marginBottom: 12,
-  },
-  dataLabel: {
-    ...typography.bodySmall,
-    fontSize: 10,
-    color: colors.textSecondary,
-    marginBottom: 4,
-  },
-  dataValue: {
-    ...typography.body,
-    fontWeight: '600',
-    color: colors.textPrimary,
-  },
-  uploadBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 16,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: layout.borderRadiusPill,
-    marginBottom: 32,
-  },
-  uploadBtnText: {
-    ...typography.body,
-    color: colors.textPrimary,
-    marginLeft: 8,
-    fontWeight: '600',
-  },
-  cameraControls: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 40,
-    paddingHorizontal: 20,
+    marginBottom: 10,
   },
-  iconBtn: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+  dataLabel: {
+    ...typography.label,
+    fontSize: 10,
+    color: colors.textSecondary,
+  },
+  dataValue: {
+    ...typography.bodySmall,
+    fontWeight: '700',
+    color: colors.textPrimary,
+    fontSize: 12,
+  },
+  rejectionBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: colors.bgInput,
-    justifyContent: 'center',
-    alignItems: 'center',
+    padding: 10,
+    borderRadius: 6,
+    marginTop: 10,
   },
-  shutterBtn: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    borderWidth: 4,
-    borderColor: colors.textPrimary,
-    justifyContent: 'center',
-    alignItems: 'center',
+  rejectionText: {
+    ...typography.bodySmall,
+    fontSize: 11,
+    flex: 1,
+    marginLeft: 8,
+    lineHeight: 16,
   },
-  shutterInner: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: colors.textPrimary,
+  retryBtn: {
+    alignItems: 'center',
+    paddingVertical: 12,
+    marginTop: 8,
+  },
+  retryBtnText: {
+    ...typography.bodySmall,
+    color: colors.textSecondary,
+    fontWeight: '600',
   },
 });
