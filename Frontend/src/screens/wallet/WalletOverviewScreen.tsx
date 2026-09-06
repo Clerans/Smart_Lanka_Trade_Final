@@ -1,43 +1,33 @@
 import * as React from 'react';
 const { useState, useEffect } = React;
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions, ActivityIndicator, Alert, Modal, TextInput } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
-import { useNavigation } from '@react-navigation/native';
 import { colors, typography, layout } from '../../theme';
-import { Card, DepositModal, PrimaryButton } from '../../components';
+import { Card, DepositModal } from '../../components';
 import Svg, { Circle } from 'react-native-svg';
 import { walletService, portfolioService } from '../../services/apiService';
 
 const { width } = Dimensions.get('window');
 
-const stockColors = ['#1A5BFF', '#009933', '#FF9900', '#9933FF', '#E60000', '#CC6600'];
-
 export const WalletOverviewScreen = () => {
-  const navigation = useNavigation<any>();
   const [walletDetails, setWalletDetails] = useState<any>(null);
   const [holdings, setHoldings] = useState<any[]>([]);
-  const [transactions, setTransactions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [isDepositVisible, setIsDepositVisible] = useState(false);
-  const [isWithdrawVisible, setIsWithdrawVisible] = useState(false);
-  const [withdrawAmount, setWithdrawAmount] = useState('');
-  const [withdrawBank, setWithdrawBank] = useState('Commercial Bank PLC');
-  const [withdrawAccount, setWithdrawAccount] = useState('');
-  const [withdrawing, setWithdrawing] = useState(false);
+  const [transactions, setTransactions] = useState<any[]>([]);
 
   const fetchWalletData = async () => {
     try {
-      setLoading(true);
       const [walletRes, txRes, portfolioRes] = await Promise.all([
         walletService.getWalletDetails(),
         walletService.getTransactions(),
         portfolioService.getPortfolio()
       ]);
-
-      if (walletRes?.success) setWalletDetails(walletRes.data || walletRes);
-      if (txRes?.success) setTransactions(txRes.data || []);
-      if (portfolioRes?.success) setHoldings(portfolioRes.data?.holdings || []);
+      
+      if (walletRes.success) setWalletDetails(walletRes);
+      if (txRes.success) setTransactions(txRes.data);
+      if (portfolioRes.success) setHoldings(portfolioRes.data.holdings);
     } catch (error) {
       console.error('Failed to fetch wallet data:', error);
     } finally {
@@ -49,98 +39,69 @@ export const WalletOverviewScreen = () => {
     fetchWalletData();
   }, []);
 
-  const handleWithdraw = async () => {
-    const amt = parseFloat(withdrawAmount);
-    if (isNaN(amt) || amt <= 0) {
-      Alert.alert('Invalid Amount', 'Please enter a valid withdrawal amount in LKR.');
-      return;
-    }
-    if (!withdrawAccount.trim()) {
-      Alert.alert('Account Required', 'Please enter your Sri Lankan bank account number.');
-      return;
-    }
-
-    const available = walletDetails?.availableBalance || walletDetails?.availableBalanceLKR || 0;
-    if (amt > available) {
-      Alert.alert('Insufficient Balance', `You have LKR ${available.toLocaleString()} available to withdraw.`);
-      return;
-    }
-
-    try {
-      setWithdrawing(true);
-      const res = await walletService.withdrawMoney({
-        amount: amt,
-        bankName: withdrawBank,
-        accountNumber: withdrawAccount,
-      });
-
-      if (res?.success) {
-        setIsWithdrawVisible(false);
-        setWithdrawAmount('');
-        setWithdrawAccount('');
-        Alert.alert('Withdrawal Submitted', `Your withdrawal request of LKR ${amt.toLocaleString()} via SLIPS/CEFT has been initiated.`);
-        fetchWalletData();
-      } else {
-        Alert.alert('Withdrawal Failed', res?.message || 'Could not process withdrawal.');
-      }
-    } catch (error: any) {
-      Alert.alert('Error', error.response?.data?.message || error.message || 'Withdrawal request failed.');
-    } finally {
-      setWithdrawing(false);
+  // Coin color mapping
+  const getCoinColor = (coin: string) => {
+    switch (coin.toUpperCase()) {
+      case 'BTC': return '#F7931A';
+      case 'ETH': return '#627EEA';
+      case 'SOL': return '#14F195';
+      case 'BNB': return '#F3BA2F';
+      case 'XRP': return '#23292F';
+      case 'ADA': return '#0033AD';
+      case 'DOGE': return '#C2A633';
+      default: return '#888888';
     }
   };
 
   // Build allocation legend dynamically
   const allocData: any[] = [];
-  const totalVal = (walletDetails?.balanceLKR || walletDetails?.totalPortfolioValue || 1000000);
-  
-  holdings.forEach((h, idx) => {
-    const pct = (((h.currentValue || (h.quantity * (h.currentPrice || h.averageBuyPrice))) / totalVal) * 100).toFixed(1);
-    allocData.push({
-      id: idx + 1,
-      name: `${h.symbol.split('.')[0]} Shares`,
-      percent: `${pct}%`,
-      color: stockColors[idx % stockColors.length],
+  if (walletDetails) {
+    const totalVal = walletDetails.balanceLKR || 1.0; // avoid division by zero
+    
+    // Add active holdings
+    holdings.forEach((h, idx) => {
+      const pct = ((h.currentValue / totalVal) * 100).toFixed(1);
+      allocData.push({
+        id: idx + 1,
+        name: `${h.coin} Holding`,
+        percent: `${pct}%`,
+        color: getCoinColor(h.coin)
+      });
     });
-  });
 
-  const cashBalance = walletDetails?.availableBalance || walletDetails?.availableBalanceLKR || 0;
-  const cashPct = ((cashBalance / totalVal) * 100).toFixed(1);
-  allocData.push({
-    id: holdings.length + 1,
-    name: 'LKR Cash Balance',
-    percent: `${cashPct}%`,
-    color: colors.accent,
-  });
+    // Add LKR Fiat Cash
+    const cashPct = ((walletDetails.availableBalance / totalVal) * 100).toFixed(1);
+    allocData.push({
+      id: holdings.length + 1,
+      name: 'LKR Fiat',
+      percent: `${cashPct}%`,
+      color: '#1A5BFF'
+    });
+  }
+
 
   return (
     <SafeAreaView style={styles.safeArea}>
       {loading ? (
-        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-          <ActivityIndicator size="large" color={colors.accent} />
-        </View>
+        <View style={{ flex: 1, justifyContent: 'center' }}><ActivityIndicator color={colors.accent} /></View>
       ) : (
         <ScrollView contentContainerStyle={styles.container}>
 
           {/* Header */}
           <View style={styles.header}>
-            <Text style={styles.headerTitle}>Account & Wallet</Text>
-            <TouchableOpacity onPress={fetchWalletData} style={styles.iconBtn}>
-              <MaterialIcons name="refresh" size={24} color={colors.accent} />
+            <Text style={styles.headerTitle}>Wallet</Text>
+            <TouchableOpacity style={styles.iconBtn}>
+              <MaterialIcons name="qr-code-scanner" size={24} color={colors.textPrimary} />
             </TouchableOpacity>
           </View>
 
           {/* Balance Card */}
           <Card style={styles.balanceCard}>
-            <Text style={styles.balanceLabel}>Total Asset Valuation (LKR)</Text>
-            <Text style={styles.balanceValue}>
-              LKR {totalVal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-            </Text>
+            <Text style={styles.balanceLabel}>Total Asset Value</Text>
+            <Text style={styles.balanceValue}>LKR {walletDetails ? walletDetails.balanceLKR.toLocaleString(undefined, { minimumFractionDigits: 2 }) : '1,000,000.00'}</Text>
             <View style={styles.walletBalanceContainer}>
-              <Text style={styles.walletBalanceLabel}>Available Trading Cash: </Text>
-              <Text style={styles.walletBalanceValue}>
-                LKR {cashBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              </Text>
+              <Text style={styles.walletBalanceLabel}>Available Cash: </Text>
+              <Text style={styles.walletBalanceValue}>LKR {walletDetails ? walletDetails.availableBalance.toLocaleString(undefined, { minimumFractionDigits: 2 }) : '1,000,000.00'}</Text>
             </View>
           </Card>
 
@@ -152,22 +113,17 @@ export const WalletOverviewScreen = () => {
               </View>
               <Text style={styles.actionText}>Deposit</Text>
             </TouchableOpacity>
-
-            <TouchableOpacity style={styles.actionBtn} onPress={() => setIsWithdrawVisible(true)}>
+            <TouchableOpacity style={styles.actionBtn}>
               <View style={styles.actionIconBgDark}>
                 <MaterialIcons name="arrow-upward" size={24} color={colors.accent} />
               </View>
               <Text style={styles.actionText}>Withdraw</Text>
             </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.actionBtn}
-              onPress={() => navigation.navigate('CurrencyConversion')}
-            >
+            <TouchableOpacity style={styles.actionBtn}>
               <View style={styles.actionIconBgDark}>
-                <MaterialIcons name="currency-exchange" size={24} color={colors.accent} />
+                <MaterialIcons name="swap-horiz" size={24} color={colors.accent} />
               </View>
-              <Text style={styles.actionText}>Forex Hub</Text>
+              <Text style={styles.actionText}>Transfer</Text>
             </TouchableOpacity>
           </View>
 
@@ -178,15 +134,21 @@ export const WalletOverviewScreen = () => {
             <Card style={styles.allocCard}>
               <View style={styles.chartLegendContainer}>
 
-                {/* Donut Chart Indicator */}
+                {/* Fake Donut Chart */}
                 <View style={styles.chartWrapper}>
-                  <Svg height="120" width="120" viewBox="0 0 140 140">
-                    <Circle cx="70" cy="70" r="50" stroke="#1E1E1E" strokeWidth="18" fill="transparent" />
-                    <Circle cx="70" cy="70" r="50" stroke={colors.accent} strokeWidth="18" fill="transparent" strokeDasharray="314" strokeDashoffset="100" transform="rotate(-90 70 70)" />
-                    <Circle cx="70" cy="70" r="50" stroke="#1A5BFF" strokeWidth="18" fill="transparent" strokeDasharray="314" strokeDashoffset="240" transform="rotate(30 70 70)" />
+                  <Svg height="140" width="140" viewBox="0 0 140 140">
+                    <Circle cx="70" cy="70" r="50" stroke="#161616" strokeWidth="20" fill="transparent" />
+                    {/* BTC */}
+                    <Circle cx="70" cy="70" r="50" stroke="#F7931A" strokeWidth="20" fill="transparent" strokeDasharray="314" strokeDashoffset="173" transform="rotate(-90 70 70)" />
+                    {/* ETH */}
+                    <Circle cx="70" cy="70" r="50" stroke="#627EEA" strokeWidth="20" fill="transparent" strokeDasharray="314" strokeDashoffset="220" transform="rotate(72 70 70)" />
+                    {/* SOL */}
+                    <Circle cx="70" cy="70" r="50" stroke="#14F195" strokeWidth="20" fill="transparent" strokeDasharray="314" strokeDashoffset="267" transform="rotate(180 70 70)" />
+                    {/* LKR */}
+                    <Circle cx="70" cy="70" r="50" stroke="#1A5BFF" strokeWidth="20" fill="transparent" strokeDasharray="314" strokeDashoffset="283" transform="rotate(234 70 70)" />
                   </Svg>
                   <View style={styles.chartCenter}>
-                    <Text style={styles.chartCenterTitle}>{holdings.length + 1}</Text>
+                    <Text style={styles.chartCenterTitle}>4</Text>
                     <Text style={styles.chartCenterSub}>Assets</Text>
                   </View>
                 </View>
@@ -208,149 +170,56 @@ export const WalletOverviewScreen = () => {
             </Card>
           </View>
 
-          {/* Active Holdings Table */}
+          {/* Recent History */}
           <View style={styles.historySection}>
-            <Text style={styles.sectionTitle}>Equities Portfolio Holdings</Text>
-            {holdings.length > 0 ? (
-              holdings.map((h, idx) => (
-                <View key={idx} style={styles.txRow}>
+            <View style={styles.sectionHeaderRow}>
+              <Text style={styles.sectionTitle}>Recent Transactions</Text>
+              <TouchableOpacity><Text style={styles.seeAllText}>View All</Text></TouchableOpacity>
+            </View>
+
+            {transactions.length > 0 ? (
+              transactions.map((tx) => (
+                <View key={tx.ID} style={styles.txRow}>
                   <View style={styles.txLeft}>
-                    <View style={[styles.txIconContainer, { backgroundColor: '#1A5BFF22' }]}>
-                      <FontAwesome5 name="chart-pie" size={16} color="#1A5BFF" />
+                    <View style={[styles.txIconContainer, tx.TYPE === 'DEPOSIT' || tx.TYPE === 'BUY' ? styles.txBgGreen : styles.txBgRed]}>
+                      <MaterialIcons
+                        name={tx.TYPE === 'DEPOSIT' || tx.TYPE === 'BUY' ? 'arrow-downward' : 'arrow-upward'}
+                        size={20}
+                        color={tx.TYPE === 'DEPOSIT' || tx.TYPE === 'BUY' ? colors.accent : colors.red}
+                      />
                     </View>
                     <View>
-                      <Text style={styles.txPair}>{h.symbol}</Text>
-                      <Text style={styles.txTime}>{h.quantity?.toLocaleString()} Shares · Avg Rs {h.averageBuyPrice?.toFixed(2)}</Text>
+                      <Text style={styles.txPair}>{tx.TYPE}</Text>
+                      <Text style={styles.txTime}>LKR Fiat</Text>
                     </View>
                   </View>
                   <View style={styles.txRight}>
-                    <Text style={styles.txAmount}>
-                      Rs {(h.currentValue || (h.quantity * (h.currentPrice || h.averageBuyPrice)))?.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                    <Text style={[styles.txAmount, tx.TYPE === 'DEPOSIT' || tx.TYPE === 'BUY' ? styles.txAmountGreen : styles.txAmountRed]}>
+                      {tx.TYPE === 'DEPOSIT' || tx.TYPE === 'BUY' ? '+' : '-'}LKR {tx.AMOUNT.toLocaleString()}
                     </Text>
-                    <Text style={[styles.holdingPLText, (h.unrealizedProfitLoss || 0) >= 0 ? { color: colors.accent } : { color: colors.red }]}>
-                      {(h.unrealizedProfitLoss || 0) >= 0 ? '+' : ''}Rs {(h.unrealizedProfitLoss || 0).toLocaleString()}
-                    </Text>
+                    <View style={[styles.statusBadge, tx.STATUS === 'COMPLETED' ? styles.statusCompleted : styles.statusPending]}>
+                      <Text style={[styles.statusText, tx.STATUS === 'COMPLETED' ? styles.statusTextCompleted : styles.statusTextPending]}>
+                        {tx.STATUS}
+                      </Text>
+                    </View>
                   </View>
                 </View>
               ))
             ) : (
-              <Text style={{ color: colors.textSecondary, fontSize: 12, marginVertical: 8 }}>
-                No active stock holdings yet. Use the Trading Terminal to buy CSE equities.
-              </Text>
+              <View style={styles.emptyTxContainer}>
+                <Text style={styles.emptyTxText}>No recent transactions</Text>
+              </View>
             )}
+            <View style={{ height: 80 }} />
           </View>
 
-          {/* Recent Transactions */}
-          <View style={styles.historySection}>
-            <View style={styles.sectionHeaderRow}>
-              <Text style={styles.sectionTitle}>Recent Transactions</Text>
-            </View>
-
-            {transactions.length > 0 ? (
-              transactions.slice(0, 10).map((tx, idx) => {
-                const isCredit = tx.TYPE === 'DEPOSIT' || tx.TYPE === 'SELL' || tx.type === 'DEPOSIT' || tx.type === 'SELL';
-                const txType = tx.TYPE || tx.type || 'TRADE';
-                const txAmt = tx.AMOUNT || tx.amount || 0;
-                const txSymbol = tx.SYMBOL || tx.symbol || 'LKR Fiat';
-
-                return (
-                  <View key={idx} style={styles.txRow}>
-                    <View style={styles.txLeft}>
-                      <View style={[styles.txIconContainer, isCredit ? styles.txBgGreen : styles.txBgRed]}>
-                        <MaterialIcons
-                          name={isCredit ? 'arrow-downward' : 'arrow-upward'}
-                          size={18}
-                          color={isCredit ? colors.accent : colors.red}
-                        />
-                      </View>
-                      <View>
-                        <Text style={styles.txPair}>{txType} · {txSymbol}</Text>
-                        <Text style={styles.txTime}>{new Date(tx.CREATED_AT || tx.createdAt || Date.now()).toLocaleDateString()}</Text>
-                      </View>
-                    </View>
-                    <View style={styles.txRight}>
-                      <Text style={[styles.txAmount, isCredit ? styles.txAmountGreen : styles.txAmountRed]}>
-                        {isCredit ? '+' : '-'}LKR {Number(txAmt).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                      </Text>
-                      <View style={styles.statusCompleted}>
-                        <Text style={styles.statusCompletedText}>COMPLETED</Text>
-                      </View>
-                    </View>
-                  </View>
-                );
-              })
-            ) : (
-              <Text style={{ color: colors.textSecondary, fontSize: 12, marginVertical: 8 }}>
-                No transaction records found.
-              </Text>
-            )}
-          </View>
-
-          <View style={{ height: 60 }} />
         </ScrollView>
       )}
-
-      <DepositModal
-        visible={isDepositVisible}
-        onClose={() => setIsDepositVisible(false)}
-        onDepositSuccess={fetchWalletData}
+      <DepositModal 
+        isVisible={isDepositVisible} 
+        onClose={() => setIsDepositVisible(false)} 
+        onSuccess={fetchWalletData} 
       />
-
-      {/* Withdraw Modal */}
-      <Modal visible={isWithdrawVisible} transparent animationType="fade">
-        <View style={styles.modalBackdrop}>
-          <Card style={styles.withdrawModalCard}>
-            <Text style={styles.modalTitle}>Withdraw to Bank Account</Text>
-            <Text style={styles.modalSub}>SLIPS / CEFT Instant Interbank Transfer</Text>
-
-            <Text style={styles.inputLabel}>AMOUNT (LKR)</Text>
-            <TextInput
-              style={styles.modalInput}
-              value={withdrawAmount}
-              onChangeText={setWithdrawAmount}
-              placeholder="e.g. 50000"
-              placeholderTextColor={colors.textSecondary}
-              keyboardType="numeric"
-            />
-
-            <Text style={styles.inputLabel}>BENEFICIARY BANK</Text>
-            <TextInput
-              style={styles.modalInput}
-              value={withdrawBank}
-              onChangeText={setWithdrawBank}
-              placeholder="e.g. Commercial Bank / Sampath Bank"
-              placeholderTextColor={colors.textSecondary}
-            />
-
-            <Text style={styles.inputLabel}>ACCOUNT NUMBER</Text>
-            <TextInput
-              style={styles.modalInput}
-              value={withdrawAccount}
-              onChangeText={setWithdrawAccount}
-              placeholder="Bank Account Number"
-              placeholderTextColor={colors.textSecondary}
-              keyboardType="numeric"
-            />
-
-            <View style={styles.modalBtnRow}>
-              <TouchableOpacity
-                style={styles.cancelBtn}
-                onPress={() => setIsWithdrawVisible(false)}
-                disabled={withdrawing}
-              >
-                <Text style={styles.cancelBtnText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.confirmBtn}
-                onPress={handleWithdraw}
-                disabled={withdrawing}
-              >
-                <Text style={styles.confirmBtnText}>{withdrawing ? "Processing..." : "Withdraw Funds"}</Text>
-              </TouchableOpacity>
-            </View>
-          </Card>
-        </View>
-      </Modal>
     </SafeAreaView>
   );
 };
@@ -361,87 +230,104 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bg,
   },
   container: {
-    paddingHorizontal: 20,
-    paddingTop: 16,
+    paddingBottom: 40,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 20,
+    paddingHorizontal: 24,
+    paddingTop: 20,
+    marginBottom: 24,
   },
   headerTitle: {
-    ...typography.h3,
-    color: '#FFF',
+    ...typography.h1,
   },
   iconBtn: {
-    padding: 8,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: colors.bgInput,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   balanceCard: {
-    padding: 20,
-    marginBottom: 20,
+    marginHorizontal: 24,
+    marginBottom: 24,
+    backgroundColor: '#161616',
+    padding: 24,
   },
   balanceLabel: {
     ...typography.label,
-    color: colors.textSecondary,
     marginBottom: 8,
   },
   balanceValue: {
-    fontSize: 26,
-    fontWeight: '700',
-    color: '#FFF',
+    ...typography.price,
     marginBottom: 12,
   },
   walletBalanceContainer: {
     flexDirection: 'row',
     alignItems: 'center',
+    marginTop: 4,
   },
   walletBalanceLabel: {
-    fontSize: 12,
+    ...typography.bodySmall,
     color: colors.textSecondary,
+    fontSize: 13,
   },
   walletBalanceValue: {
-    fontSize: 12,
+    ...typography.bodySmall,
+    color: colors.textPrimary,
     fontWeight: '700',
+    fontSize: 13,
+  },
+  pnlPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.accentMuted,
+    alignSelf: 'flex-start',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+  },
+  pnlText: {
     color: colors.accent,
+    fontWeight: '600',
+    fontSize: 12,
+    marginLeft: 4,
   },
   actionRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 12,
-    marginBottom: 24,
+    justifyContent: 'space-around',
+    paddingHorizontal: 24,
+    marginBottom: 32,
   },
   actionBtn: {
-    flex: 1,
     alignItems: 'center',
   },
   actionIconBgDark: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: colors.bgCard,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: colors.bgInput,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  actionText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: colors.textPrimary,
-  },
-  allocSection: {
-    marginBottom: 24,
-  },
-  sectionTitle: {
-    ...typography.body,
-    fontWeight: '700',
-    color: '#FFF',
     marginBottom: 12,
   },
+  actionText: {
+    ...typography.bodySmall,
+    fontWeight: '600',
+  },
+  allocSection: {
+    paddingHorizontal: 24,
+    marginBottom: 32,
+  },
+  sectionTitle: {
+    ...typography.h3,
+    marginBottom: 16,
+  },
   allocCard: {
-    padding: 16,
+    padding: 24,
   },
   chartLegendContainer: {
     flexDirection: 'row',
@@ -449,31 +335,31 @@ const styles = StyleSheet.create({
   },
   chartWrapper: {
     position: 'relative',
-    justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 16,
+    justifyContent: 'center',
+    marginRight: 24,
   },
   chartCenter: {
     position: 'absolute',
     alignItems: 'center',
+    justifyContent: 'center',
   },
   chartCenterTitle: {
-    fontSize: 16,
-    fontWeight: '700',
+    ...typography.h2,
     color: '#FFF',
   },
   chartCenterSub: {
-    fontSize: 9,
-    color: colors.textSecondary,
+    ...typography.label,
+    fontSize: 10,
   },
   legendWrapper: {
     flex: 1,
-    gap: 8,
   },
   legendRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    marginBottom: 12,
   },
   legendLeft: {
     flexDirection: 'row',
@@ -486,27 +372,33 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   legendName: {
-    fontSize: 12,
-    color: colors.textPrimary,
+    ...typography.bodySmall,
+    color: colors.textSecondary,
   },
   legendPercent: {
-    fontSize: 12,
+    ...typography.bodySmall,
     fontWeight: '700',
     color: '#FFF',
   },
   historySection: {
-    marginBottom: 20,
+    paddingHorizontal: 24,
   },
   sectionHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    marginBottom: 16,
+  },
+  seeAllText: {
+    ...typography.bodySmall,
+    color: colors.accent,
+    fontWeight: '600',
   },
   txRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 12,
+    paddingVertical: 16,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
@@ -515,122 +407,55 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   txIconContainer: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
   },
-  txBgGreen: {
-    backgroundColor: colors.accentMuted,
-  },
-  txBgRed: {
-    backgroundColor: colors.red + '22',
-  },
+  txBgGreen: { backgroundColor: colors.accentMuted },
+  txBgRed: { backgroundColor: colors.red + '22' },
   txPair: {
     ...typography.body,
-    fontWeight: '600',
-    color: '#FFF',
-    fontSize: 13,
+    fontWeight: '700',
+    marginBottom: 4,
   },
   txTime: {
-    fontSize: 11,
+    ...typography.bodySmall,
+    fontSize: 12,
     color: colors.textSecondary,
-    marginTop: 2,
   },
   txRight: {
     alignItems: 'flex-end',
   },
   txAmount: {
-    fontSize: 13,
+    ...typography.body,
     fontWeight: '700',
-    color: '#FFF',
+    marginBottom: 6,
   },
-  txAmountGreen: {
-    color: colors.accent,
+  txAmountGreen: { color: colors.accent },
+  txAmountRed: { color: colors.red },
+  statusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
   },
-  txAmountRed: {
-    color: colors.red,
-  },
-  holdingPLText: {
-    fontSize: 10,
-    fontWeight: '600',
-    marginTop: 2,
-  },
-  statusCompleted: {
-    backgroundColor: colors.accentMuted,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-    marginTop: 4,
-  },
-  statusCompletedText: {
-    fontSize: 8,
-    fontWeight: '700',
-    color: colors.accent,
-  },
-  modalBackdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    justifyContent: 'center',
-    paddingHorizontal: 24,
-  },
-  withdrawModalCard: {
-    padding: 20,
-  },
-  modalTitle: {
-    ...typography.h3,
-    color: '#FFF',
-    marginBottom: 4,
-  },
-  modalSub: {
-    fontSize: 11,
-    color: colors.textSecondary,
-    marginBottom: 16,
-  },
-  inputLabel: {
+  statusCompleted: { backgroundColor: colors.accentMuted },
+  statusPending: { backgroundColor: colors.yellow + '33' },
+  statusText: {
+    ...typography.bodySmall,
     fontSize: 10,
     fontWeight: '700',
-    color: colors.textSecondary,
-    marginBottom: 4,
   },
-  modalInput: {
-    backgroundColor: colors.bgInput,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    color: '#FFF',
-    fontSize: 13,
-    borderWidth: 1,
-    borderColor: colors.border,
-    marginBottom: 12,
-  },
-  modalBtnRow: {
-    flexDirection: 'row',
-    gap: 10,
-    marginTop: 8,
-  },
-  cancelBtn: {
-    flex: 1,
-    backgroundColor: colors.bgInput,
-    paddingVertical: 12,
-    borderRadius: 10,
+  statusTextCompleted: { color: colors.accent },
+  statusTextPending: { color: colors.yellow },
+  emptyTxContainer: {
+    paddingVertical: 32,
     alignItems: 'center',
   },
-  cancelBtnText: {
+  emptyTxText: {
+    ...typography.bodySmall,
     color: colors.textSecondary,
-    fontWeight: '600',
-  },
-  confirmBtn: {
-    flex: 2,
-    backgroundColor: colors.accent,
-    paddingVertical: 12,
-    borderRadius: 10,
-    alignItems: 'center',
-  },
-  confirmBtnText: {
-    color: '#000',
-    fontWeight: '700',
   },
 });

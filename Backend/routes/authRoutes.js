@@ -3,7 +3,9 @@ const router = express.Router();
 const {
   login,
   register,
+  getUsers,
   verifyEmail,
+  verifyEmailToken,
   sendVerification,
   resendVerification,
   forgotPassword,
@@ -14,12 +16,13 @@ const {
 } = require('../controllers/authController');
 const { protect } = require('../middleware/authMiddleware');
 
-// Public Authentication Endpoints
 router.post('/register', register);
 router.post('/login', login);
 router.post('/google-login', googleLogin);
+router.get('/users', getUsers);
+router.get('/verify/:token', verifyEmailToken); // Legacy HTML verification support
 
-// Verification & Recovery Endpoints
+// New OTP & security endpoints
 router.post('/send-verification', sendVerification);
 router.post('/verify-email', verifyEmail);
 router.post('/resend-verification', resendVerification);
@@ -27,7 +30,7 @@ router.post('/forgot-password', forgotPassword);
 router.post('/verify-reset-otp', verifyResetOTP);
 router.post('/reset-password', resetPassword);
 
-// Authenticated Token Verification Endpoint
+// Token check endpoint
 router.get('/validate-token', protect, validateToken);
 
 module.exports = router;

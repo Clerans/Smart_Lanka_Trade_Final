@@ -1,9 +1,9 @@
 import * as React from 'react';
 const { useEffect, useState } = React;
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
-import { MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
+import { MaterialIcons } from '@expo/vector-icons';
 import Svg, { Path } from 'react-native-svg';
 import { colors, typography, layout } from '../../theme';
 import { Card } from '../../components';
@@ -29,163 +29,153 @@ const generateSparklinePath = (data: number[], width: number, height: number) =>
 export const HomeScreen = () => {
   const navigation = useNavigation<any>();
   const [watchlist, setWatchlist] = useState<any[]>([]);
-  const [forexRate, setForexRate] = useState<number>(310.50);
+  const [lkrPriceData, setLkrPriceData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [availableCash, setAvailableCash] = useState<number>(1000000);
-  const [totalPortfolioValue, setTotalPortfolioValue] = useState<number>(1000000);
-  const [unrealizedPL, setUnrealizedPL] = useState<number>(0);
-  const [todaysProfit, setTodaysProfit] = useState<number>(0);
-  const [pnlPercent, setPnlPercent] = useState<number>(0);
+  const [balance, setBalance] = useState<number | null>(null);
+  const [portfolioValue, setPortfolioValue] = useState<number | null>(null);
+  const [todaysProfit, setTodaysProfit] = useState<number | null>(null);
+  const [pnlPercent, setPnlPercent] = useState<number | null>(null);
   const [user, setUser] = useState<{ name: string } | null>(null);
   const [isAlertModalVisible, setIsAlertModalVisible] = useState(false);
-  const [selectedStockForAlert, setSelectedStockForAlert] = useState<string>('JKH.N0000');
-
-  const fetchData = async () => {
-    try {
-      setLoading(true);
-      const userData = await AsyncStorage.getItem('userData');
-      if (userData) {
-        setUser(JSON.parse(userData));
-      }
-
-      const [marketRes, portfolioRes, forexRes] = await Promise.all([
-        marketService.getMultiplePricesLKR(['JKH.N0000', 'COMB.N0000', 'SAMP.N0000', 'DIAL.N0000'], true),
-        portfolioService.getPortfolio(),
-        marketService.getForexRates()
-      ]);
-
-      if (marketRes?.success && marketRes.data?.prices) {
-        const formatted = marketRes.data.prices.map((p: any) => ({
-          symbol: p.symbol,
-          pair: `${p.symbol.split('.')[0]} / LKR`,
-          change: `${p.changePercent >= 0 ? '+' : ''}${p.changePercent?.toFixed(2)}%`,
-          price: `Rs ${p.priceLKR?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
-          color: p.changePercent >= 0 ? colors.accent : colors.red,
-          path: generateSparklinePath(p.sparkline || [p.priceLKR * 0.98, p.priceLKR * 0.99, p.priceLKR, p.priceLKR * 1.01], 100, 40)
-        }));
-        setWatchlist(formatted);
-      }
-
-      if (portfolioRes?.success && portfolioRes.data?.summary) {
-        const s = portfolioRes.data.summary;
-        setAvailableCash(s.availableCash);
-        setTotalPortfolioValue(s.totalPortfolioValue);
-        setUnrealizedPL(s.unrealizedProfitLoss);
-        setTodaysProfit(s.todaysProfit);
-        setPnlPercent(s.profitLossPercent);
-      }
-
-      if (forexRes?.success && forexRes.data?.rates?.USD_LKR) {
-        setForexRate(forexRes.data.rates.USD_LKR);
-      }
-    } catch (error) {
-      console.error('Failed to fetch home data:', error);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  };
 
   useEffect(() => {
+    const fetchData = async () => {
+      try {
+        // Load user info
+        const userData = await AsyncStorage.getItem('userData');
+        if (userData) {
+          setUser(JSON.parse(userData));
+        }
+
+        // Fetch watchlist prices with sparkline data
+        const marketResponse = await marketService.getMultiplePricesLKR(['BTCUSDT', 'ETHUSDT'], true);
+        
+        // Fetch portfolio summary
+        const portfolioResponse = await portfolioService.getPortfolio();
+        
+        if (marketResponse.success) {
+          const formatted = marketResponse.data.prices.map((p: any) => ({
+            pair: `${p.symbol.replace('USDT', '')}/LKR`,
+            change: `${p.changePercent >= 0 ? '+' : ''}${p.changePercent.toFixed(2)}%`,
+            price: p.priceLKR.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 }),
+            color: p.changePercent >= 0 ? colors.accent : colors.red,
+            path: generateSparklinePath(p.sparkline, 100, 40)
+          }));
+          setWatchlist(formatted);
+          setLkrPriceData(marketResponse.data);
+        }
+
+        if (portfolioResponse.success) {
+          const { summary } = portfolioResponse.data;
+          setBalance(summary.availableCash);
+          setPortfolioValue(summary.totalPortfolioValue);
+          setTodaysProfit(summary.todaysProfit);
+          setPnlPercent(summary.profitLossPercent);
+        }
+
+      } catch (error) {
+        console.error('Failed to fetch home data:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
     fetchData();
-    const interval = setInterval(fetchData, 20000);
+    const interval = setInterval(fetchData, 30000);
     return () => clearInterval(interval);
   }, []);
 
-  const onRefresh = () => {
-    setRefreshing(true);
-    fetchData();
-  };
-
   return (
     <SafeAreaView style={styles.safeArea}>
-      <ScrollView
-        contentContainerStyle={styles.container}
-        showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.accent} />}
-      >
+      <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
 
         {/* Header */}
         <View style={styles.header}>
           <View style={styles.headerLeft}>
-            <TouchableOpacity onPress={() => navigation.navigate('Profile')} style={styles.avatar}>
+            <View style={styles.avatar}>
               <MaterialIcons name="person" size={24} color={colors.accent} />
-            </TouchableOpacity>
+            </View>
             <View style={styles.headerTextContainer}>
               <Text style={styles.greetingText}>Ayubowan,</Text>
-              <Text style={styles.userName}>{user?.name || 'Investor'}</Text>
+              <Text style={styles.userName}>{user?.name || 'Friend'}</Text>
             </View>
           </View>
           <View style={styles.headerIcons}>
-            <TouchableOpacity style={styles.iconButton} onPress={() => navigation.navigate('Market')}>
+            <TouchableOpacity style={styles.iconButton}>
               <MaterialIcons name="search" size={24} color={colors.textPrimary} />
             </TouchableOpacity>
-            <TouchableOpacity style={styles.iconButton} onPress={() => navigation.navigate('AIAnalytics')}>
-              <FontAwesome5 name="robot" size={20} color={colors.accent} />
+            <TouchableOpacity style={styles.iconButton}>
+              <MaterialIcons name="notifications-none" size={24} color={colors.textPrimary} />
             </TouchableOpacity>
           </View>
         </View>
 
-        {/* Portfolio Net Worth Card */}
+        {/* Balance Card */}
         <Card style={styles.balanceCard}>
-          <Text style={styles.balanceLabel}>Est. Total Portfolio Value (LKR)</Text>
+          <Text style={styles.balanceLabel}>Est. Total Value</Text>
           <Text style={styles.balanceValue}>
-            LKR {totalPortfolioValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            LKR {portfolioValue !== null ? portfolioValue.toLocaleString(undefined, { minimumFractionDigits: 2 }) : '1,000,000.00'}
           </Text>
           <View style={styles.balanceFooterRow}>
             <View style={[
               styles.pnlPill,
-              unrealizedPL < 0 ? styles.pnlPillRed : styles.pnlPillGreen
+              todaysProfit !== null && todaysProfit < 0 ? styles.pnlPillRed : styles.pnlPillGreen
             ]}>
               <MaterialIcons 
-                name={unrealizedPL >= 0 ? "trending-up" : "trending-down"} 
+                name={todaysProfit !== null && todaysProfit >= 0 ? "trending-up" : "trending-down"} 
                 size={14} 
-                color={unrealizedPL >= 0 ? colors.accent : colors.red} 
+                color={todaysProfit !== null && todaysProfit >= 0 ? colors.accent : colors.red} 
               />
               <Text style={[
                 styles.pnlText,
-                unrealizedPL >= 0 ? { color: colors.accent } : { color: colors.red }
+                todaysProfit !== null && todaysProfit >= 0 ? { color: colors.accent } : { color: colors.red }
               ]}>
-                {unrealizedPL >= 0 ? '+' : ''}{pnlPercent.toFixed(2)}% (Rs {unrealizedPL.toLocaleString()})
+                {todaysProfit !== null && todaysProfit >= 0 ? '+' : ''}{pnlPercent !== null ? pnlPercent.toFixed(2) : '0.00'}% PNL
               </Text>
             </View>
             <View style={styles.walletBalanceContainer}>
-              <Text style={styles.walletBalanceLabel}>Available Cash: </Text>
-              <Text style={styles.walletBalanceValue}>LKR {availableCash.toLocaleString(undefined, { maximumFractionDigits: 0 })}</Text>
+              <Text style={styles.walletBalanceLabel}>Available: </Text>
+              <Text style={styles.walletBalanceValue}>LKR {balance !== null ? balance.toLocaleString(undefined, { maximumFractionDigits: 0 }) : '1,000,000'}</Text>
             </View>
           </View>
+          <MaterialIcons
+            name="account-balance-wallet"
+            size={60}
+            color={colors.border}
+            style={styles.walletWatermark}
+          />
         </Card>
 
-        {/* CBSL Benchmark Banner */}
-        <View style={{ marginHorizontal: 24, marginBottom: 16 }}>
-          <Text style={{ color: colors.textSecondary, fontSize: 12, textAlign: 'right' }}>
-            CBSL Official Forex Benchmark: 1 USD = <Text style={{ color: colors.accent, fontWeight: '700' }}>Rs {forexRate.toFixed(2)}</Text>
-          </Text>
-        </View>
+        {lkrPriceData && (
+          <View style={{ marginHorizontal: 24, marginBottom: 16 }}>
+            <Text style={{ color: colors.textSecondary, fontSize: 12, textAlign: 'right' }}>
+              Live Rate: 1 USDT = <Text style={{ color: colors.accent, fontWeight: '700' }}>Rs {lkrPriceData.usdToLkr.toFixed(2)}</Text>
+            </Text>
+          </View>
+        )}
 
         {/* Quick Actions */}
         <View style={styles.quickActionsRow}>
           <TouchableOpacity 
             style={[styles.actionCard, styles.actionCardActive]}
-            onPress={() => navigation.navigate('Market', { screen: 'TradingTerminal', params: { symbol: 'JKH.N0000' } })}
+            onPress={() => navigation.navigate('Wallet', { screen: 'CurrencyConversion' })}
           >
-            <MaterialIcons name="show-chart" size={24} color="#000" />
-            <Text style={styles.actionCardActiveText}>Trade Stocks</Text>
+            <MaterialIcons name="shopping-cart" size={24} color="#000" />
+            <Text style={styles.actionCardActiveText}>Buy</Text>
           </TouchableOpacity>
           <TouchableOpacity 
             style={styles.actionCard}
             onPress={() => navigation.navigate('Wallet', { screen: 'WalletOverview' })}
           >
-            <MaterialIcons name="account-balance-wallet" size={24} color={colors.accent} />
-            <Text style={styles.actionCardText}>Holdings</Text>
+            <MaterialIcons name="pie-chart-outline" size={24} color={colors.accent} />
+            <Text style={styles.actionCardText}>Portfolio</Text>
           </TouchableOpacity>
           <TouchableOpacity 
             style={styles.actionCard}
-            onPress={() => navigation.navigate('Wallet', { screen: 'CurrencyConversion' })}
+            onPress={() => navigation.navigate('Wallet', { screen: 'WalletOverview' })}
           >
-            <MaterialIcons name="currency-exchange" size={24} color={colors.accent} />
-            <Text style={styles.actionCardText}>Forex Hub</Text>
+            <MaterialIcons name="history" size={24} color={colors.accent} />
+            <Text style={styles.actionCardText}>History</Text>
           </TouchableOpacity>
         </View>
 
@@ -197,49 +187,44 @@ export const HomeScreen = () => {
               <View style={[styles.currencyIcon, { backgroundColor: '#1A5BFF', marginLeft: -12, zIndex: 1 }]}><Text style={styles.currencyIconText}>LKR</Text></View>
             </View>
             <View style={styles.rateInfoRow}>
-              <Text style={styles.ratePairTitle}>USD / LKR Spot</Text>
-              <Text style={styles.rateValue}>Rs {forexRate.toFixed(2)}</Text>
+              <Text style={styles.ratePairTitle}>USDT/LKR</Text>
+              {loading ? (
+                <ActivityIndicator size="small" color={colors.accent} />
+              ) : (
+                <Text style={styles.rateValue}>Rs {lkrPriceData?.usdToLkr?.toFixed(2) || '---'}</Text>
+              )}
             </View>
           </View>
           <TouchableOpacity 
             style={styles.alertBtn}
-            onPress={() => {
-              setSelectedStockForAlert('JKH.N0000');
-              setIsAlertModalVisible(true);
-            }}
+            onPress={() => setIsAlertModalVisible(true)}
           >
             <MaterialIcons name="notifications-active" size={14} color={colors.accent} />
-            <Text style={styles.alertBtnText}>Price Alert</Text>
+            <Text style={styles.alertBtnText}>Set Alert</Text>
           </TouchableOpacity>
         </Card>
 
         {/* Watchlist */}
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>CSE Featured Watchlist</Text>
+          <Text style={styles.sectionTitle}>Watchlist</Text>
           <TouchableOpacity onPress={() => navigation.navigate('Market')}>
-            <Text style={styles.seeAllText}>All Equities {'>'}</Text>
+            <Text style={styles.seeAllText}>See All {'>'}</Text>
           </TouchableOpacity>
         </View>
-
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.watchlistScroll}>
-          {loading && !refreshing ? (
+          {loading ? (
             <ActivityIndicator size="small" color={colors.accent} style={{ marginLeft: 24 }} />
           ) : (
             watchlist.map((item: any, index: number) => (
-              <TouchableOpacity
-                key={index}
-                onPress={() => navigation.navigate('Market', { screen: 'TradingTerminal', params: { symbol: item.symbol } })}
-              >
-                <Card style={styles.watchlistCard}>
-                  <Text style={styles.watchPair}>{item.pair} <Text style={{ color: item.color }}>{item.change}</Text></Text>
-                  <Text style={styles.watchPrice}>{item.price}</Text>
-                  <View style={styles.sparklineContainer}>
-                    <Svg height="40" width="100" viewBox="0 0 100 40">
-                      <Path d={item.path} fill="none" stroke={item.color} strokeWidth="2" />
-                    </Svg>
-                  </View>
-                </Card>
-              </TouchableOpacity>
+              <Card key={index} style={styles.watchlistCard}>
+                <Text style={styles.watchPair}>{item.pair} <Text style={{ color: item.color }}>{item.change}</Text></Text>
+                <Text style={styles.watchPrice}>{item.price}</Text>
+                <View style={styles.sparklineContainer}>
+                  <Svg height="50" width="100" viewBox="0 0 100 50">
+                    <Path d={item.path} fill="none" stroke={item.color} strokeWidth="2" />
+                  </Svg>
+                </View>
+              </Card>
             ))
           )}
           <View style={{ width: 24 }} />
@@ -247,7 +232,7 @@ export const HomeScreen = () => {
 
         {/* Market Trends */}
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>CSE Daily Top Movers</Text>
+          <Text style={styles.sectionTitle}>Market Trends</Text>
         </View>
         <Card style={styles.trendCard}>
           <View style={styles.trendHeader}>
@@ -256,25 +241,35 @@ export const HomeScreen = () => {
                 <MaterialIcons name="show-chart" size={16} color={colors.accent} />
               </View>
               <View>
-                <Text style={styles.trendTitle}>John Keells Holdings</Text>
-                <Text style={styles.trendSubtitle}>JKH.N0000 · Conglomerates</Text>
+                <Text style={styles.trendTitle}>Top Gainer</Text>
+                <Text style={styles.trendSubtitle}>SOL/LKR</Text>
               </View>
             </View>
             <View style={styles.trendHeaderRight}>
-              <Text style={styles.trendPrice}>Rs 205.50</Text>
-              <Text style={[styles.trendChange, { color: colors.accent }]}>+2.45%</Text>
+              <Text style={styles.trendPrice}>Rs 45,230</Text>
+              <Text style={styles.trendChange}>+8.45%</Text>
             </View>
+          </View>
+          <View style={styles.candlestickPlaceholder}>
+            {/* Fake Candlesticks using Views for demonstration */}
+            {[50, 60, 40, 70, 80, 50, 90, 110, 100, 130].map((h, i) => (
+              <View key={`candle-${i}`} style={styles.candleContainer}>
+                <View style={[styles.candleWick, { height: h + 20 }]} />
+                <View style={[styles.candleBody, { height: h, backgroundColor: i % 3 === 0 ? colors.textMuted : colors.textPrimary }]} />
+              </View>
+            ))}
           </View>
         </Card>
 
       </ScrollView>
-
-      <SetAlertModal
-        visible={isAlertModalVisible}
-        onClose={() => setIsAlertModalVisible(false)}
-        symbol={selectedStockForAlert}
-        currentPrice={205.50}
-      />
+      {lkrPriceData && (
+        <SetAlertModal
+          visible={isAlertModalVisible}
+          onClose={() => setIsAlertModalVisible(false)}
+          symbol="USDTUSDT" // We are setting alert for USDT in LKR
+          currentPrice={lkrPriceData.usdToLkr}
+        />
+      )}
     </SafeAreaView>
   );
 };
@@ -285,23 +280,23 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bg,
   },
   container: {
-    paddingTop: 16,
+    paddingTop: 20,
     paddingBottom: 40,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     paddingHorizontal: 24,
-    marginBottom: 20,
+    marginBottom: 24,
   },
   headerLeft: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   avatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     borderWidth: 1,
     borderColor: colors.accent,
     justifyContent: 'center',
@@ -311,45 +306,38 @@ const styles = StyleSheet.create({
   headerTextContainer: {},
   greetingText: {
     ...typography.label,
-    color: colors.textSecondary,
   },
   userName: {
     ...typography.h3,
-    color: '#FFF',
   },
   headerIcons: {
     flexDirection: 'row',
-    alignItems: 'center',
   },
   iconButton: {
-    marginLeft: 14,
+    marginLeft: 16,
     justifyContent: 'center',
-    alignItems: 'center',
   },
   balanceCard: {
     marginHorizontal: 24,
-    marginBottom: 16,
-    backgroundColor: '#161616',
-    padding: 20,
+    marginBottom: 20,
+    backgroundColor: '#161616',  // slightly distinct
+    padding: 24,
   },
   balanceLabel: {
     ...typography.label,
     marginBottom: 8,
-    color: colors.textSecondary,
   },
   balanceValue: {
-    fontSize: 26,
-    fontWeight: '700',
-    color: '#FFF',
-    marginBottom: 14,
+    ...typography.price,
+    marginBottom: 16,
   },
   pnlPill: {
     flexDirection: 'row',
     alignItems: 'center',
     alignSelf: 'flex-start',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
   },
   pnlPillGreen: {
     backgroundColor: colors.accentMuted,
@@ -358,8 +346,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.red + '22',
   },
   pnlText: {
-    fontWeight: '700',
-    fontSize: 11,
+    fontWeight: '600',
+    fontSize: 12,
     marginLeft: 4,
   },
   balanceFooterRow: {
@@ -372,52 +360,61 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   walletBalanceLabel: {
-    fontSize: 11,
+    ...typography.bodySmall,
     color: colors.textSecondary,
+    fontSize: 11,
   },
   walletBalanceValue: {
-    fontSize: 11,
+    ...typography.bodySmall,
+    color: colors.textPrimary,
     fontWeight: '700',
-    color: '#FFF',
+    fontSize: 11,
+  },
+  walletWatermark: {
+    position: 'absolute',
+    top: 20,
+    right: 20,
+    opacity: 0.1,
   },
   quickActionsRow: {
     flexDirection: 'row',
-    gap: 12,
+    justifyContent: 'space-between',
     paddingHorizontal: 24,
-    marginBottom: 16,
+    marginBottom: 24,
   },
   actionCard: {
     flex: 1,
     backgroundColor: colors.bgCard,
-    borderRadius: 14,
-    paddingVertical: 14,
+    borderRadius: layout.borderRadius,
     alignItems: 'center',
-    justifyContent: 'center',
+    paddingVertical: 16,
+    marginHorizontal: 4,
     borderWidth: 1,
     borderColor: colors.border,
   },
   actionCardActive: {
     backgroundColor: colors.accent,
+    borderColor: colors.accent,
   },
   actionCardText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: colors.textPrimary,
-    marginTop: 6,
+    ...typography.bodySmall,
+    marginTop: 8,
+    color: '#FFF',
+    fontWeight: '600',
   },
   actionCardActiveText: {
-    fontSize: 11,
-    fontWeight: '700',
+    ...typography.bodySmall,
+    marginTop: 8,
     color: '#000',
-    marginTop: 6,
+    fontWeight: '700',
   },
   rateBanner: {
-    marginHorizontal: 24,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 14,
-    marginBottom: 20,
+    marginHorizontal: 24,
+    marginBottom: 32,
+    padding: 16,
   },
   rateBannerLeft: {
     flexDirection: 'row',
@@ -425,7 +422,7 @@ const styles = StyleSheet.create({
   },
   iconStack: {
     flexDirection: 'row',
-    marginRight: 10,
+    marginRight: 12,
   },
   currencyIcon: {
     width: 28,
@@ -433,34 +430,39 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     justifyContent: 'center',
     alignItems: 'center',
+    borderWidth: 2,
+    borderColor: colors.bgCard,
   },
   currencyIconText: {
     fontSize: 8,
+    color: '#FFF',
+    fontWeight: '700',
+  },
+  rateInfoRow: {
+    justifyContent: 'center',
+  },
+  ratePairTitle: {
+    ...typography.bodySmall,
     fontWeight: '700',
     color: '#FFF',
-  },
-  rateInfoRow: {},
-  ratePairTitle: {
-    fontSize: 11,
-    color: colors.textSecondary,
   },
   rateValue: {
+    ...typography.label,
     fontSize: 14,
-    fontWeight: '700',
-    color: '#FFF',
   },
   alertBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.bgInput,
-    paddingHorizontal: 10,
+    borderWidth: 1,
+    borderColor: colors.accent,
+    paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 12,
+    borderRadius: 20,
   },
   alertBtnText: {
-    fontSize: 11,
     color: colors.accent,
-    fontWeight: '700',
+    fontSize: 12,
+    fontWeight: '600',
     marginLeft: 4,
   },
   sectionHeader: {
@@ -468,84 +470,100 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 24,
-    marginBottom: 12,
+    marginBottom: 16,
   },
   sectionTitle: {
-    ...typography.body,
-    fontWeight: '700',
-    color: '#FFF',
+    ...typography.h3,
   },
   seeAllText: {
-    fontSize: 12,
     color: colors.accent,
     fontWeight: '600',
   },
   watchlistScroll: {
     paddingLeft: 24,
-    marginBottom: 20,
+    marginBottom: 32,
   },
   watchlistCard: {
-    width: 140,
-    padding: 12,
-    marginRight: 12,
+    width: 160,
+    marginRight: 16,
+    padding: 16,
   },
   watchPair: {
-    fontSize: 11,
-    fontWeight: '600',
+    ...typography.bodySmall,
     color: colors.textSecondary,
-    marginBottom: 4,
+    fontWeight: '700',
+    marginBottom: 8,
   },
   watchPrice: {
-    fontSize: 13,
+    ...typography.body,
     fontWeight: '700',
-    color: '#FFF',
     marginBottom: 8,
   },
   sparklineContainer: {
-    height: 40,
-    justifyContent: 'center',
+    height: 50,
+    width: 100,
+    marginTop: 8,
   },
   trendCard: {
     marginHorizontal: 24,
-    padding: 16,
+    padding: 20,
   },
   trendHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    marginBottom: 20,
   },
   trendHeaderLeft: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   trendIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: colors.accentMuted,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 10,
+    marginRight: 12,
   },
   trendTitle: {
     ...typography.body,
     fontWeight: '700',
-    color: '#FFF',
   },
   trendSubtitle: {
-    fontSize: 11,
+    ...typography.bodySmall,
     color: colors.textSecondary,
   },
   trendHeaderRight: {
     alignItems: 'flex-end',
   },
   trendPrice: {
-    fontSize: 14,
+    ...typography.body,
     fontWeight: '700',
-    color: '#FFF',
   },
   trendChange: {
-    fontSize: 11,
+    ...typography.bodySmall,
+    color: colors.accent,
     fontWeight: '700',
+  },
+  candlestickPlaceholder: {
+    height: 150,
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'space-around',
+    paddingBottom: 20,
+  },
+  candleContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  candleWick: {
+    width: 2,
+    backgroundColor: colors.textSecondary,
+    position: 'absolute',
+  },
+  candleBody: {
+    width: 8,
+    borderRadius: 2,
   },
 });

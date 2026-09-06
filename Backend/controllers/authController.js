@@ -1,14 +1,6 @@
 const authService = require('../services/authService');
 const { validateEmail, validatePassword } = require('../utils/validator');
 
-// Extract client metadata for audit trails
-function getClientMeta(req) {
-  return {
-    ip: req.ip || req.headers['x-forwarded-for'] || req.socket.remoteAddress || '127.0.0.1',
-    userAgent: req.headers['user-agent'] || 'SmartLanka-App'
-  };
-}
-
 exports.register = async (req, res) => {
   try {
     const { name, email, password } = req.body;
@@ -25,7 +17,7 @@ exports.register = async (req, res) => {
       return res.status(422).json({
         success: false,
         code: 'INVALID_EMAIL',
-        message: 'Invalid email address format.'
+        message: 'Invalid email format.'
       });
     }
 
@@ -37,19 +29,18 @@ exports.register = async (req, res) => {
       });
     }
 
-    const result = await authService.registerUser(name, email, password, 'INVESTOR', getClientMeta(req));
-    
-    // Security Rule: NEVER expose or return OTP in API response
+    const result = await authService.registerUser(name, email, password);
     res.status(201).json({
       success: true,
-      message: 'Registration successful! A verification code has been sent to your email.',
-      userId: result.userId
+      message: 'Registration successful! Please check your email for the verification code.',
+      userId: result.userId,
+      otp: result.otp // Returned for development simulation/testing
     });
   } catch (err) {
     res.status(err.status || 500).json({
       success: false,
       code: err.code || 'SERVER_ERROR',
-      message: err.message || 'An error occurred during registration.'
+      message: err.message
     });
   }
 };
@@ -65,7 +56,7 @@ exports.login = async (req, res) => {
       });
     }
 
-    const data = await authService.loginUser(email, password, getClientMeta(req));
+    const data = await authService.loginUser(email, password);
     res.json({
       success: true,
       token: data.token,
@@ -75,7 +66,7 @@ exports.login = async (req, res) => {
     res.status(err.status || 500).json({
       success: false,
       code: err.code || 'SERVER_ERROR',
-      message: err.message || 'An error occurred during login.'
+      message: err.message
     });
   }
 };
@@ -87,11 +78,11 @@ exports.verifyEmail = async (req, res) => {
       return res.status(422).json({
         success: false,
         code: 'MISSING_FIELDS',
-        message: 'Email and OTP verification code are required.'
+        message: 'Email and OTP code are required.'
       });
     }
 
-    const result = await authService.verifyEmailOTP(email, otp, getClientMeta(req));
+    const result = await authService.verifyEmailOTP(email, otp);
     res.json({
       success: true,
       message: result.message
@@ -100,8 +91,18 @@ exports.verifyEmail = async (req, res) => {
     res.status(err.status || 500).json({
       success: false,
       code: err.code || 'SERVER_ERROR',
-      message: err.message || 'Verification failed.'
+      message: err.message
     });
+  }
+};
+
+exports.verifyEmailToken = async (req, res) => {
+  try {
+    const { token } = req.params;
+    const result = await authService.verifyEmailToken(token);
+    res.send(`<h1>Verification Successful</h1><p>${result.message}</p>`);
+  } catch (err) {
+    res.status(err.status || 400).send(`<h1>Verification Failed</h1><p>${err.message}</p>`);
   }
 };
 
@@ -116,16 +117,17 @@ exports.sendVerification = async (req, res) => {
       });
     }
 
-    const result = await authService.resendVerificationOTP(email, getClientMeta(req));
+    const result = await authService.sendVerificationOTP(email);
     res.json({
       success: true,
-      message: result.message
+      message: 'Verification OTP sent successfully.',
+      otp: result.otp
     });
   } catch (err) {
     res.status(err.status || 500).json({
       success: false,
       code: err.code || 'SERVER_ERROR',
-      message: err.message || 'Failed to send verification code.'
+      message: err.message
     });
   }
 };
@@ -141,16 +143,17 @@ exports.resendVerification = async (req, res) => {
       });
     }
 
-    const result = await authService.resendVerificationOTP(email, getClientMeta(req));
+    const result = await authService.resendVerificationOTP(email);
     res.json({
       success: true,
-      message: result.message
+      message: 'Verification OTP resent successfully.',
+      otp: result.otp
     });
   } catch (err) {
     res.status(err.status || 500).json({
       success: false,
       code: err.code || 'SERVER_ERROR',
-      message: err.message || 'Failed to resend verification code.'
+      message: err.message
     });
   }
 };
@@ -166,16 +169,17 @@ exports.forgotPassword = async (req, res) => {
       });
     }
 
-    const result = await authService.forgotPassword(email, getClientMeta(req));
+    const result = await authService.forgotPassword(email);
     res.json({
       success: true,
-      message: result.message
+      message: 'Password reset OTP sent successfully.',
+      otp: result.otp
     });
   } catch (err) {
     res.status(err.status || 500).json({
       success: false,
       code: err.code || 'SERVER_ERROR',
-      message: err.message || 'Failed to process forgot password request.'
+      message: err.message
     });
   }
 };
@@ -200,7 +204,7 @@ exports.verifyResetOTP = async (req, res) => {
     res.status(err.status || 500).json({
       success: false,
       code: err.code || 'SERVER_ERROR',
-      message: err.message || 'Invalid code.'
+      message: err.message
     });
   }
 };
@@ -216,7 +220,7 @@ exports.resetPassword = async (req, res) => {
       });
     }
 
-    const result = await authService.resetPassword(email, otp, password, getClientMeta(req));
+    const result = await authService.resetPassword(email, otp, password);
     res.json({
       success: true,
       message: result.message
@@ -225,7 +229,7 @@ exports.resetPassword = async (req, res) => {
     res.status(err.status || 500).json({
       success: false,
       code: err.code || 'SERVER_ERROR',
-      message: err.message || 'Password reset failed.'
+      message: err.message
     });
   }
 };
@@ -237,18 +241,32 @@ exports.validateToken = async (req, res) => {
   });
 };
 
+exports.getUsers = async (req, res) => {
+  try {
+    const userModel = require('../models/userModel');
+    const users = await userModel.findAllUsers();
+    res.json(users);
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      code: 'SERVER_ERROR',
+      message: err.message
+    });
+  }
+};
+
 exports.googleLogin = async (req, res) => {
   try {
-    const { idToken, email, name } = req.body;
-    if (!email) {
+    const { email, name } = req.body;
+    if (!email || !name) {
       return res.status(422).json({
         success: false,
         code: 'MISSING_FIELDS',
-        message: 'Google authentication details are required.'
+        message: 'Email and Name are required.'
       });
     }
 
-    const data = await authService.googleLoginUser(idToken, email, name, getClientMeta(req));
+    const data = await authService.googleLoginUser(email, name);
     res.json({
       success: true,
       token: data.token,
@@ -258,7 +276,7 @@ exports.googleLogin = async (req, res) => {
     res.status(err.status || 500).json({
       success: false,
       code: err.code || 'SERVER_ERROR',
-      message: err.message || 'Google authentication failed.'
+      message: err.message
     });
   }
 };

@@ -1,15 +1,8 @@
 const tradeService = require('../services/tradeService');
 
-function getClientMeta(req) {
-  return {
-    ip: req.ip || req.headers['x-forwarded-for'] || req.socket.remoteAddress || '127.0.0.1',
-    userAgent: req.headers['user-agent'] || 'SmartLanka-App'
-  };
-}
-
 const buyOrder = async (req, res) => {
   try {
-    const { symbol, amountLKR, quantity } = req.body;
+    const { symbol, amountLKR } = req.body;
     const userId = req.user.id;
 
     if (!symbol) {
@@ -20,18 +13,18 @@ const buyOrder = async (req, res) => {
       });
     }
 
-    if ((amountLKR === undefined || amountLKR === null || parseFloat(amountLKR) <= 0) &&
-        (quantity === undefined || quantity === null || parseFloat(quantity) <= 0)) {
+    if (amountLKR === undefined || amountLKR === null || parseFloat(amountLKR) <= 0) {
       return res.status(422).json({
         success: false,
         code: 'INVALID_AMOUNT',
-        message: 'Please provide a valid purchase amount in LKR or share quantity.'
+        message: 'Purchase amount must be greater than zero.'
       });
     }
 
-    const result = await tradeService.executeBuyOrder(userId, symbol, amountLKR, quantity, getClientMeta(req));
+    const result = await tradeService.executeBuyOrder(userId, symbol, amountLKR);
     res.json(result);
   } catch (err) {
+    console.error('Buy Order Error:', err.message);
     res.status(err.status || 500).json({
       success: false,
       code: err.code || 'SERVER_ERROR',
@@ -56,14 +49,15 @@ const sellOrder = async (req, res) => {
     if (quantity === undefined || quantity === null || parseFloat(quantity) <= 0) {
       return res.status(422).json({
         success: false,
-        code: 'INVALID_QUANTITY',
+        code: 'INVALID_AMOUNT',
         message: 'Sell quantity must be greater than zero.'
       });
     }
 
-    const result = await tradeService.executeSellOrder(userId, symbol, quantity, getClientMeta(req));
+    const result = await tradeService.executeSellOrder(userId, symbol, quantity);
     res.json(result);
   } catch (err) {
+    console.error('Sell Order Error:', err.message);
     res.status(err.status || 500).json({
       success: false,
       code: err.code || 'SERVER_ERROR',

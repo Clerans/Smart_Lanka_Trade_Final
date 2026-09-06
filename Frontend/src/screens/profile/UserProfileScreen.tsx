@@ -7,27 +7,26 @@ import { useNavigation } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { colors, typography, layout } from '../../theme';
 import { Card } from '../../components';
-import { authService, kycService } from '../../services/apiService';
+import { authService } from '../../services/apiService';
+
+const menuItems = [
+  { id: '1', title: 'Security & Privacy', icon: 'security' },
+  { id: '2', title: 'Payment Methods', icon: 'payment' },
+  { id: '3', title: 'Trading Limits & Fees', icon: 'assessment' },
+  { id: '4', title: 'Connected Devices', icon: 'devices' },
+  { id: '5', title: 'Help & Support', icon: 'help-outline' },
+  { id: '6', title: 'About SmartLanka', icon: 'info-outline' },
+];
 
 export const UserProfileScreen = () => {
   const navigation = useNavigation<any>();
-  const [user, setUser] = useState<{ name: string; email: string; role?: string; kyc_status?: string } | null>(null);
-  const [biometricEnabled, setBiometricEnabled] = useState(true);
-  const [pushEnabled, setPushEnabled] = useState(true);
+  const [user, setUser] = useState<{ name: string; email: string } | null>(null);
 
   useEffect(() => {
     const loadUser = async () => {
       const userData = await AsyncStorage.getItem('userData');
       if (userData) {
         setUser(JSON.parse(userData));
-      }
-      try {
-        const kycRes = await kycService.getKycStatus();
-        if (kycRes?.success && kycRes.data) {
-          setUser(prev => prev ? { ...prev, kyc_status: kycRes.data.status } : null);
-        }
-      } catch (err) {
-        // ignore
       }
     };
     loadUser();
@@ -49,48 +48,14 @@ export const UserProfileScreen = () => {
       }
     ]);
   };
-
-  const menuItems = [
-    {
-      id: '1',
-      title: 'KYC Identity Verification',
-      icon: 'verified-user',
-      onPress: () => navigation.navigate('KYCVerification'),
-    },
-    {
-      id: '2',
-      title: 'Security & 2FA Settings',
-      icon: 'security',
-      onPress: () => navigation.navigate('SecuritySettings'),
-    },
-    {
-      id: '3',
-      title: 'SOMI AI Financial Helpdesk',
-      icon: 'support-agent',
-      onPress: () => navigation.navigate('SOMIAIChat'),
-    },
-    {
-      id: '4',
-      title: 'Trading Limits & SEC Compliance',
-      icon: 'assessment',
-      onPress: () => Alert.alert('SEC Sri Lanka Compliance', 'Your account operates under standard CSE/SEC tier retail equity trading limits (LKR 5,000,000 / day).'),
-    },
-    {
-      id: '5',
-      title: 'About SmartLanka Trade',
-      icon: 'info-outline',
-      onPress: () => Alert.alert('SmartLanka Trade v2.4.0', 'Horizon Campus IT41028 Capstone Project.\nReal-Time LKR Stock Trading with Quantitative Machine Learning Intelligence.'),
-    },
-  ];
-
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView contentContainerStyle={styles.container}>
 
         {/* Header */}
         <View style={styles.header}>
-          <Text style={styles.headerTitle}>Account Profile</Text>
-          <TouchableOpacity onPress={() => navigation.navigate('SecuritySettings')} style={styles.iconBtn}>
+          <Text style={styles.headerTitle}>Profile</Text>
+          <TouchableOpacity style={styles.iconBtn}>
             <MaterialIcons name="settings" size={24} color={colors.textPrimary} />
           </TouchableOpacity>
         </View>
@@ -102,15 +67,16 @@ export const UserProfileScreen = () => {
               <MaterialIcons name="person" size={40} color={colors.accent} />
             </View>
             <View style={styles.userDetails}>
-              <Text style={styles.userName}>{user?.name || 'SmartLanka Trader'}</Text>
-              <Text style={styles.userEmail}>{user?.email || 'trader@smartlanka.lk'}</Text>
+              <Text style={styles.userName}>{user?.name || 'Loading...'}</Text>
+              <Text style={styles.userEmail}>{user?.email || '---'}</Text>
               <View style={styles.tierBadge}>
                 <MaterialIcons name="verified" size={14} color={colors.accent} />
-                <Text style={styles.tierText}>
-                  {user?.kyc_status === 'VERIFIED' ? 'NIC KYC Verified' : 'Standard Investor'}
-                </Text>
+                <Text style={styles.tierText}>Tier 2 Verified</Text>
               </View>
             </View>
+            <TouchableOpacity style={styles.editBtn}>
+              <MaterialIcons name="edit" size={20} color={colors.textSecondary} />
+            </TouchableOpacity>
           </View>
         </Card>
 
@@ -119,28 +85,28 @@ export const UserProfileScreen = () => {
           <View style={styles.prefRow}>
             <View style={styles.prefLeft}>
               <MaterialIcons name="fingerprint" size={24} color={colors.textSecondary} style={styles.prefIcon} />
-              <Text style={styles.prefText}>Biometric Authentication</Text>
+              <Text style={styles.prefText}>Biometric Login</Text>
             </View>
             <Switch
               trackColor={{ false: colors.bgInput, true: colors.accent }}
               thumbColor={'#FFF'}
               ios_backgroundColor="#3e3e3e"
-              value={biometricEnabled}
-              onValueChange={setBiometricEnabled}
+              value={true}
+              onValueChange={() => { }}
             />
           </View>
           <View style={styles.divider} />
           <View style={styles.prefRow}>
             <View style={styles.prefLeft}>
               <MaterialIcons name="notifications-active" size={24} color={colors.textSecondary} style={styles.prefIcon} />
-              <Text style={styles.prefText}>CSE Market Price Alerts</Text>
+              <Text style={styles.prefText}>Push Notifications</Text>
             </View>
             <Switch
               trackColor={{ false: colors.bgInput, true: colors.accent }}
               thumbColor={'#FFF'}
               ios_backgroundColor="#3e3e3e"
-              value={pushEnabled}
-              onValueChange={setPushEnabled}
+              value={true}
+              onValueChange={() => { }}
             />
           </View>
         </View>
@@ -148,7 +114,7 @@ export const UserProfileScreen = () => {
         {/* Menu List */}
         <View style={styles.menuSection}>
           {menuItems.map((item) => (
-            <TouchableOpacity key={item.id} style={styles.menuItem} onPress={item.onPress}>
+            <TouchableOpacity key={item.id} style={styles.menuItem}>
               <View style={styles.menuLeft}>
                 <View style={styles.menuIconBg}>
                   <MaterialIcons name={item.icon as any} size={20} color={colors.textPrimary} />
@@ -186,37 +152,35 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 24,
-    paddingTop: 16,
-    marginBottom: 20,
+    paddingTop: 20,
+    marginBottom: 24,
   },
   headerTitle: {
     ...typography.h1,
-    color: '#FFF',
   },
   iconBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     backgroundColor: colors.bgInput,
     justifyContent: 'center',
     alignItems: 'center',
   },
   userCard: {
     marginHorizontal: 24,
-    marginBottom: 24,
+    marginBottom: 32,
     backgroundColor: '#161616',
     borderWidth: 1,
     borderColor: colors.border,
-    padding: 18,
   },
   userInfoRow: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   avatarLarge: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    width: 64,
+    height: 64,
+    borderRadius: 32,
     borderWidth: 2,
     borderColor: colors.accent,
     justifyContent: 'center',
@@ -228,107 +192,105 @@ const styles = StyleSheet.create({
   },
   userName: {
     ...typography.h3,
-    color: '#FFF',
-    marginBottom: 2,
+    marginBottom: 4,
   },
   userEmail: {
     ...typography.bodySmall,
     color: colors.textSecondary,
-    marginBottom: 6,
+    marginBottom: 8,
   },
   tierBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.accentMuted,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 8,
     alignSelf: 'flex-start',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 16,
   },
   tierText: {
-    fontSize: 10,
-    fontWeight: '700',
+    ...typography.label,
     color: colors.accent,
     marginLeft: 4,
+  },
+  editBtn: {
+    padding: 8,
   },
   preferencesSection: {
     marginHorizontal: 24,
     backgroundColor: colors.bgCard,
-    borderRadius: 16,
-    paddingHorizontal: 16,
-    marginBottom: 24,
-    borderWidth: 1,
-    borderColor: colors.border,
+    borderRadius: layout.borderRadius,
+    marginBottom: 32,
+    padding: 8,
   },
   prefRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
   },
   prefLeft: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   prefIcon: {
-    marginRight: 12,
+    marginRight: 16,
   },
   prefText: {
     ...typography.body,
-    color: colors.textPrimary,
+    fontWeight: '600',
   },
   divider: {
     height: 1,
     backgroundColor: colors.border,
+    marginHorizontal: 16,
   },
   menuSection: {
-    marginHorizontal: 24,
-    marginBottom: 24,
+    paddingHorizontal: 24,
+    marginBottom: 40,
   },
   menuItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: colors.bgCard,
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    borderRadius: 14,
-    marginBottom: 10,
-    borderWidth: 1,
-    borderColor: colors.border,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
   },
   menuLeft: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   menuIconBg: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: colors.bgInput,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
+    marginRight: 16,
   },
   menuTitle: {
     ...typography.body,
-    color: colors.textPrimary,
+    fontWeight: '600',
   },
   logoutBtn: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
     marginHorizontal: 24,
-    paddingVertical: 14,
-    borderRadius: 14,
-    backgroundColor: colors.red + '22',
+    paddingVertical: 16,
+    borderRadius: layout.borderRadiusPill,
+    borderWidth: 1,
+    borderColor: colors.red,
   },
   logoutIcon: {
     marginRight: 8,
   },
   logoutText: {
     ...typography.body,
-    fontWeight: '700',
     color: colors.red,
+    fontWeight: '700',
   },
 });

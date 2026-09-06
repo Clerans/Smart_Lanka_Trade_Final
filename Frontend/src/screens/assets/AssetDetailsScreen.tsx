@@ -1,64 +1,16 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions, ActivityIndicator } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation, useRoute } from '@react-navigation/native';
+import { useNavigation } from '@react-navigation/native';
 import { MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
 import { colors, typography, layout } from '../../theme';
 import { PrimaryButton, Card } from '../../components';
-import { marketService, aiService } from '../../services/apiService';
 
-const cseMetadata: Record<string, { name: string; sector: string }> = {
-  'JKH.N0000': { name: 'John Keells Holdings PLC', sector: 'Conglomerates' },
-  'COMB.N0000': { name: 'Commercial Bank of Ceylon PLC', sector: 'Banking' },
-  'SAMP.N0000': { name: 'Sampath Bank PLC', sector: 'Banking' },
-  'HNB.N0000': { name: 'Hatton National Bank PLC', sector: 'Banking' },
-  'DIAL.N0000': { name: 'Dialog Axiata PLC', sector: 'Telecom & Technology' },
-  'CTC.N0000': { name: 'Ceylon Tobacco Company PLC', sector: 'Beverage & Tobacco' },
-  'LOLC.N0000': { name: 'LOLC Holdings PLC', sector: 'Diversified Financials' },
-  'MELS.N0000': { name: 'Melstacorp PLC', sector: 'Conglomerates' },
-  'BIL.N0000': { name: 'Browns Investments PLC', sector: 'Investments' },
-  'DIST.N0000': { name: 'Distilleries Company of Sri Lanka PLC', sector: 'Beverages' },
-  'HAYL.N0000': { name: 'Hayleys PLC', sector: 'Conglomerates' },
-  'CARG.N0000': { name: 'Cargills (Ceylon) PLC', sector: 'Food & Staples Retailing' },
-};
+const { width } = Dimensions.get('window');
 
 export const AssetDetailsScreen = () => {
   const navigation = useNavigation<any>();
-  const route = useRoute<any>();
-  const symbol = route.params?.symbol || 'JKH.N0000';
-
   const [activeTab, setActiveTab] = useState('1D');
-  const [quote, setQuote] = useState<any>(null);
-  const [prediction, setPrediction] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
-
-  const company = cseMetadata[symbol] || {
-    name: symbol,
-    sector: 'Colombo Stock Exchange',
-  };
-
-  useEffect(() => {
-    const loadDetails = async () => {
-      try {
-        setLoading(true);
-        const [quoteRes, predRes] = await Promise.all([
-          marketService.getPriceLKR(symbol),
-          aiService.getPrediction(symbol)
-        ]);
-
-        if (quoteRes?.success) setQuote(quoteRes.data);
-        if (predRes?.success) setPrediction(predRes.data);
-      } catch (error) {
-        console.error('Failed to load asset details:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadDetails();
-  }, [symbol]);
-
-  const isPositive = (quote?.changePercent || 0) >= 0;
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -70,128 +22,120 @@ export const AssetDetailsScreen = () => {
             <MaterialIcons name="arrow-back" size={24} color="#FFF" />
           </TouchableOpacity>
           <View style={styles.headerTitles}>
-            <Text style={styles.headerTitle}>{symbol}</Text>
-            <Text style={styles.headerSubtitle}>{company.name.toUpperCase()}</Text>
+            <Text style={styles.headerTitle}>BTC / LKR</Text>
+            <Text style={styles.headerSubtitle}>BITCOIN / SRI LANKAN RUPEE</Text>
           </View>
           <View style={styles.headerIcons}>
             <TouchableOpacity style={styles.iconBtn}>
               <MaterialIcons name="star-outline" size={24} color={colors.textPrimary} />
             </TouchableOpacity>
+            <TouchableOpacity style={styles.iconBtn}>
+              <MaterialIcons name="share" size={24} color={colors.textPrimary} />
+            </TouchableOpacity>
           </View>
         </View>
 
-        {loading ? (
-          <View style={{ paddingVertical: 80, alignItems: 'center' }}>
-            <ActivityIndicator size="large" color={colors.accent} />
+        {/* Price Display */}
+        <View style={styles.priceSection}>
+          <Text style={styles.priceValue}>18,450,200 LKR</Text>
+          <View style={styles.changePill}>
+            <MaterialIcons name="arrow-upward" size={16} color={colors.accent} />
+            <Text style={styles.changeText}>+2.41% Last 24h</Text>
           </View>
-        ) : (
-          <>
-            {/* Price Display */}
-            <View style={styles.priceSection}>
-              <Text style={styles.priceValue}>Rs {quote?.priceLKR?.toFixed(2) || '205.50'}</Text>
-              <View style={[styles.changePill, isPositive ? styles.changePositiveBg : styles.changeNegativeBg]}>
-                <MaterialIcons name={isPositive ? "arrow-upward" : "arrow-downward"} size={16} color={isPositive ? colors.accent : colors.red} />
-                <Text style={[styles.changeText, { color: isPositive ? colors.accent : colors.red }]}>
-                  {isPositive ? '+' : ''}{quote?.changePercent?.toFixed(2) || '0.00'}% (Last 24h)
-                </Text>
+        </View>
+
+        {/* Time Tabs */}
+        <View style={styles.timeTabs}>
+          {['1D', '1W', '1M', '1Y', 'ALL'].map(tab => (
+            <TouchableOpacity
+              key={tab}
+              style={[styles.timeTabBtn, activeTab === tab && styles.timeTabActive]}
+              onPress={() => setActiveTab(tab)}
+            >
+              <Text style={[styles.timeTabText, activeTab === tab && styles.timeTabTextActive]}>{tab}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        {/* Fake Candlestick Chart Area */}
+        <View style={styles.chartArea}>
+          {/* Simple visual representation of candles */}
+          {[60, 45, 80, 50, 95, 110, 85, 120, 100, 140, 130, 160].map((h, i) => {
+            const isGreen = i % 2 !== 0 && i > 0;
+            return (
+              <View key={i} style={styles.candleContainer}>
+                <View style={[styles.candleWick, { height: h + 30 }]} />
+                <View style={[styles.candleBody, { height: h, backgroundColor: isGreen ? colors.accent : colors.red }]} />
+              </View>
+            );
+          })}
+        </View>
+
+        {/* Stats Grid */}
+        <View style={styles.statsGrid}>
+          <View style={styles.statBox}>
+            <Text style={styles.statLabel}>24H HIGH</Text>
+            <Text style={styles.statValue}>18,620,000</Text>
+          </View>
+          <View style={styles.statBox}>
+            <Text style={styles.statLabel}>24H LOW</Text>
+            <Text style={styles.statValue}>17,980,500</Text>
+          </View>
+          <View style={styles.statBox}>
+            <Text style={styles.statLabel}>24H VOLUME</Text>
+            <Text style={styles.statValue}>4.2k BTC</Text>
+          </View>
+          <View style={styles.statBox}>
+            <Text style={styles.statLabel}>MARKET CAP</Text>
+            <Text style={styles.statValue}>1.2T LKR</Text>
+          </View>
+        </View>
+
+        {/* AI Insight Card */}
+        <Card style={styles.aiCard}>
+          <View style={styles.aiHeaderRow}>
+            <View style={styles.aiPillGreen}><Text style={styles.aiPillGreenText}>AI INSIGHT</Text></View>
+            <View style={styles.aiPillOutline}><Text style={styles.aiPillOutlineText}>RISK: LOW</Text></View>
+            <View style={{ flex: 1 }} />
+            <FontAwesome5 name="sparkles" size={16} color={colors.accent} />
+          </View>
+
+          <View style={styles.aiContentRow}>
+            {/* Fake Circular Progress */}
+            <View style={styles.circularProgress}>
+              <View style={styles.circularInner}>
+                <Text style={styles.circularText}>70%</Text>
               </View>
             </View>
 
-            {/* Time Tabs */}
-            <View style={styles.timeTabs}>
-              {['1D', '1W', '1M', '1Y', 'ALL'].map(tab => (
-                <TouchableOpacity
-                  key={tab}
-                  style={[styles.timeTabBtn, activeTab === tab && styles.timeTabActive]}
-                  onPress={() => setActiveTab(tab)}
-                >
-                  <Text style={[styles.timeTabText, activeTab === tab && styles.timeTabTextActive]}>{tab}</Text>
-                </TouchableOpacity>
-              ))}
+            <View style={styles.aiContentText}>
+              <Text style={styles.aiAnalysisTitle}>Bullish Sentiment</Text>
+              <Text style={styles.aiAnalysisSubtitle}>Market indicators suggest a strong upward momentum.</Text>
             </View>
+          </View>
 
-            {/* Candlestick / Area Chart Representation */}
-            <View style={styles.chartArea}>
-              {[60, 45, 80, 50, 95, 110, 85, 120, 100, 140, 130, 160].map((h, i) => {
-                const isGreen = i % 2 !== 0 && i > 0;
-                return (
-                  <View key={i} style={styles.candleContainer}>
-                    <View style={[styles.candleWick, { height: h + 24 }]} />
-                    <View style={[styles.candleBody, { height: h, backgroundColor: isGreen ? colors.accent : colors.red }]} />
-                  </View>
-                );
-              })}
-            </View>
-
-            {/* Stats Grid */}
-            <View style={styles.statsGrid}>
-              <View style={styles.statBox}>
-                <Text style={styles.statLabel}>24H HIGH</Text>
-                <Text style={styles.statValue}>Rs {quote?.high24h?.toFixed(2) || (quote?.priceLKR * 1.02)?.toFixed(2)}</Text>
-              </View>
-              <View style={styles.statBox}>
-                <Text style={styles.statLabel}>24H LOW</Text>
-                <Text style={styles.statValue}>Rs {quote?.low24h?.toFixed(2) || (quote?.priceLKR * 0.98)?.toFixed(2)}</Text>
-              </View>
-              <View style={styles.statBox}>
-                <Text style={styles.statLabel}>VOLUME</Text>
-                <Text style={styles.statValue}>{quote?.volume ? Number(quote.volume).toLocaleString() : '124,500'} Shares</Text>
-              </View>
-              <View style={styles.statBox}>
-                <Text style={styles.statLabel}>SECTOR</Text>
-                <Text style={styles.statValue}>{company.sector}</Text>
-              </View>
-            </View>
-
-            {/* AI Insight Card */}
-            <Card style={styles.aiCard}>
-              <View style={styles.aiHeaderRow}>
-                <View style={styles.aiPillGreen}><Text style={styles.aiPillGreenText}>QUANT AI INSIGHT</Text></View>
-                <View style={styles.aiPillOutline}><Text style={styles.aiPillOutlineText}>MODEL: ARIMA + LSTM</Text></View>
-                <View style={{ flex: 1 }} />
-                <FontAwesome5 name="robot" size={16} color={colors.accent} />
-              </View>
-
-              <View style={styles.aiContentRow}>
-                <View style={styles.circularProgress}>
-                  <Text style={styles.circularText}>{prediction?.confidenceScore || 87}%</Text>
-                  <Text style={styles.circularSub}>CONF</Text>
-                </View>
-
-                <View style={styles.aiContentText}>
-                  <Text style={styles.aiAnalysisTitle}>{prediction?.trend || 'Bullish'} Trajectory</Text>
-                  <Text style={styles.aiAnalysisSubtitle}>
-                    7-Day Forecast: Rs {prediction?.predictedPrice?.toFixed(2) || (quote?.priceLKR * 1.04)?.toFixed(2)}
-                  </Text>
-                </View>
-              </View>
-
-              <View style={styles.quoteBlock}>
-                <Text style={styles.quoteText}>
-                  "{prediction?.reasoning || 'Price structure indicates solid accumulation on the Colombo Stock Exchange with strong institutional dividend support.'}"
-                </Text>
-              </View>
-            </Card>
-          </>
-        )}
+          <View style={styles.quoteBlock}>
+            <Text style={styles.quoteText}>
+              "Historical moving averages are converging positively, indicating structural support at the 18.2M LKR level. Volume footprint analysis confirms retail accumulation."
+            </Text>
+          </View>
+        </Card>
 
       </ScrollView>
 
       {/* Fixed Bottom CTA Row */}
       <View style={styles.bottomCtaRow}>
-        <TouchableOpacity
+        <PrimaryButton
+          title="SELL"
           style={styles.sellBtn}
-          onPress={() => navigation.navigate('TradingTerminal', { symbol, initialSide: 'SELL' })}
-        >
-          <Text style={styles.btnTextWhite}>SELL</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
+          onPress={() => { }}
+        />
+        <View style={{ width: 16 }} />
+        <PrimaryButton
+          title="BUY BTC"
           style={styles.buyBtn}
-          onPress={() => navigation.navigate('TradingTerminal', { symbol, initialSide: 'BUY' })}
-        >
-          <Text style={styles.btnTextBlack}>BUY {symbol.split('.')[0]}</Text>
-        </TouchableOpacity>
+          onPress={() => { }}
+        />
       </View>
     </SafeAreaView>
   );
@@ -203,14 +147,14 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bg,
   },
   container: {
-    paddingBottom: 120,
+    paddingBottom: 100, // space for bottom CTAs
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 20,
     paddingTop: 16,
-    marginBottom: 20,
+    marginBottom: 24,
   },
   backButton: {
     padding: 8,
@@ -222,7 +166,6 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     ...typography.h3,
-    color: '#FFF',
   },
   headerSubtitle: {
     ...typography.label,
@@ -234,186 +177,184 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
   },
   iconBtn: {
-    padding: 8,
+    marginLeft: 16,
   },
   priceSection: {
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: 24,
   },
   priceValue: {
-    fontSize: 32,
+    fontSize: 36,
     fontWeight: '700',
     color: '#FFF',
-    marginBottom: 6,
+    marginBottom: 8,
   },
   changePill: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 14,
-  },
-  changePositiveBg: {
     backgroundColor: colors.accentMuted,
-  },
-  changeNegativeBg: {
-    backgroundColor: colors.red + '22',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
   },
   changeText: {
-    fontSize: 12,
-    fontWeight: '700',
-    marginLeft: 4,
+    color: colors.accent,
+    fontWeight: '600',
+    fontSize: 14,
+    marginLeft: 6,
   },
   timeTabs: {
     flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 8,
-    marginBottom: 20,
+    justifyContent: 'space-between',
+    paddingHorizontal: 24,
+    marginBottom: 24,
   },
   timeTabBtn: {
     paddingHorizontal: 16,
-    paddingVertical: 6,
-    borderRadius: 14,
-    backgroundColor: colors.bgCard,
+    paddingVertical: 8,
+    borderRadius: layout.borderRadiusPill,
+    backgroundColor: colors.bgInput,
   },
   timeTabActive: {
     backgroundColor: colors.accent,
   },
   timeTabText: {
-    fontSize: 12,
-    color: colors.textSecondary,
+    ...typography.bodySmall,
     fontWeight: '600',
   },
   timeTabTextActive: {
     color: '#000',
-    fontWeight: '700',
   },
   chartArea: {
+    height: 220,
+    width: '100%',
+    backgroundColor: '#050505',
     flexDirection: 'row',
-    height: 160,
     alignItems: 'flex-end',
     justifyContent: 'space-between',
-    paddingHorizontal: 24,
+    paddingHorizontal: 16,
+    paddingBottom: 40,
     marginBottom: 24,
   },
   candleContainer: {
     alignItems: 'center',
-    width: 14,
+    justifyContent: 'center',
   },
   candleWick: {
     width: 2,
-    backgroundColor: colors.border,
+    backgroundColor: colors.textSecondary,
     position: 'absolute',
   },
   candleBody: {
     width: 10,
-    borderRadius: 2,
+    borderRadius: 1,
   },
   statsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 12,
     paddingHorizontal: 24,
-    marginBottom: 20,
+    marginBottom: 24,
   },
   statBox: {
-    width: '48%',
-    backgroundColor: colors.bgCard,
-    padding: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
+    width: '50%',
+    marginBottom: 16,
   },
   statLabel: {
+    ...typography.label,
     fontSize: 10,
     color: colors.textSecondary,
-    fontWeight: '600',
     marginBottom: 4,
   },
   statValue: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#FFF',
+    ...typography.body,
+    fontWeight: '600',
   },
   aiCard: {
     marginHorizontal: 24,
-    padding: 18,
+    borderColor: colors.accent,
+    backgroundColor: colors.accentMuted + '44',
   },
   aiHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 14,
+    marginBottom: 16,
   },
   aiPillGreen: {
-    backgroundColor: colors.accentMuted,
+    backgroundColor: colors.accent,
     paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-    marginRight: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
   },
   aiPillGreenText: {
+    ...typography.label,
+    color: '#000',
     fontSize: 10,
-    fontWeight: '700',
-    color: colors.accent,
   },
   aiPillOutline: {
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.accent,
     paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
+    paddingVertical: 4,
+    borderRadius: 4,
+    marginLeft: 8,
   },
   aiPillOutlineText: {
+    ...typography.label,
     fontSize: 10,
-    color: colors.textSecondary,
   },
   aiContentRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 16,
   },
   circularProgress: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    borderWidth: 3,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    borderWidth: 4,
     borderColor: colors.accent,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 14,
+  },
+  circularInner: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: colors.bgCard,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   circularText: {
-    fontSize: 13,
-    fontWeight: '700',
+    ...typography.bodySmall,
     color: colors.accent,
-  },
-  circularSub: {
-    fontSize: 8,
-    color: colors.textSecondary,
+    fontWeight: '700',
   },
   aiContentText: {
     flex: 1,
+    marginLeft: 16,
   },
   aiAnalysisTitle: {
-    fontSize: 14,
+    ...typography.body,
     fontWeight: '700',
     color: '#FFF',
-    marginBottom: 2,
+    marginBottom: 4,
   },
   aiAnalysisSubtitle: {
-    fontSize: 12,
-    color: colors.accent,
+    ...typography.bodySmall,
+    color: colors.textSecondary,
+    lineHeight: 20,
   },
   quoteBlock: {
-    backgroundColor: colors.bgInput,
+    backgroundColor: colors.bg,
     padding: 12,
-    borderRadius: 10,
+    borderRadius: 8,
+    borderLeftWidth: 3,
+    borderLeftColor: colors.accent,
   },
   quoteText: {
-    fontSize: 12,
-    color: colors.textSecondary,
+    ...typography.bodySmall,
     fontStyle: 'italic',
-    lineHeight: 18,
+    lineHeight: 20,
   },
   bottomCtaRow: {
     position: 'absolute',
@@ -430,29 +371,8 @@ const styles = StyleSheet.create({
   sellBtn: {
     flex: 1,
     backgroundColor: colors.red,
-    paddingVertical: 14,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 8,
   },
   buyBtn: {
-    flex: 2,
-    backgroundColor: colors.accent,
-    paddingVertical: 14,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginLeft: 8,
-  },
-  btnTextWhite: {
-    color: '#FFF',
-    fontWeight: '700',
-    fontSize: 14,
-  },
-  btnTextBlack: {
-    color: '#000',
-    fontWeight: '700',
-    fontSize: 14,
+    flex: 1,
   },
 });
