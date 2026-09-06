@@ -13,7 +13,7 @@ async function saveRecommendation(recData, userId = null) {
       INSERT INTO AI_RECOMMENDATIONS (
         USER_ID,
         SYMBOL,
-        INTERVAL,
+        TIMEFRAME,
         PRICE_USD,
         PRICE_LKR,
         RECOMMENDATION,
@@ -32,7 +32,7 @@ async function saveRecommendation(recData, userId = null) {
       ) VALUES (
         :userId,
         :symbol,
-        :interval,
+        :timeframe,
         :priceUSD,
         :priceLKR,
         :recommendation,
@@ -54,7 +54,7 @@ async function saveRecommendation(recData, userId = null) {
     const binds = {
       userId: userId || null,
       symbol: recData.symbol,
-      interval: recData.interval || '1h',
+      timeframe: recData.interval || '1h',
       priceUSD: recData.priceUSD || 0,
       priceLKR: recData.priceLKR || 0,
       recommendation: recData.recommendation,
@@ -69,13 +69,12 @@ async function saveRecommendation(recData, userId = null) {
       macdSignal: recData.indicators?.macdSignal || null,
       macdHistogram: recData.indicators?.macdHistogram || null,
       volatility: recData.indicators?.volatility || null,
-      reasons: JSON.stringify(recData.reasons || [])
+      reasons: JSON.stringify(recData.reasons || []).substring(0, 3999)
     };
 
     await connection.execute(sql, binds);
     await connection.commit();
   } catch (error) {
-    // Non-blocking log so recommendation API doesn't fail if table is not migrated yet
     console.error('⚠️ Failed to persist AI recommendation to Oracle DB:', error.message);
   } finally {
     if (connection) {
@@ -97,7 +96,7 @@ async function getRecentRecommendations(symbol, limit = 10) {
     connection = await oracledb.getConnection();
     const sql = `
       SELECT 
-        ID, USER_ID, SYMBOL, INTERVAL, PRICE_USD, PRICE_LKR,
+        ID, USER_ID, SYMBOL, TIMEFRAME, PRICE_USD, PRICE_LKR,
         RECOMMENDATION, CONFIDENCE, RISK_LEVEL, TREND,
         RSI, SMA20, SMA50, EMA20, MACD, MACD_SIGNAL, MACD_HISTOGRAM,
         VOLATILITY, REASONS, CREATED_AT
@@ -117,7 +116,7 @@ async function getRecentRecommendations(symbol, limit = 10) {
       id: row.ID,
       userId: row.USER_ID,
       symbol: row.SYMBOL,
-      interval: row.INTERVAL,
+      interval: row.TIMEFRAME,
       priceUSD: parseFloat(row.PRICE_USD),
       priceLKR: parseFloat(row.PRICE_LKR),
       recommendation: row.RECOMMENDATION,
