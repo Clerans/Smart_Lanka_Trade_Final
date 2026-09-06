@@ -14,7 +14,9 @@ const fs = require('fs');
 async function recognizeText(imageInput) {
   let worker = null;
   try {
-    worker = await createWorker('eng');
+    worker = await createWorker('eng', 1, {
+      errorHandler: (err) => console.error('Tesseract Worker Internal Warning:', err)
+    });
     
     // Perform text recognition
     const ret = await worker.recognize(imageInput);
@@ -32,7 +34,11 @@ async function recognizeText(imageInput) {
     throw new Error(`OCR Processing Failed: ${error.message}`);
   } finally {
     if (worker) {
-      await worker.terminate();
+      try {
+        await worker.terminate();
+      } catch (termErr) {
+        // ignore termination errors
+      }
     }
   }
 }
