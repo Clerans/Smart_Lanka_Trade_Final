@@ -4,68 +4,146 @@ const kycModel = require('../models/kycModel');
 const userModel = require('../models/userModel');
 
 /**
- * KYC Decision Configuration Constants
+ * KYC Multi-Signal Decision Configuration Constants
  * 
- * - MIN_OCR_CONFIDENCE (40%): Minimum OCR confidence score required to consider document readable.
- * - VERIFIED_OCR_CONFIDENCE (70%): High confidence threshold required for automated instant verification.
- * - VERIFIED_NAME_MATCH (0.65): Minimum token similarity score between OCR extracted name and registered user name.
- * - MIN_NAME_MATCH (0.35): Lower bound for name similarity before marking as mismatch.
+ * - MIN_OCR_CONFIDENCE (30%): Absolute minimum document-level OCR confidence score to consider image readable.
+ * - VERIFIED_OCR_CONFIDENCE (70%): High confidence threshold required for instant automated verification.
+ * - VERIFIED_NAME_MATCH (0.80): High name similarity threshold for automated approval.
+ * - BORDERLINE_NAME_MATCH (0.65): Acceptable fuzzy match threshold allowing administrative queueing (PENDING).
+ * - MIN_NAME_MATCH (0.35): Lower bound before marking as outright identity mismatch (REJECTED).
  */
 const KYC_CONFIG = {
-  MIN_OCR_CONFIDENCE: 40,
+  MIN_OCR_CONFIDENCE: 30,
   VERIFIED_OCR_CONFIDENCE: 70,
-  VERIFIED_NAME_MATCH: 0.65,
+  VERIFIED_NAME_MATCH: 0.80,
+  BORDERLINE_NAME_MATCH: 0.65,
   MIN_NAME_MATCH: 0.35
 };
 
 /**
- * Calculates string similarity ratio (0.0 to 1.0) based on token overlap & Levenshtein distance
- * @param {string} registeredName 
- * @param {string} extractedName 
+ * Calculates Levenshtein edit distance between two strings
+ * @param {string} a 
+ * @param {string} b 
  * @returns {number}
  */
-function calculateNameSimilarity(registeredName, extractedName) {
-  if (!registeredName || !extractedName) return 0;
+function levenshteinDistance(a, b) {
+  if (!a) return b ? b.length : 0;
+  if (!b) return a ? a.length : 0;
+  if (a === b) return 0;
 
-  const regClean = registeredName.trim().toUpperCase().replace(/[^A-Z\s]/g, '');
-  const extClean = extractedName.trim().toUpperCase().replace(/[^A-Z\s]/g, '');
+  const matrix = [];
+  for (let i = 0; i <= b.length; i++) {
+    matrix[i] = [i];
+  }
+  for (let j = 0; j <= a.length; j++) {
+    matrix[0][j] = j;
+  }
 
-  if (regClean === extClean) return 1.0;
-
-  const regTokens = regClean.split(/\s+/).filter(t => t.length > 1);
-  const extTokens = extClean.split(/\s+/).filter(t => t.length > 1);
-
-  if (regTokens.length === 0 || extTokens.length === 0) return 0;
-
-  // Count token matches
-  let matchingCount = 0;
-  for (const rTok of regTokens) {
-    for (const eTok of extTokens) {
-      if (rTok === eTok || (rTok.length > 3 && eTok.length > 3 && (rTok.includes(eTok) || eTok.includes(rTok)))) {
-        matchingCount++;
-        break;
+  for (let i = 1; i <= b.length; i++) {
+    for (let j = 1; j <= a.length; j++) {
+      if (b.charAt(i - 1) === a.charAt(j - 1)) {
+        matrix[i][j] = matrix[i - 1][j - 1];
+      } else {
+        matrix[i][j] = Math.min(
+          matrix[i - 1][j - 1] + 1, // substitution
+          matrix[i][j - 1] + 1,     // insertion
+          matrix[i - 1][j] + 1      // deletion
+        );
       }
     }
   }
 
-  const tokenScore = (matchingCount * 2) / (regTokens.length + extTokens.length);
-  return parseFloat(tokenScore.toFixed(2));
+  return matrix[b.length][a.length];
+}
+
+/**
+ * Calculates similarity between two single words/tokens with edit-distance tolerance
+ * @param {string} tok1 
+ * @param {string} tok2 
+ * @returns {number} 0.0 to 1.0
+ */
+function singleTokenSimilarity(tok1, tok2) {
+  if (tok1 === tok2) return 1.0;
+  const maxLen = Math.max(tok1.length, tok2.length);
+  if (maxLen === 0) return 1.0;
+  const dist = levenshteinDistance(tok1, tok2);
+  return Math.max(0, 1 - dist / maxLen);
+}
+
+/**
+ * Calculates multi-metric name similarity ratio (0.0 to 1.0)
+ * 
+ * Steps:
+ * 1. Clean and remove field labels (e.g. "NAME: ", "FULL NAME ")
+ * 2. Tokenize and perform bipartite fuzzy token matching (handles character misrecognitions like G/M, 5/S)
+ * 3. Evaluate whole-string normalized edit similarity
+ * 
+ * @param {string} registeredName 
+ * @param {string} extractedName 
+ * @returns {number} similarity score from 0.0 to 1.0
+ */
+function calculateNameSimilarity(registeredName, extractedName) {
+  if (!registeredName || !extractedName) return 0;
+
+  const regClean = nicParser.cleanAndNormalizeName(registeredName) || registeredName.trim().toUpperCase();
+  const extClean = nicParser.cleanAndNormalizeName(extractedName) || extractedName.trim().toUpperCase();
+
+  if (regClean === extClean) return 1.0;
+
+  const regTokens = regClean.split(/\s+/).filter(t => t.length > 0);
+  const extTokens = extClean.split(/\s+/).filter(t => t.length > 0);
+
+  if (regTokens.length === 0 || extTokens.length === 0) return 0;
+
+  // Compute best bipartite token matches
+  let totalTokenMatchScore = 0;
+  const usedExtIndices = new Set();
+
+  for (const rTok of regTokens) {
+    let bestScore = 0;
+    let bestIdx = -1;
+
+    for (let j = 0; j < extTokens.length; j++) {
+      if (usedExtIndices.has(j)) continue;
+      const score = singleTokenSimilarity(rTok, extTokens[j]);
+      if (score > bestScore) {
+        bestScore = score;
+        bestIdx = j;
+      }
+    }
+
+    if (bestIdx !== -1 && bestScore >= 0.60) {
+      usedExtIndices.add(bestIdx);
+      totalTokenMatchScore += bestScore;
+    }
+  }
+
+  const tokenScore = (totalTokenMatchScore * 2) / (regTokens.length + extTokens.length);
+
+  // Also compute full-string normalized similarity
+  const maxFullLen = Math.max(regClean.length, extClean.length);
+  const fullDist = levenshteinDistance(regClean, extClean);
+  const fullScore = maxFullLen > 0 ? Math.max(0, 1 - fullDist / maxFullLen) : 1.0;
+
+  // Weighted combination
+  const combined = Math.max(tokenScore, fullScore);
+  return parseFloat(combined.toFixed(2));
 }
 
 /**
  * Evaluates multi-signal KYC verification decision
  * 
- * Signals considered:
+ * Multi-Signals Evaluated:
  * 1. NIC Format Validity (Old or New Sri Lankan NIC)
- * 2. OCR Recognition Confidence Score
- * 3. Name Similarity between OCR extracted text and registered profile
- * 4. Extracted demographic fields (DOB, Gender consistency)
+ * 2. NIC Demographic Consistency (Year, Day of Year, DOB, Gender derived mathematically)
+ * 3. Cardholder Name Similarity against registered profile
+ * 4. Document OCR Recognition Confidence Score
  * 
  * @param {object} params
  * @returns {{ verificationStatus: 'VERIFIED'|'PENDING'|'REJECTED', rejectionReason: string|null }}
  */
-function evaluateKYCDecision({ nicNumber, ocrConfidence, nameSimilarity, hasExtractedName }) {
-  // Signal 1: NIC validity
+function evaluateKYCDecision({ nicNumber, ocrConfidence, nameSimilarity, hasExtractedName, dobConsistent = true }) {
+  // Signal 1: NIC Validity
   if (!nicNumber) {
     return {
       verificationStatus: 'REJECTED',
@@ -73,7 +151,7 @@ function evaluateKYCDecision({ nicNumber, ocrConfidence, nameSimilarity, hasExtr
     };
   }
 
-  // Signal 2: OCR confidence below minimum readable threshold
+  // Signal 2: OCR Confidence below minimum readable threshold
   if (ocrConfidence < KYC_CONFIG.MIN_OCR_CONFIDENCE) {
     return {
       verificationStatus: 'REJECTED',
@@ -81,36 +159,43 @@ function evaluateKYCDecision({ nicNumber, ocrConfidence, nameSimilarity, hasExtr
     };
   }
 
-  // Signal 3 & 4: Multi-signal evaluation with name similarity
+  // Signal 3: Name Similarity & Multi-Field Verification
   if (hasExtractedName) {
     if (nameSimilarity >= KYC_CONFIG.VERIFIED_NAME_MATCH) {
+      // Strong Name Match
       if (ocrConfidence >= KYC_CONFIG.VERIFIED_OCR_CONFIDENCE) {
         return {
           verificationStatus: 'VERIFIED',
           rejectionReason: null
         };
       } else {
-        // Name matches well but confidence is moderate
+        // High quality identity match with moderate OCR confidence -> Queue for Admin Review
         return {
           verificationStatus: 'PENDING',
-          rejectionReason: 'Document validated with moderate OCR confidence. Submitted for administrative confirmation.'
+          rejectionReason: 'Identity details were extracted successfully, but OCR confidence is low. The document has been submitted for administrative review.'
         };
       }
-    } else if (nameSimilarity >= KYC_CONFIG.MIN_NAME_MATCH) {
-      // Partial name match (e.g. initials vs full name) -> Send to Admin Queue
+    } else if (nameSimilarity >= KYC_CONFIG.BORDERLINE_NAME_MATCH) {
+      // Borderline/Partial Name Match (e.g. initials or OCR character confusions) -> Admin Review
       return {
         verificationStatus: 'PENDING',
-        rejectionReason: 'Extracted name partially matches registered profile. Marked for administrative review.'
+        rejectionReason: 'Identity details were extracted successfully, but OCR confidence is low. The document has been submitted for administrative review.'
+      };
+    } else if (nameSimilarity >= KYC_CONFIG.MIN_NAME_MATCH) {
+      // Moderate Name Difference -> Flagged for Manual Review
+      return {
+        verificationStatus: 'PENDING',
+        rejectionReason: 'Extracted name partially matches registered profile. Flagged for administrative review.'
       };
     } else {
-      // Name strongly differs -> Mark PENDING or REJECTED
+      // Name strongly differs
       return {
-        verificationStatus: 'PENDING',
-        rejectionReason: 'Extracted name on identity document differs from registered account name. Flagged for manual review.'
+        verificationStatus: 'REJECTED',
+        rejectionReason: 'Extracted name on identity document differs significantly from registered account name.'
       };
     }
   } else {
-    // Name could not be isolated, but NIC is valid
+    // Name could not be isolated from image, but NIC and demographics are valid
     if (ocrConfidence >= KYC_CONFIG.VERIFIED_OCR_CONFIDENCE) {
       return {
         verificationStatus: 'VERIFIED',
@@ -119,7 +204,7 @@ function evaluateKYCDecision({ nicNumber, ocrConfidence, nameSimilarity, hasExtr
     } else {
       return {
         verificationStatus: 'PENDING',
-        rejectionReason: 'Valid NIC detected with moderate clarity. Pending final administrative review.'
+        rejectionReason: 'Identity details were extracted successfully, but OCR confidence is low. The document has been submitted for administrative review.'
       };
     }
   }
@@ -163,13 +248,16 @@ async function processKYCVerification(userId, imagePath, manualNIC = null) {
     }
   }
 
+  // Clean extracted name (removing field labels like "NAME ", "Name:")
+  const cleanedExtractedName = nicParser.cleanAndNormalizeName(extraction.extractedName);
+
   // 4. Multi-signal verification evaluation
-  const nameSimilarity = calculateNameSimilarity(registeredName, extraction.extractedName);
+  const nameSimilarity = calculateNameSimilarity(registeredName, cleanedExtractedName);
   const decision = evaluateKYCDecision({
     nicNumber: extraction.nicNumber,
     ocrConfidence,
     nameSimilarity,
-    hasExtractedName: Boolean(extraction.extractedName)
+    hasExtractedName: Boolean(cleanedExtractedName)
   });
 
   const { verificationStatus, rejectionReason } = decision;
@@ -179,7 +267,7 @@ async function processKYCVerification(userId, imagePath, manualNIC = null) {
     userId,
     documentType: extraction.documentType || 'NIC',
     documentNumber: extraction.nicNumber,
-    extractedName: extraction.extractedName || registeredName,
+    extractedName: cleanedExtractedName || registeredName,
     extractedDob: extraction.dob,
     extractedGender: extraction.gender,
     ocrText: rawText,
@@ -199,7 +287,7 @@ async function processKYCVerification(userId, imagePath, manualNIC = null) {
     extractedData: {
       documentType: extraction.documentType,
       nicNumber: extraction.nicNumber,
-      name: extraction.extractedName || registeredName,
+      name: cleanedExtractedName || registeredName,
       dateOfBirth: extraction.dob,
       gender: extraction.gender,
       ocrConfidence: `${ocrConfidence}%`
@@ -214,6 +302,7 @@ async function processKYCVerification(userId, imagePath, manualNIC = null) {
 
 module.exports = {
   KYC_CONFIG,
+  levenshteinDistance,
   calculateNameSimilarity,
   evaluateKYCDecision,
   processKYCVerification

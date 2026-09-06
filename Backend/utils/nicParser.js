@@ -295,16 +295,155 @@ function extractFromOCRText(ocrText) {
     }
   }
 
-  // 4. Extract Cardholder Name (Do not fabricate)
+/**
+ * Cleans, removes field labels, and normalizes cardholder name extracted from OCR
+ * @param {string} rawName 
+ * @returns {string|null}
+ */
+function cleanAndNormalizeName(rawName) {
+  if (!rawName || typeof rawName !== 'string') return null;
+
+  let cleaned = rawName.toUpperCase();
+
+  // Strip leading labels and prefixes
+  const labelPatterns = [
+    /^\s*(?:FULL\s*NAME|NAME\s*IN\s*FULL|GIVEN\s*NAME|SAMPURNA\s*NAMA|NAM\s*E|NAME|NAMA)\s*[:\-\.]*\s*/i,
+    /^\s*(?:NIC\s*NO|NIC\s*NUMBER|IDENTITY\s*NO|CARD\s*NO|DOC\s*NO|NO)\s*[:\-\.]*\s*/i,
+    /^\s*(?:DATE\s*OF\s*BIRTH|DOB|BIRTH\s*DATE)\s*[:\-\.]*\s*/i,
+    /^\s*(?:SEX|GENDER)\s*[:\-\.]*\s*/i
+  ];
+
+  for (const pattern of labelPatterns) {
+    cleaned = cleaned.replace(pattern, '');
+  }
+
+  // Remove trailing field labels if stuck to name (e.g. "MICHAEL CLERANS NIC NO 2000...")
+  cleaned = cleaned.replace(/\s+\b(?:NIC|DOB|SEX|GENDER|NO)\b.*$/i, '');
+
+  // Keep only alphabetic characters, spaces, dots, hyphens
+  cleaned = cleaned.replace(/[^A-Z\s.\-]/g, ' ');
+
+  // Collapse multiple spaces
+  cleaned = cleaned.replace(/\s+/g, ' ').trim();
+
+  // Filter out system header keywords
+  const ignoredKeywords = [
+    'SRI LANKA', 'NATIONAL', 'IDENTITY', 'CARD', 'REPUBLIC', 'DEMOCRATIC',
+    'SOCIALIST', 'DEPARTMENT', 'REGISTRATION', 'PERSONS', 'MINISTRY',
+    'OFFICIAL', 'COMMISSION', 'HOLDER', 'SIGNATURE', 'MALE', 'FEMALE',
+    'DATE OF BIRTH', 'SEX', 'GENDER', 'NAME', 'FULL NAME'
+  ];
+
+  if (cleaned.length < 3 || ignoredKeywords.includes(cleaned)) {
+    return null;
+  }
+
+  return cleaned;
+}
+
+/**
+ * Extracts NIC number, demographic details, and cardholder name from raw OCR text
+ * @param {string} ocrText 
+ * @returns {{ documentType: string, nicNumber: string|null, extractedName: string|null, dob: string|null, gender: string|null, parsedNIC: object|null }}
+ */
+function extractFromOCRText(ocrText) {
+  if (!ocrText || typeof ocrText !== 'string') {
+    return {
+      documentType: 'UNKNOWN',
+      nicNumber: null,
+      extractedName: null,
+      dob: null,
+      gender: null,
+      parsedNIC: null
+    };
+  }
+
+  const cleanText = ocrText.replace(/\r/g, '\n');
+  const lines = cleanText.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+
+  let detectedNIC = null;
+  let parsedNIC = null;
+
+  // 1. Scan for direct regex matches
+  const oldNicRegex = /\b([0-9]{9}[vVxX])\b/g;
+  const newNicRegex = /\b([0-9]{12})\b/g;
+
+  const oldMatches = cleanText.match(oldNicRegex);
+  if (oldMatches && oldMatches.length > 0) {
+    for (const match of oldMatches) {
+      const parsed = parseNICDetails(match);
+      if (parsed) {
+        detectedNIC = parsed.nicNumber;
+        parsedNIC = parsed;
+        break;
+      }
+    }
+  }
+
+  if (!detectedNIC) {
+    const newMatches = cleanText.match(newNicRegex);
+    if (newMatches && newMatches.length > 0) {
+      for (const match of newMatches) {
+        const parsed = parseNICDetails(match);
+        if (parsed) {
+          detectedNIC = parsed.nicNumber;
+          parsedNIC = parsed;
+          break;
+        }
+      }
+    }
+  }
+
+  // 2. Scan line-by-line with OCR confusion correction
+  if (!detectedNIC) {
+    for (const line of lines) {
+      const tokens = line.split(/[\s,;:|/]+/);
+      for (const token of tokens) {
+        const fixedToken = fixOCRNICConfusions(token);
+        const parsed = parseNICDetails(fixedToken);
+        if (parsed) {
+          detectedNIC = parsed.nicNumber;
+          parsedNIC = parsed;
+          break;
+        }
+      }
+      if (detectedNIC) break;
+    }
+  }
+
+  // 3. Scan stripped continuous text for embedded NICs
+  if (!detectedNIC) {
+    const stripped = cleanText.replace(/[\s\-_.:,;/\\|()]/g, '');
+    const altOld = stripped.match(/([0-9]{9}[vVxXuU])/i);
+    if (altOld) {
+      const fixed = fixOCRNICConfusions(altOld[1]);
+      const parsed = parseNICDetails(fixed);
+      if (parsed) {
+        detectedNIC = parsed.nicNumber;
+        parsedNIC = parsed;
+      }
+    } else {
+      const altNew = stripped.match(/([0-9]{12})/);
+      if (altNew) {
+        const parsed = parseNICDetails(altNew[1]);
+        if (parsed) {
+          detectedNIC = parsed.nicNumber;
+          parsedNIC = parsed;
+        }
+      }
+    }
+  }
+
+  // 4. Extract Cardholder Name (Do not fabricate, clean labels)
   let extractedName = null;
   const nameHeaders = [
     'FULL NAME',
     'NAME IN FULL',
-    'NAME',
     'GIVEN NAME',
     'NAM E',
     'SAMPURNA NAMA',
-    'NAMA'
+    'NAMA',
+    'NAME'
   ];
 
   for (let i = 0; i < lines.length; i++) {
@@ -312,52 +451,33 @@ function extractFromOCRText(ocrText) {
     const upper = line.toUpperCase();
 
     for (const header of nameHeaders) {
-      if (upper.startsWith(header) || upper.includes(header + ':') || upper.includes(header + ' -')) {
-        const parts = line.split(/[:\-\.]/);
-        if (parts.length > 1 && parts[1].trim().length >= 3) {
-          extractedName = parts.slice(1).join(' ').trim();
+      if (upper.startsWith(header) || upper.includes(header + ':') || upper.includes(header + ' -') || upper.includes(header + ' ')) {
+        // Line contains name marker
+        const candidate = cleanAndNormalizeName(line);
+        if (candidate) {
+          extractedName = candidate;
           break;
-        } else if (i + 1 < lines.length && lines[i + 1].trim().length >= 3) {
-          extractedName = lines[i + 1].trim();
-          break;
+        } else if (i + 1 < lines.length) {
+          // Check next line
+          const nextCandidate = cleanAndNormalizeName(lines[i + 1]);
+          if (nextCandidate) {
+            extractedName = nextCandidate;
+            break;
+          }
         }
       }
     }
     if (extractedName) break;
   }
 
-  // If no explicit label, check for candidate alphabetic name lines
+  // If no explicit label matched, check for candidate alphabetic name lines
   if (!extractedName) {
-    const ignoredKeywords = [
-      'SRI LANKA', 'NATIONAL', 'IDENTITY', 'CARD', 'REPUBLIC', 'DEMOCRATIC',
-      'SOCIALIST', 'DEPARTMENT', 'REGISTRATION', 'PERSONS', 'MINISTRY',
-      'OFFICIAL', 'COMMISSION', 'HOLDER', 'SIGNATURE', 'DATE OF ISSUE',
-      'DATE OF BIRTH', 'SEX', 'MALE', 'FEMALE', 'ADDRESS', 'DISTRICT'
-    ];
-
     for (const line of lines) {
-      const upper = line.toUpperCase();
-      const hasIgnored = ignoredKeywords.some(kw => upper.includes(kw));
-      const isAlphaLine = /^[A-Za-z\s.\-']+$/.test(line.trim());
-      const words = line.trim().split(/\s+/);
-
-      if (!hasIgnored && isAlphaLine && words.length >= 2 && line.trim().length >= 5 && line.trim().length <= 60) {
-        extractedName = line.trim();
+      const candidate = cleanAndNormalizeName(line);
+      if (candidate && candidate.split(' ').length >= 2 && candidate.length >= 5 && candidate.length <= 60) {
+        extractedName = candidate;
         break;
       }
-    }
-  }
-
-  // Clean extracted name or set null if invalid
-  if (extractedName) {
-    extractedName = extractedName
-      .replace(/[^A-Za-z\s.\-]/g, '')
-      .replace(/\s+/g, ' ')
-      .trim()
-      .toUpperCase();
-
-    if (extractedName.length < 3) {
-      extractedName = null;
     }
   }
 
@@ -379,6 +499,7 @@ module.exports = {
   validateNICFormat,
   parseNICDetails,
   extractFromOCRText,
+  cleanAndNormalizeName,
   isLeapYear,
   normalizeNICString
 };
