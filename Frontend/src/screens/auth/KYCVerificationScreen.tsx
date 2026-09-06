@@ -339,7 +339,7 @@ export const KYCVerificationScreen = () => {
               setVerificationResult(null);
             }}
           >
-            <Text style={styles.retryBtnText}>Upload Another Document</Text>
+            <Text style={styles.retryBtnText}>Resubmit Identity Document</Text>
           </TouchableOpacity>
         )}
 

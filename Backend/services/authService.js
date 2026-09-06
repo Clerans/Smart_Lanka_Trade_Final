@@ -95,8 +95,9 @@ exports.loginUser = async (email, password) => {
   // Reset attempts and log login timestamp
   await userModel.resetFailedAttemptsAndLogLogin(user.ID);
 
+  const userRole = user.ROLE || 'USER';
   const token = jwt.sign(
-    { id: user.ID, email: user.EMAIL },
+    { id: user.ID, email: user.EMAIL, role: userRole },
     process.env.JWT_SECRET,
     { expiresIn: '1d' }
   );
@@ -106,7 +107,8 @@ exports.loginUser = async (email, password) => {
     user: {
       id: user.ID,
       name: user.NAME,
-      email: user.EMAIL
+      email: user.EMAIL,
+      role: userRole
     }
   };
 };

@@ -1,5 +1,3 @@
-const fs = require('fs');
-const path = require('path');
 const kycService = require('../services/kycService');
 const kycModel = require('../models/kycModel');
 
@@ -13,7 +11,7 @@ exports.uploadAndVerify = async (req, res) => {
     if (!userId) {
       return res.status(401).json({
         success: false,
-        message: 'Authentication required'
+        message: 'Authentication required. Please log in.'
       });
     }
 
@@ -35,12 +33,12 @@ exports.uploadAndVerify = async (req, res) => {
       message: result.verificationStatus === 'VERIFIED' 
         ? 'KYC Verification successful! Your account is now verified.'
         : result.verificationStatus === 'PENDING'
-        ? 'KYC Document submitted and pending verification.'
-        : 'KYC Verification could not be completed with the uploaded document.',
+        ? 'KYC Document submitted and pending administrative review.'
+        : 'KYC Verification rejected. Please review the reason and resubmit.',
       data: result
     });
   } catch (error) {
-    console.error('KYC upload error:', error.message);
+    console.error('KYC verification error:', error.message);
     return res.status(500).json({
       success: false,
       code: 'KYC_PROCESSING_ERROR',
@@ -94,7 +92,7 @@ exports.getKYCStatus = async (req, res) => {
 
 /**
  * GET /api/kyc/history
- * Get KYC submission history
+ * Get KYC submission history for authenticated user
  */
 exports.getKYCHistory = async (req, res) => {
   try {
@@ -108,10 +106,26 @@ exports.getKYCHistory = async (req, res) => {
 
     const history = await kycModel.getKYCHistory(userId);
 
+    // Sanitize any internal paths for client privacy
+    const sanitizedHistory = history.map(item => ({
+      id: item.ID,
+      userId: item.USER_ID,
+      documentType: item.DOCUMENT_TYPE,
+      documentNumber: item.DOCUMENT_NUMBER,
+      extractedName: item.EXTRACTED_NAME,
+      extractedDob: item.EXTRACTED_DOB,
+      extractedGender: item.EXTRACTED_GENDER,
+      ocrConfidence: item.OCR_CONFIDENCE,
+      verificationStatus: item.VERIFICATION_STATUS,
+      rejectionReason: item.REJECTION_REASON,
+      submittedAt: item.SUBMITTED_AT,
+      verifiedAt: item.VERIFIED_AT
+    }));
+
     return res.status(200).json({
       success: true,
-      count: history.length,
-      data: history
+      count: sanitizedHistory.length,
+      data: sanitizedHistory
     });
   } catch (error) {
     console.error('Error fetching KYC history:', error.message);
@@ -130,10 +144,25 @@ exports.adminGetPending = async (req, res) => {
     const limit = parseInt(req.query.limit || '20', 10);
     const pendingList = await kycModel.getPendingKYC(limit);
 
+    const sanitizedList = pendingList.map(item => ({
+      id: item.ID,
+      userId: item.USER_ID,
+      userName: item.USER_NAME,
+      userEmail: item.USER_EMAIL,
+      documentType: item.DOCUMENT_TYPE,
+      documentNumber: item.DOCUMENT_NUMBER,
+      extractedName: item.EXTRACTED_NAME,
+      extractedDob: item.EXTRACTED_DOB,
+      extractedGender: item.EXTRACTED_GENDER,
+      ocrConfidence: item.OCR_CONFIDENCE,
+      verificationStatus: item.VERIFICATION_STATUS,
+      submittedAt: item.SUBMITTED_AT
+    }));
+
     return res.status(200).json({
       success: true,
-      count: pendingList.length,
-      data: pendingList
+      count: sanitizedList.length,
+      data: sanitizedList
     });
   } catch (error) {
     console.error('Error fetching pending KYC:', error.message);
@@ -153,6 +182,14 @@ exports.adminUpdateStatus = async (req, res) => {
     const { status, rejectionReason } = req.body;
     const adminId = req.user?.id;
 
+    const docId = parseInt(id, 10);
+    if (isNaN(docId) || docId <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid KYC document ID.'
+      });
+    }
+
     if (!['VERIFIED', 'REJECTED', 'PENDING'].includes(status)) {
       return res.status(400).json({
         success: false,
@@ -160,20 +197,35 @@ exports.adminUpdateStatus = async (req, res) => {
       });
     }
 
-    const doc = await kycModel.getKYCById(parseInt(id, 10));
-    if (!doc) {
-      return res.status(404).json({
+    // Rejection reason validation: required when status is REJECTED
+    if (status === 'REJECTED' && (!rejectionReason || !rejectionReason.trim())) {
+      return res.status(400).json({
         success: false,
-        message: 'KYC Document record not found'
+        message: 'Rejection reason is required when rejecting a KYC application.'
       });
     }
 
-    await kycModel.updateKYCStatus(parseInt(id, 10), status, rejectionReason || null, adminId);
-    await kycModel.updateUserKYCStatus(doc.USER_ID, status, doc.DOCUMENT_NUMBER);
+    const doc = await kycModel.getKYCById(docId);
+    if (!doc) {
+      return res.status(404).json({
+        success: false,
+        message: 'KYC Document record not found.'
+      });
+    }
+
+    // Update KYC_DOCUMENTS and SL_USERS atomically in a database transaction
+    await kycModel.updateAdminKYCDecision(
+      docId,
+      doc.USER_ID,
+      status,
+      status === 'REJECTED' ? rejectionReason.trim() : null,
+      adminId,
+      doc.DOCUMENT_NUMBER
+    );
 
     return res.status(200).json({
       success: true,
-      message: `KYC application #${id} updated to ${status}`
+      message: `KYC application #${docId} successfully updated to ${status}.`
     });
   } catch (error) {
     console.error('Error updating KYC status:', error.message);

@@ -232,6 +232,55 @@ async function getPendingKYC(limit = 20) {
   }
 }
 
+/**
+ * Atomically updates both KYC_DOCUMENTS and SL_USERS in a single database transaction
+ * @param {number} docId 
+ * @param {number} userId 
+ * @param {string} status - 'VERIFIED' | 'REJECTED' | 'PENDING'
+ * @param {string|null} rejectionReason 
+ * @param {number|null} verifiedBy 
+ * @param {string|null} nicNumber 
+ */
+async function updateAdminKYCDecision(docId, userId, status, rejectionReason = null, verifiedBy = null, nicNumber = null) {
+  let connection;
+  try {
+    connection = await oracledb.getConnection();
+
+    // 1. Update KYC Document record
+    await connection.execute(
+      `UPDATE KYC_DOCUMENTS
+       SET VERIFICATION_STATUS = :status,
+           REJECTION_REASON = :rejectionReason,
+           VERIFIED_AT = CURRENT_TIMESTAMP,
+           VERIFIED_BY = :verifiedBy
+       WHERE ID = :docId`,
+      { status, rejectionReason, verifiedBy, docId }
+    );
+
+    // 2. Update User Profile KYC Status
+    await connection.execute(
+      `UPDATE SL_USERS
+       SET KYC_STATUS = :status,
+           NIC_NUMBER = COALESCE(:nicNumber, NIC_NUMBER),
+           UPDATED_AT = CURRENT_TIMESTAMP
+       WHERE ID = :userId`,
+      { status, nicNumber, userId }
+    );
+
+    // 3. Commit transaction atomically
+    await connection.commit();
+  } catch (error) {
+    if (connection) {
+      try { await connection.rollback(); } catch (rErr) {}
+    }
+    throw error;
+  } finally {
+    if (connection) {
+      try { await connection.close(); } catch (e) {}
+    }
+  }
+}
+
 module.exports = {
   createKYCDocument,
   getKYCByUser,
@@ -239,5 +288,6 @@ module.exports = {
   getKYCById,
   updateKYCStatus,
   updateUserKYCStatus,
+  updateAdminKYCDecision,
   getPendingKYC
 };
