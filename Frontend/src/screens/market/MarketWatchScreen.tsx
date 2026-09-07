@@ -138,9 +138,9 @@ export const MarketWatchScreen = () => {
               <View key={asset.id}>
                 <TouchableOpacity
                   style={styles.assetRow}
-                  onPress={() => navigation.navigate('Market', {
-                    screen: 'TradingTerminal',
-                    params: { symbol: assets.find(a => a.id === asset.id)?.ticker + 'USDT' }
+                  onPress={() => navigation.navigate('AssetDetails', {
+                    symbol: asset.ticker + 'USDT',
+                    coin: asset.ticker
                   })}
                 >
 

@@ -8,14 +8,17 @@ const getBaseUrl = () => {
     return process.env.EXPO_PUBLIC_API_URL;
   }
   const hostUri = Constants.expoConfig?.hostUri;
-  if (hostUri) {
+  if (hostUri && !hostUri.includes('exp.direct') && !hostUri.includes('ngrok')) {
     const ip = hostUri.split(':')[0];
-    return `http://${ip}:5000/api`;
+    if (ip && /^\d+\.\d+\.\d+\.\d+$/.test(ip)) {
+      return `http://${ip}:5000/api`;
+    }
   }
   return 'http://192.168.8.109:5000/api';
 };
 
 const BASE_URL = getBaseUrl();
+console.log('📡 SmartLanka Trade Frontend API Base URL:', BASE_URL);
 
 const api = axios.create({
   baseURL: BASE_URL,

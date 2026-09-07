@@ -232,7 +232,7 @@ export const HomeScreen = () => {
         {/* Watchlist */}
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Watchlist</Text>
-          <TouchableOpacity onPress={() => navigation.navigate('Market')}>
+          <TouchableOpacity onPress={() => navigation.navigate('Markets')}>
             <Text style={styles.seeAllText}>See All {'>'}</Text>
           </TouchableOpacity>
         </View>
