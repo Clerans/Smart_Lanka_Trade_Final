@@ -416,15 +416,28 @@ export const aiService = {
 export const kycService = {
   submitKYC: async (formData: FormData) => {
     try {
-      const response = await api.post('/kyc/verify', formData, {
+      const token = await AsyncStorage.getItem('userToken');
+      const url = `${BASE_URL}/kyc/verify`;
+      
+      const response = await fetch(url, {
+        method: 'POST',
         headers: {
           'Accept': 'application/json',
-          'Content-Type': 'multipart/form-data',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
         },
-        transformRequest: (data) => data,
-        timeout: 90000, // 90s timeout for mobile OCR photo upload and recognition
+        body: formData,
       });
-      return response.data;
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw {
+          code: data.code || 'KYC_ERROR',
+          message: data.message || 'KYC document verification failed.',
+          success: false,
+          data: data.data || null
+        };
+      }
+      return data;
     } catch (error: any) {
       console.error('Error submitting KYC document:', error);
       throw error;
