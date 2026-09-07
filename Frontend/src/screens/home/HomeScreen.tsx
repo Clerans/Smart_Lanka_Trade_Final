@@ -30,6 +30,9 @@ export const HomeScreen = () => {
   const navigation = useNavigation<any>();
   const [watchlist, setWatchlist] = useState<any[]>([]);
   const [lkrPriceData, setLkrPriceData] = useState<any>(null);
+  const [topGainer, setTopGainer] = useState<any>(null);
+  const [topLoser, setTopLoser] = useState<any>(null);
+  const [trendTab, setTrendTab] = useState<'gainer' | 'loser'>('gainer');
   const [loading, setLoading] = useState(true);
   const [balance, setBalance] = useState<number | null>(null);
   const [portfolioValue, setPortfolioValue] = useState<number | null>(null);
@@ -47,22 +50,35 @@ export const HomeScreen = () => {
           setUser(JSON.parse(userData));
         }
 
-        // Fetch watchlist prices with sparkline data
-        const marketResponse = await marketService.getMultiplePricesLKR(['BTCUSDT', 'ETHUSDT'], true);
+        // Fetch prices with sparkline data for all major pairs
+        const symbols = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'ADAUSDT', 'XRPUSDT', 'DOGEUSDT'];
+        const marketResponse = await marketService.getMultiplePricesLKR(symbols, true);
         
         // Fetch portfolio summary
         const portfolioResponse = await portfolioService.getPortfolio();
         
-        if (marketResponse.success) {
-          const formatted = marketResponse.data.prices.map((p: any) => ({
+        if (marketResponse.success && marketResponse.data?.prices) {
+          const prices = marketResponse.data.prices;
+          const formatted = prices.map((p: any) => ({
+            symbol: p.symbol,
             pair: `${p.symbol.replace('USDT', '')}/LKR`,
             change: `${p.changePercent >= 0 ? '+' : ''}${p.changePercent.toFixed(2)}%`,
-            price: p.priceLKR.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 }),
+            changeVal: p.changePercent,
+            price: p.priceLKR < 10 
+              ? `Rs ${p.priceLKR.toFixed(4)}`
+              : `Rs ${p.priceLKR.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`,
+            rawPrice: p.priceLKR,
             color: p.changePercent >= 0 ? colors.accent : colors.red,
-            path: generateSparklinePath(p.sparkline, 100, 40)
+            path: generateSparklinePath(p.sparkline, 100, 40),
+            sparkline: p.sparkline || []
           }));
           setWatchlist(formatted);
           setLkrPriceData(marketResponse.data);
+
+          // Find top gainer & loser
+          const sorted = [...formatted].sort((a, b) => b.changeVal - a.changeVal);
+          setTopGainer(sorted[0]);
+          setTopLoser(sorted[sorted.length - 1]);
         }
 
         if (portfolioResponse.success) {
@@ -84,6 +100,8 @@ export const HomeScreen = () => {
     const interval = setInterval(fetchData, 30000);
     return () => clearInterval(interval);
   }, []);
+
+  const activeTrend = trendTab === 'gainer' ? topGainer : topLoser;
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -214,7 +232,7 @@ export const HomeScreen = () => {
         {/* Watchlist */}
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Watchlist</Text>
-          <TouchableOpacity onPress={() => navigation.navigate('Market')}>
+          <TouchableOpacity onPress={() => navigation.navigate('Markets')}>
             <Text style={styles.seeAllText}>See All {'>'}</Text>
           </TouchableOpacity>
         </View>
@@ -223,15 +241,21 @@ export const HomeScreen = () => {
             <ActivityIndicator size="small" color={colors.accent} style={{ marginLeft: 24 }} />
           ) : (
             watchlist.map((item: any, index: number) => (
-              <Card key={index} style={styles.watchlistCard}>
-                <Text style={styles.watchPair}>{item.pair} <Text style={{ color: item.color }}>{item.change}</Text></Text>
-                <Text style={styles.watchPrice}>{item.price}</Text>
-                <View style={styles.sparklineContainer}>
-                  <Svg height="50" width="100" viewBox="0 0 100 50">
-                    <Path d={item.path} fill="none" stroke={item.color} strokeWidth="2" />
-                  </Svg>
-                </View>
-              </Card>
+              <TouchableOpacity
+                key={index}
+                activeOpacity={0.8}
+                onPress={() => navigation.navigate('AssetDetails', { symbol: item.symbol, coin: item.symbol.replace('USDT', '') })}
+              >
+                <Card style={styles.watchlistCard}>
+                  <Text style={styles.watchPair}>{item.pair} <Text style={{ color: item.color }}>{item.change}</Text></Text>
+                  <Text style={styles.watchPrice}>{item.price}</Text>
+                  <View style={styles.sparklineContainer}>
+                    <Svg height="50" width="100" viewBox="0 0 100 50">
+                      <Path d={item.path} fill="none" stroke={item.color} strokeWidth="2" />
+                    </Svg>
+                  </View>
+                </Card>
+              </TouchableOpacity>
             ))
           )}
           <View style={{ width: 24 }} />
@@ -240,33 +264,69 @@ export const HomeScreen = () => {
         {/* Market Trends */}
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Market Trends</Text>
+          <View style={{ flexDirection: 'row' }}>
+            <TouchableOpacity 
+              style={[styles.trendTogglePill, trendTab === 'gainer' && styles.trendTogglePillActive]}
+              onPress={() => setTrendTab('gainer')}
+            >
+              <Text style={[styles.trendToggleText, trendTab === 'gainer' && styles.trendToggleTextActive]}>Gainers</Text>
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={[styles.trendTogglePill, trendTab === 'loser' && styles.trendTogglePillActive, { marginLeft: 6 }]}
+              onPress={() => setTrendTab('loser')}
+            >
+              <Text style={[styles.trendToggleText, trendTab === 'loser' && styles.trendToggleTextActive]}>Losers</Text>
+            </TouchableOpacity>
+          </View>
         </View>
-        <Card style={styles.trendCard}>
-          <View style={styles.trendHeader}>
-            <View style={styles.trendHeaderLeft}>
-              <View style={styles.trendIcon}>
-                <MaterialIcons name="show-chart" size={16} color={colors.accent} />
+        {activeTrend ? (
+          <TouchableOpacity
+            activeOpacity={0.85}
+            onPress={() => navigation.navigate('AssetDetails', { symbol: activeTrend.symbol, coin: activeTrend.symbol.replace('USDT', '') })}
+          >
+            <Card style={styles.trendCard}>
+              <View style={styles.trendHeader}>
+                <View style={styles.trendHeaderLeft}>
+                  <View style={[styles.trendIcon, activeTrend.changeVal < 0 && { backgroundColor: colors.red + '22' }]}>
+                    <MaterialIcons 
+                      name={activeTrend.changeVal >= 0 ? "trending-up" : "trending-down"} 
+                      size={18} 
+                      color={activeTrend.color} 
+                    />
+                  </View>
+                  <View>
+                    <Text style={styles.trendTitle}>{trendTab === 'gainer' ? 'Top Gainer' : 'Top Loser'}</Text>
+                    <Text style={styles.trendSubtitle}>{activeTrend.pair}</Text>
+                  </View>
+                </View>
+                <View style={styles.trendHeaderRight}>
+                  <Text style={styles.trendPrice}>{activeTrend.price}</Text>
+                  <Text style={[styles.trendChange, { color: activeTrend.color }]}>{activeTrend.change}</Text>
+                </View>
               </View>
-              <View>
-                <Text style={styles.trendTitle}>Top Gainer</Text>
-                <Text style={styles.trendSubtitle}>SOL/LKR</Text>
+
+              {/* Dynamic Sparkline / Mini Candles */}
+              <View style={styles.candlestickPlaceholder}>
+                {activeTrend.sparkline?.length > 1 ? (
+                  <View style={{ width: '100%', height: 60, justifyContent: 'center' }}>
+                    <Svg height="60" width="100%" viewBox="0 0 300 60">
+                      <Path 
+                        d={generateSparklinePath(activeTrend.sparkline, 300, 50)} 
+                        fill="none" 
+                        stroke={activeTrend.color} 
+                        strokeWidth="2.5" 
+                      />
+                    </Svg>
+                  </View>
+                ) : (
+                  <Text style={{ color: colors.textSecondary, fontSize: 11, textAlign: 'center', marginVertical: 10 }}>
+                    Tap to view live candlestick chart →
+                  </Text>
+                )}
               </View>
-            </View>
-            <View style={styles.trendHeaderRight}>
-              <Text style={styles.trendPrice}>Rs 45,230</Text>
-              <Text style={styles.trendChange}>+8.45%</Text>
-            </View>
-          </View>
-          <View style={styles.candlestickPlaceholder}>
-            {/* Fake Candlesticks using Views for demonstration */}
-            {[50, 60, 40, 70, 80, 50, 90, 110, 100, 130].map((h, i) => (
-              <View key={`candle-${i}`} style={styles.candleContainer}>
-                <View style={[styles.candleWick, { height: h + 20 }]} />
-                <View style={[styles.candleBody, { height: h, backgroundColor: i % 3 === 0 ? colors.textMuted : colors.textPrimary }]} />
-              </View>
-            ))}
-          </View>
-        </Card>
+            </Card>
+          </TouchableOpacity>
+        ) : null}
 
       </ScrollView>
       {lkrPriceData && (
@@ -541,6 +601,23 @@ const styles = StyleSheet.create({
     ...typography.bodySmall,
     color: colors.textSecondary,
   },
+  trendTogglePill: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    backgroundColor: colors.bgInput,
+  },
+  trendTogglePillActive: {
+    backgroundColor: colors.accent,
+  },
+  trendToggleText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: colors.textSecondary,
+  },
+  trendToggleTextActive: {
+    color: '#000',
+  },
   trendHeaderRight: {
     alignItems: 'flex-end',
   },
@@ -554,23 +631,9 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   candlestickPlaceholder: {
-    height: 150,
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    justifyContent: 'space-around',
-    paddingBottom: 20,
-  },
-  candleContainer: {
-    alignItems: 'center',
+    minHeight: 60,
     justifyContent: 'center',
-  },
-  candleWick: {
-    width: 2,
-    backgroundColor: colors.textSecondary,
-    position: 'absolute',
-  },
-  candleBody: {
-    width: 8,
-    borderRadius: 2,
+    alignItems: 'center',
+    marginTop: 8,
   },
 });

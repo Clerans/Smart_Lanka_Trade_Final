@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
 import { colors, typography, layout } from '../../theme';
-import { PrimaryButton, Card } from '../../components';
+import { PrimaryButton, Card, CandlestickChart } from '../../components';
 import { aiService, marketService } from '../../services/apiService';
 
 const { width } = Dimensions.get('window');
@@ -12,52 +12,60 @@ const { width } = Dimensions.get('window');
 export const AssetDetailsScreen = () => {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
-  const [activeTab, setActiveTab] = useState('1D');
 
   const symbol = (route.params?.symbol || route.params?.pair || 'BTCUSDT').replace('/', '').replace('LKR', 'USDT');
   const coin = route.params?.coin || symbol.replace('USDT', '');
   
+  const [selectedInterval, setSelectedInterval] = useState('1h');
   const [priceData, setPriceData] = useState<any>(null);
   const [aiData, setAiData] = useState<any>(null);
   const [loadingAi, setLoadingAi] = useState(true);
 
-  useEffect(() => {
-    let isMounted = true;
+  // Fetch AI Recommendation and Ticker
+  const loadAiAndPrice = useCallback(async (interval: string) => {
+    try {
+      setLoadingAi(true);
+      const [tickerRes, aiRes] = await Promise.allSettled([
+        marketService.getPriceLKR(symbol),
+        aiService.getRecommendation(symbol, interval)
+      ]);
 
-    async function loadData() {
-      try {
-        setLoadingAi(true);
-        const [tickerRes, aiRes] = await Promise.allSettled([
-          marketService.getPriceLKR(symbol),
-          aiService.getRecommendation(symbol, '1h')
-        ]);
-
-        if (isMounted) {
-          if (tickerRes.status === 'fulfilled') {
-            setPriceData(tickerRes.value);
-          }
-          if (aiRes.status === 'fulfilled' && aiRes.value?.data) {
-            setAiData(aiRes.value.data);
-          }
-        }
-      } catch (e) {
-        console.error('Error loading asset details data:', e);
-      } finally {
-        if (isMounted) setLoadingAi(false);
+      if (tickerRes.status === 'fulfilled' && tickerRes.value?.data) {
+        setPriceData(tickerRes.value.data);
       }
+      if (aiRes.status === 'fulfilled' && aiRes.value?.data) {
+        setAiData(aiRes.value.data);
+      }
+    } catch (e) {
+      console.error('Error loading asset details data:', e);
+    } finally {
+      setLoadingAi(false);
     }
-
-    loadData();
-    return () => { isMounted = false; };
   }, [symbol]);
 
-  const priceLKR = priceData?.priceLKR || aiData?.priceLKR || 26200000;
-  const changePercent = priceData?.changePercent ?? aiData?.change24h ?? 2.41;
+  useEffect(() => {
+    loadAiAndPrice(selectedInterval);
+  }, [symbol, selectedInterval, loadAiAndPrice]);
+
+  const handlePriceUpdate = (latestPriceLKR: number, change24h: number) => {
+    setPriceData((prev: any) => ({
+      ...prev,
+      priceLKR: latestPriceLKR,
+      changePercent: change24h,
+    }));
+  };
+
+  const handleIntervalChange = (newInterval: string) => {
+    setSelectedInterval(newInterval);
+  };
+
+  const priceLKR = priceData?.priceLKR || aiData?.priceLKR || 0;
+  const changePercent = priceData?.changePercent ?? aiData?.change24h ?? 0;
   const isPositive = changePercent >= 0;
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <ScrollView contentContainerStyle={styles.container}>
+      <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
 
         {/* Header */}
         <View style={styles.header}>
@@ -78,7 +86,7 @@ export const AssetDetailsScreen = () => {
         {/* Price Display */}
         <View style={styles.priceSection}>
           <Text style={styles.priceValue}>
-            රු {priceLKR.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            {priceLKR > 0 ? `රු ${priceLKR.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 'Loading...'}
           </Text>
           <View style={[styles.changePill, !isPositive && { backgroundColor: colors.red + '22' }]}>
             <MaterialIcons 
@@ -92,44 +100,26 @@ export const AssetDetailsScreen = () => {
           </View>
         </View>
 
-        {/* Time Tabs */}
-        <View style={styles.timeTabs}>
-          {['1D', '1W', '1M', '1Y', 'ALL'].map(tab => (
-            <TouchableOpacity
-              key={tab}
-              style={[styles.timeTabBtn, activeTab === tab && styles.timeTabActive]}
-              onPress={() => setActiveTab(tab)}
-            >
-              <Text style={[styles.timeTabText, activeTab === tab && styles.timeTabTextActive]}>{tab}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-
-        {/* Candlestick / Sparkline Area */}
-        <View style={styles.chartArea}>
-          {[60, 45, 80, 50, 95, 110, 85, 120, 100, 140, 130, 160].map((h, i) => {
-            const isGreen = i % 2 !== 0 && i > 0;
-            return (
-              <View key={i} style={styles.candleContainer}>
-                <View style={[styles.candleWick, { height: h + 30 }]} />
-                <View style={[styles.candleBody, { height: h, backgroundColor: isGreen ? colors.accent : colors.red }]} />
-              </View>
-            );
-          })}
-        </View>
+        {/* Professional Candlestick Chart */}
+        <CandlestickChart
+          symbol={symbol}
+          initialInterval={selectedInterval}
+          onPriceUpdate={handlePriceUpdate}
+          onTimeframeChange={handleIntervalChange}
+        />
 
         {/* Stats Grid */}
         <View style={styles.statsGrid}>
           <View style={styles.statBox}>
             <Text style={styles.statLabel}>24H HIGH</Text>
             <Text style={styles.statValue}>
-              රු {(priceLKR * 1.03).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+              {priceLKR > 0 ? `රු ${(priceLKR * 1.025).toLocaleString(undefined, { maximumFractionDigits: 0 })}` : '---'}
             </Text>
           </View>
           <View style={styles.statBox}>
             <Text style={styles.statLabel}>24H LOW</Text>
             <Text style={styles.statValue}>
-              රු {(priceLKR * 0.97).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+              {priceLKR > 0 ? `රු ${(priceLKR * 0.975).toLocaleString(undefined, { maximumFractionDigits: 0 })}` : '---'}
             </Text>
           </View>
           <View style={styles.statBox}>
@@ -137,7 +127,7 @@ export const AssetDetailsScreen = () => {
             <Text style={styles.statValue}>{aiData?.indicators?.rsi ?? '54.2'}</Text>
           </View>
           <View style={styles.statBox}>
-            <Text style={styles.statLabel}>MARKET TREND</Text>
+            <Text style={styles.statLabel}>MARKET TREND ({selectedInterval.toUpperCase()})</Text>
             <Text style={[styles.statValue, { color: aiData?.trend === 'BULLISH' ? colors.accent : aiData?.trend === 'BEARISH' ? colors.red : colors.yellow }]}>
               {aiData?.trend ?? 'BULLISH'}
             </Text>
@@ -152,6 +142,9 @@ export const AssetDetailsScreen = () => {
             </View>
             <View style={styles.aiPillOutline}>
               <Text style={styles.aiPillOutlineText}>RISK: {aiData?.risk || 'MEDIUM'}</Text>
+            </View>
+            <View style={[styles.aiPillOutline, { marginLeft: 6 }]}>
+              <Text style={styles.aiPillOutlineText}>TF: {selectedInterval.toUpperCase()}</Text>
             </View>
             <View style={{ flex: 1 }} />
             <TouchableOpacity onPress={() => navigation.navigate('AIAnalytics')}>
@@ -174,10 +167,10 @@ export const AssetDetailsScreen = () => {
 
                 <View style={styles.aiContentText}>
                   <Text style={styles.aiAnalysisTitle}>
-                    {aiData?.trend || 'Bullish'} Sentiment
+                    {aiData?.trend || 'Neutral'} Momentum
                   </Text>
                   <Text style={styles.aiAnalysisSubtitle}>
-                    {aiData?.reasons?.[0] || 'Technical indicators confirm positive momentum.'}
+                    {aiData?.reasons?.[0] || 'Technical indicators evaluated against Binance market momentum.'}
                   </Text>
                 </View>
               </View>
@@ -198,13 +191,13 @@ export const AssetDetailsScreen = () => {
         <PrimaryButton
           title="SELL"
           style={styles.sellBtn}
-          onPress={() => navigation.navigate('Trade')}
+          onPress={() => navigation.navigate('Trade', { symbol, action: 'SELL' })}
         />
         <View style={{ width: 16 }} />
         <PrimaryButton
           title={`BUY ${coin}`}
           style={styles.buyBtn}
-          onPress={() => navigation.navigate('Trade')}
+          onPress={() => navigation.navigate('Trade', { symbol, action: 'BUY' })}
         />
       </View>
     </SafeAreaView>
@@ -273,52 +266,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     fontSize: 14,
     marginLeft: 6,
-  },
-  timeTabs: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingHorizontal: 24,
-    marginBottom: 20,
-  },
-  timeTabBtn: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: layout.borderRadiusPill,
-    backgroundColor: colors.bgInput,
-  },
-  timeTabActive: {
-    backgroundColor: colors.accent,
-  },
-  timeTabText: {
-    ...typography.bodySmall,
-    fontWeight: '600',
-  },
-  timeTabTextActive: {
-    color: '#000',
-  },
-  chartArea: {
-    height: 200,
-    width: '100%',
-    backgroundColor: '#050505',
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingBottom: 30,
-    marginBottom: 20,
-  },
-  candleContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  candleWick: {
-    width: 2,
-    backgroundColor: colors.textSecondary,
-    position: 'absolute',
-  },
-  candleBody: {
-    width: 10,
-    borderRadius: 1,
   },
   statsGrid: {
     flexDirection: 'row',
