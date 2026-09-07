@@ -13,7 +13,10 @@ async function testConnection() {
     connection = await oracledb.getConnection({
       user: process.env.DB_USER,
       password: process.env.DB_PASSWORD,
-      connectString: process.env.DB_CONNECT
+      connectString: process.env.DB_CONNECT,
+      configDir: process.env.DB_WALLET_PATH,
+      walletLocation: process.env.DB_WALLET_PATH,
+      walletPassword: process.env.DB_WALLET_PASSWORD
     });
 
     console.log('✅ Connection Successful!');
