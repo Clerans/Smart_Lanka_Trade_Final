@@ -2,19 +2,12 @@ import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 
-// Dynamic Backend Base URL resolver with environment override and Expo hostUri detection
+// Dynamic Backend Base URL resolver with environment override and production fallback
 const getBaseUrl = () => {
   if (process.env.EXPO_PUBLIC_API_URL) {
     return process.env.EXPO_PUBLIC_API_URL;
   }
-  const hostUri = Constants.expoConfig?.hostUri;
-  if (hostUri && !hostUri.includes('exp.direct') && !hostUri.includes('ngrok')) {
-    const ip = hostUri.split(':')[0];
-    if (ip && /^\d+\.\d+\.\d+\.\d+$/.test(ip)) {
-      return `http://${ip}:5000/api`;
-    }
-  }
-  return 'http://192.168.8.109:5000/api';
+  return 'https://smart-lanka-trade-final.onrender.com/api';
 };
 
 const BASE_URL = getBaseUrl();
