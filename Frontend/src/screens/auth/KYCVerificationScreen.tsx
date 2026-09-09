@@ -128,8 +128,11 @@ export const KYCVerificationScreen = () => {
       }
     } catch (err: any) {
       console.error('KYC submission error:', err);
+      if (err.data) {
+        setVerificationResult(err.data);
+      }
       Alert.alert(
-        'Verification Failed',
+        'Verification Notice',
         err.message || 'Failed to communicate with OCR identity verification server.'
       );
     } finally {

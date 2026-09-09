@@ -2,19 +2,12 @@ import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 
-// Dynamic Backend Base URL resolver with environment override and Expo hostUri detection
+// Dynamic Backend Base URL resolver with environment override and production fallback
 const getBaseUrl = () => {
   if (process.env.EXPO_PUBLIC_API_URL) {
     return process.env.EXPO_PUBLIC_API_URL;
   }
-  const hostUri = Constants.expoConfig?.hostUri;
-  if (hostUri && !hostUri.includes('exp.direct') && !hostUri.includes('ngrok')) {
-    const ip = hostUri.split(':')[0];
-    if (ip && /^\d+\.\d+\.\d+\.\d+$/.test(ip)) {
-      return `http://${ip}:5000/api`;
-    }
-  }
-  return 'http://192.168.8.109:5000/api';
+  return 'https://smart-lanka-trade-final.onrender.com/api';
 };
 
 const BASE_URL = getBaseUrl();
@@ -416,15 +409,28 @@ export const aiService = {
 export const kycService = {
   submitKYC: async (formData: FormData) => {
     try {
-      const response = await api.post('/kyc/verify', formData, {
+      const token = await AsyncStorage.getItem('userToken');
+      const url = `${BASE_URL}/kyc/verify`;
+      
+      const response = await fetch(url, {
+        method: 'POST',
         headers: {
           'Accept': 'application/json',
-          'Content-Type': 'multipart/form-data',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
         },
-        transformRequest: (data) => data,
-        timeout: 90000, // 90s timeout for mobile OCR photo upload and recognition
+        body: formData,
       });
-      return response.data;
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw {
+          code: data.code || 'KYC_ERROR',
+          message: data.message || 'KYC document verification failed.',
+          success: false,
+          data: data.data || null
+        };
+      }
+      return data;
     } catch (error: any) {
       console.error('Error submitting KYC document:', error);
       throw error;
