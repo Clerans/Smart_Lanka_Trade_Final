@@ -245,30 +245,98 @@ export const walletService = {
       throw error;
     }
   },
-  deposit: async (amount: number) => {
-    try {
-      const response = await api.post('/wallet/deposit', { amount });
-      return response.data;
-    } catch (error) {
-      console.error('Error depositing money:', error);
-      throw error;
-    }
-  },
-  getTransactions: async () => {
-    try {
-      const response = await api.get('/wallet/transactions');
-      return response.data;
-    } catch (error) {
-      console.error('Error fetching transactions:', error);
-      throw error;
-    }
-  },
   getWalletDetails: async () => {
     try {
       const response = await api.get('/wallet');
       return response.data;
     } catch (error) {
       console.error('Error fetching wallet details:', error);
+      throw error;
+    }
+  },
+  deposit: async (amount: number, method: string = 'CARD', idempotencyKey?: string) => {
+    try {
+      const response = await api.post('/wallet/deposit', { amount, method, idempotencyKey });
+      return response.data;
+    } catch (error) {
+      console.error('Error depositing money:', error);
+      throw error;
+    }
+  },
+  initiateDeposit: async (amount: number, method: string = 'CARD', idempotencyKey?: string) => {
+    try {
+      const response = await api.post('/wallet/deposit/initiate', { amount, method, idempotencyKey });
+      return response.data;
+    } catch (error) {
+      console.error('Error initiating deposit:', error);
+      throw error;
+    }
+  },
+  verifyDeposit: async (transactionId: number, providerReference: string) => {
+    try {
+      const response = await api.post('/wallet/deposit/verify', { transactionId, providerReference });
+      return response.data;
+    } catch (error) {
+      console.error('Error verifying deposit:', error);
+      throw error;
+    }
+  },
+  withdraw: async (amount: number, method: string, destination: string, bankName?: string, idempotencyKey?: string) => {
+    try {
+      const response = await api.post('/wallet/withdraw', {
+        amount,
+        method,
+        destination,
+        bankName,
+        idempotencyKey
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Error requesting withdrawal:', error);
+      throw error;
+    }
+  },
+  lookupRecipient: async (uid: string) => {
+    try {
+      const cleanUid = encodeURIComponent(uid.trim().toUpperCase());
+      const response = await api.get(`/wallet/recipient/${cleanUid}`);
+      return response.data;
+    } catch (error) {
+      console.error('Error looking up recipient:', error);
+      throw error;
+    }
+  },
+  transfer: async (recipientUid: string, amount: number, message?: string, idempotencyKey?: string) => {
+    try {
+      const response = await api.post('/wallet/transfer', {
+        recipientUid,
+        amount,
+        message,
+        idempotencyKey
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Error executing transfer:', error);
+      throw error;
+    }
+  },
+  getTransactions: async (type: string = 'ALL', limit: number = 20) => {
+    try {
+      const response = await api.get('/wallet/transactions', {
+        params: { type, limit }
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching transactions:', error);
+      throw error;
+    }
+  },
+  getTransactionDetails: async (id: number) => {
+    try {
+      const response = await api.get(`/wallet/transactions/${id}`);
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching transaction details:', error);
       throw error;
     }
   },

@@ -372,14 +372,14 @@ class WalletFundingService {
           STATUS, PAYMENT_METHOD, PROVIDER_REF, DESCRIPTION, IDEMPOTENCY_KEY
         ) VALUES (
           :userId, 'LKR', 'WITHDRAW', 1, :numAmount, :numAmount, 
-          'PROCESSING', :method, :withdrawalRef, :desc, :idempotencyKey
+          'PROCESSING', :method, :withdrawalRef, :txDescription, :idempotencyKey
         ) RETURNING TRANSACTION_ID INTO :txId`,
         {
           userId,
           numAmount,
           method,
           withdrawalRef,
-          desc,
+          txDescription: desc,
           idempotencyKey: idempotencyKey || null,
           txId: { type: oracledb.NUMBER, dir: oracledb.BIND_OUT }
         }
