@@ -40,7 +40,8 @@
           "icon": "./assets/icon.png",
           "color": "#00E5FF"
         }
-      ]
+      ],
+      "expo-secure-store"
     ]
   }
 }

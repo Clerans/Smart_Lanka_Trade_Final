@@ -1,6 +1,7 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
+import { storageService } from './storageService';
 
 // Dynamic Backend Base URL resolver with environment override and production fallback
 const getBaseUrl = () => {
@@ -21,9 +22,9 @@ const api = axios.create({
   },
 });
 
-// Add interceptor to include JWT token
+// Add interceptor to include JWT token from SecureStore
 api.interceptors.request.use(async (config) => {
-  const token = await AsyncStorage.getItem('userToken');
+  const token = await storageService.getToken();
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
@@ -57,8 +58,8 @@ export const authService = {
     try {
       const response = await api.post('/auth/login', { email, password });
       if (response.data.token) {
-        await AsyncStorage.setItem('userToken', response.data.token);
-        await AsyncStorage.setItem('userData', JSON.stringify(response.data.user));
+        await storageService.setToken(response.data.token);
+        await storageService.setUserData(response.data.user);
       }
       return response.data;
     } catch (error: any) {
@@ -74,8 +75,7 @@ export const authService = {
     }
   },
   logout: async () => {
-    await AsyncStorage.removeItem('userToken');
-    await AsyncStorage.removeItem('userData');
+    await storageService.clearAuthSession();
     await AsyncStorage.removeItem('rememberMe');
   },
   forgotPassword: async (email: string) => {
@@ -138,8 +138,8 @@ export const authService = {
     try {
       const response = await api.post('/auth/google-login', { idToken });
       if (response.data.token) {
-        await AsyncStorage.setItem('userToken', response.data.token);
-        await AsyncStorage.setItem('userData', JSON.stringify(response.data.user));
+        await storageService.setToken(response.data.token);
+        await storageService.setUserData(response.data.user);
       }
       return response.data;
     } catch (error: any) {
@@ -158,7 +158,7 @@ export const authService = {
     try {
       const response = await api.get('/auth/profile');
       if (response.data && response.data.user) {
-        await AsyncStorage.setItem('userData', JSON.stringify(response.data.user));
+        await storageService.setUserData(response.data.user);
       }
       return response.data;
     } catch (error: any) {
@@ -169,7 +169,7 @@ export const authService = {
     try {
       const response = await api.put('/auth/profile', data);
       if (response.data && response.data.user) {
-        await AsyncStorage.setItem('userData', JSON.stringify(response.data.user));
+        await storageService.setUserData(response.data.user);
       }
       return response.data;
     } catch (error: any) {
@@ -409,7 +409,7 @@ export const aiService = {
 export const kycService = {
   submitKYC: async (formData: FormData) => {
     try {
-      const token = await AsyncStorage.getItem('userToken');
+      const token = await storageService.getToken();
       const url = `${BASE_URL}/kyc/verify`;
       
       const response = await fetch(url, {

@@ -23,6 +23,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { colors, typography, layout } from '../../theme';
 import { Card } from '../../components';
 import { authService, kycService } from '../../services/apiService';
+import { storageService } from '../../services/storageService';
 
 const menuItems = [
   { id: 'kyc', title: 'KYC Identity Verification', icon: 'verified-user', screen: 'KYCVerification' },
@@ -65,15 +66,15 @@ export const UserProfileScreen = () => {
 
   const loadUserProfile = async () => {
     try {
-      const userData = await AsyncStorage.getItem('userData');
+      const userData = await storageService.getUserData();
       if (userData) {
-        setUser(JSON.parse(userData));
+        setUser(userData);
       }
 
       const res = await authService.getProfile();
       if (res?.user) {
         setUser(res.user);
-        await AsyncStorage.setItem('userData', JSON.stringify(res.user));
+        await storageService.setUserData(res.user);
       }
     } catch (err) {
       // Offline fallback
@@ -196,7 +197,7 @@ export const UserProfileScreen = () => {
 
       if (res?.user) {
         setUser(res.user);
-        await AsyncStorage.setItem('userData', JSON.stringify(res.user));
+        await storageService.setUserData(res.user);
       }
 
       setEditProfileModalVisible(false);

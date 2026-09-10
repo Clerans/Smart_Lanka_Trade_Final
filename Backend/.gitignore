@@ -1,9 +1,9 @@
 # dependencies
 node_modules/
 
-# env
-.env
-.env.example
+# uploads & user content
+uploads/
+
 # misc
 .DS_Store
 *.log
@@ -13,6 +13,7 @@ yarn-error.log*
 
 # build
 dist/
+
 # Environment variables
 .env
 .env.*

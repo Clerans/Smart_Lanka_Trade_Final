@@ -24,6 +24,7 @@
     "expo-linear-gradient": "~55.0.18",
     "expo-local-authentication": "~55.0.18",
     "expo-notifications": "~55.0.27",
+    "expo-secure-store": "~55.0.18",
     "expo-status-bar": "~55.0.6",
     "react": "19.2.0",
     "react-dom": "19.2.0",

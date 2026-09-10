@@ -9,6 +9,7 @@ import * as LocalAuthentication from 'expo-local-authentication';
 import { colors, typography, layout } from '../../theme';
 import { InputField, PrimaryButton, Toast, NetworkErrorScreen } from '../../components';
 import { authService } from '../../services/apiService';
+import { storageService } from '../../services/storageService';
 
 const { height } = Dimensions.get('window');
 const isSmallDevice = height < 700;
@@ -112,8 +113,8 @@ export const LoginScreen = () => {
       });
 
       if (result.success) {
-        const storedToken = await AsyncStorage.getItem('userToken');
-        const storedUser = await AsyncStorage.getItem('userData');
+        const storedToken = await storageService.getToken();
+        const storedUser = await storageService.getUserData();
 
         if (storedToken && storedUser) {
           showToast('Biometric verified! Signing in...', 'success');

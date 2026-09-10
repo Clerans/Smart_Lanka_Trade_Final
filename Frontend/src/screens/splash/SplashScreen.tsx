@@ -5,6 +5,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { colors, typography } from '../../theme';
 import { authService } from '../../services/apiService';
+import { storageService } from '../../services/storageService';
 
 export const SplashScreen = () => {
   const navigation = useNavigation<any>();
@@ -19,7 +20,7 @@ export const SplashScreen = () => {
       if (finished) {
         try {
           const rememberMe = await AsyncStorage.getItem('rememberMe');
-          const token = await AsyncStorage.getItem('userToken');
+          const token = await storageService.getToken();
 
           if (rememberMe === 'true' && token) {
             try {

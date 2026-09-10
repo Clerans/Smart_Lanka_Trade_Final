@@ -7,7 +7,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import Svg, { Path } from 'react-native-svg';
 import { colors, typography, layout } from '../../theme';
 import { Card, NotificationModal, SetAlertModal } from '../../components';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { storageService } from '../../services/storageService';
 import { marketService, walletService, portfolioService, authService } from '../../services/apiService';
 
 // Helper to generate SVG path for sparklines
@@ -46,14 +46,14 @@ export const HomeScreen = () => {
   useEffect(() => {
     const loadUser = async () => {
       try {
-        const userData = await AsyncStorage.getItem('userData');
+        const userData = await storageService.getUserData();
         if (userData) {
-          setUser(JSON.parse(userData));
+          setUser(userData);
         }
         const profileRes = await authService.getProfile();
         if (profileRes?.user) {
           setUser(profileRes.user);
-          await AsyncStorage.setItem('userData', JSON.stringify(profileRes.user));
+          await storageService.setUserData(profileRes.user);
         }
       } catch (e) {
         // Ignore offline error
