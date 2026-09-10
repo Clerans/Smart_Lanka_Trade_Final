@@ -1,5 +1,6 @@
 const axios = require('axios');
 const marketService = require('./marketService');
+const { fetchBinanceData } = require('../utils/binanceClient');
 const {
   calculateSMASeries,
   calculateEMASeries,
@@ -59,7 +60,7 @@ function validateInterval(interval = '1h') {
 }
 
 /**
- * Fetches historical candlestick (Kline) data from Binance with caching
+ * Fetches historical candlestick (Kline) data from Binance with multi-mirror caching & failover
  * @param {string} symbol - e.g. "BTCUSDT"
  * @param {string} interval - e.g. "1h"
  * @param {number} limit - number of candles (default: 100)
@@ -78,14 +79,17 @@ async function getHistoricalCandles(symbol = 'BTCUSDT', interval = '1h', limit =
   }
 
   try {
-    const url = `https://api.binance.com/api/v3/klines?symbol=${normSymbol}&interval=${normInterval}&limit=${safeLimit}`;
-    const response = await axios.get(url, { timeout: 8000 });
+    const rawKlines = await fetchBinanceData('/klines', {
+      symbol: normSymbol,
+      interval: normInterval,
+      limit: safeLimit
+    }, 6000);
 
-    if (!Array.isArray(response.data) || response.data.length === 0) {
+    if (!Array.isArray(rawKlines) || rawKlines.length === 0) {
       throw new Error(`No candle data returned for ${normSymbol}`);
     }
 
-    const candles = response.data.map(k => ({
+    const candles = rawKlines.map(k => ({
       timestamp: parseInt(k[0], 10),
       open: parseFloat(k[1]),
       high: parseFloat(k[2]),
