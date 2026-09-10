@@ -6,7 +6,6 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Dimensions,
   ActivityIndicator,
   RefreshControl,
   Alert
@@ -14,7 +13,13 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useNavigation, useIsFocused } from '@react-navigation/native';
-import { Card, DepositModal, WithdrawModal } from '../../components';
+import {
+  Card,
+  DepositModal,
+  WithdrawModal,
+  TransferModal,
+  TransactionDetailsModal
+} from '../../components';
 import { colors } from '../../theme';
 import { walletService, portfolioService } from '../../services/apiService';
 
@@ -78,9 +83,14 @@ export const WalletOverviewScreen = () => {
   const [holdings, setHoldings] = useState<HoldingItem[]>(DEFAULT_HOLDINGS);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+
+  // Modals
   const [isDepositVisible, setIsDepositVisible] = useState(false);
   const [isWithdrawVisible, setIsWithdrawVisible] = useState(false);
+  const [isTransferVisible, setIsTransferVisible] = useState(false);
   const [transactions, setTransactions] = useState<any[]>([]);
+  const [selectedTx, setSelectedTx] = useState<any>(null);
+  const [isTxDetailsVisible, setIsTxDetailsVisible] = useState(false);
 
   const getCoinMeta = (coin: string) => {
     switch (coin.toUpperCase()) {
@@ -107,15 +117,15 @@ export const WalletOverviewScreen = () => {
     try {
       const [walletRes, txRes, portfolioRes] = await Promise.all([
         walletService.getWalletDetails().catch(() => null),
-        walletService.getTransactions().catch(() => null),
+        walletService.getTransactions('ALL', 10).catch(() => null),
         portfolioService.getPortfolio().catch(() => null)
       ]);
 
       if (walletRes?.success) {
         setWalletDetails(walletRes);
       }
-      if (txRes?.success) {
-        setTransactions(txRes.data || []);
+      if (txRes?.success && Array.isArray(txRes.data)) {
+        setTransactions(txRes.data);
       }
 
       if (portfolioRes?.success && Array.isArray(portfolioRes.data?.holdings) && portfolioRes.data.holdings.length > 0) {
@@ -136,7 +146,6 @@ export const WalletOverviewScreen = () => {
         });
         setHoldings(mappedHoldings);
       } else {
-        // Use default benchmark holdings if none in user account
         setHoldings(DEFAULT_HOLDINGS);
       }
     } catch (error) {
@@ -158,18 +167,49 @@ export const WalletOverviewScreen = () => {
     fetchWalletData();
   }, []);
 
-  // Calculated values
   const availableCash = walletDetails?.availableBalance !== undefined ? walletDetails.availableBalance : 892300.00;
   const totalAssetVal = walletDetails?.balanceLKR !== undefined ? walletDetails.balanceLKR : 1247850.40;
 
-  const handleOpenTransactions = () => {
-    if (transactions.length > 0) {
-      Alert.alert(
-        'Transaction History',
-        transactions.slice(0, 5).map(t => `${t.TYPE}: LKR ${parseFloat(t.AMOUNT).toLocaleString()} (${t.STATUS})`).join('\n\n')
-      );
-    } else {
-      Alert.alert('Transaction History', 'No recent deposit/withdrawal transactions found.');
+  const handleOpenTxDetails = (tx: any) => {
+    setSelectedTx(tx);
+    setIsTxDetailsVisible(true);
+  };
+
+  const getTxTypeTitle = (type: string) => {
+    switch (type) {
+      case 'DEPOSIT':
+        return 'Deposit';
+      case 'WITHDRAW':
+        return 'Withdrawal';
+      case 'TRANSFER_SENT':
+        return 'Transfer Sent';
+      case 'TRANSFER_RECEIVED':
+        return 'Transfer Received';
+      case 'BUY':
+        return 'Bought Asset';
+      case 'SELL':
+        return 'Sold Asset';
+      default:
+        return type;
+    }
+  };
+
+  const getTxIcon = (type: string) => {
+    switch (type) {
+      case 'DEPOSIT':
+        return 'arrow-downward';
+      case 'WITHDRAW':
+        return 'arrow-upward';
+      case 'TRANSFER_SENT':
+        return 'arrow-forward';
+      case 'TRANSFER_RECEIVED':
+        return 'arrow-back';
+      case 'BUY':
+        return 'shopping-cart';
+      case 'SELL':
+        return 'sell';
+      default:
+        return 'swap-horiz';
     }
   };
 
@@ -193,13 +233,24 @@ export const WalletOverviewScreen = () => {
         >
           {/* Top Header */}
           <View style={styles.header}>
-            <Text style={styles.headerTitle}>Wallet</Text>
+            <View>
+              <Text style={styles.headerTitle}>Wallet</Text>
+              {walletDetails?.accountUid && (
+                <Text style={styles.headerUidText}>UID: {walletDetails.accountUid}</Text>
+              )}
+            </View>
             <TouchableOpacity 
               style={styles.gridBtn} 
-              onPress={handleOpenTransactions}
+              onPress={() => {
+                if (transactions.length > 0) {
+                  handleOpenTxDetails(transactions[0]);
+                } else {
+                  Alert.alert('Transaction History', 'No transaction activity found.');
+                }
+              }}
               activeOpacity={0.7}
             >
-              <MaterialIcons name="grid-view" size={20} color="#FFFFFF" />
+              <MaterialIcons name="receipt-long" size={20} color="#FFFFFF" />
             </TouchableOpacity>
           </View>
 
@@ -247,13 +298,7 @@ export const WalletOverviewScreen = () => {
             <View style={styles.actionItem}>
               <TouchableOpacity
                 style={styles.actionSquareBtn}
-                onPress={() => {
-                  try {
-                    navigation.navigate('CurrencyConversion');
-                  } catch (e) {
-                    Alert.alert('Transfer', 'Instant P2P & Wallet Transfer is enabled for your account.');
-                  }
-                }}
+                onPress={() => setIsTransferVisible(true)}
                 activeOpacity={0.75}
               >
                 <MaterialIcons name="swap-horiz" size={24} color="#00E676" />
@@ -267,7 +312,7 @@ export const WalletOverviewScreen = () => {
             <View style={styles.holdingsHeaderRow}>
               <Text style={styles.holdingsTitle}>Your Holdings</Text>
               <TouchableOpacity onPress={() => fetchWalletData()} activeOpacity={0.7}>
-                <Text style={styles.viewAllText}>View All</Text>
+                <Text style={styles.viewAllText}>Refresh</Text>
               </TouchableOpacity>
             </View>
 
@@ -327,6 +372,61 @@ export const WalletOverviewScreen = () => {
             })}
           </View>
 
+          {/* Recent Activity Section */}
+          <View style={[styles.holdingsSection, { marginTop: 24 }]}>
+            <View style={styles.holdingsHeaderRow}>
+              <Text style={styles.holdingsTitle}>Recent Activity</Text>
+              <Text style={styles.activitySubText}>{transactions.length} Records</Text>
+            </View>
+
+            {transactions.length === 0 ? (
+              <View style={styles.emptyActivityCard}>
+                <MaterialIcons name="history" size={32} color={colors.textSecondary} style={{ marginBottom: 6 }} />
+                <Text style={styles.emptyActivityText}>No recent funding or transfer activity.</Text>
+              </View>
+            ) : (
+              transactions.slice(0, 5).map((tx) => {
+                const isIncoming = tx.isIncoming !== undefined 
+                  ? tx.isIncoming 
+                  : ['DEPOSIT', 'TRANSFER_RECEIVED', 'SELL'].includes(tx.type);
+
+                return (
+                  <TouchableOpacity
+                    key={tx.id}
+                    style={styles.activityCard}
+                    onPress={() => handleOpenTxDetails(tx)}
+                    activeOpacity={0.75}
+                  >
+                    <View style={[styles.activityIconBox, { backgroundColor: isIncoming ? colors.accentMuted : '#FF525222' }]}>
+                      <MaterialIcons
+                        name={getTxIcon(tx.type)}
+                        size={20}
+                        color={isIncoming ? colors.accent : '#FF5252'}
+                      />
+                    </View>
+                    <View style={styles.activityInfo}>
+                      <Text style={styles.activityTitle}>{getTxTypeTitle(tx.type)}</Text>
+                      <Text style={styles.activityDate}>
+                        {tx.paymentMethod ? `${tx.paymentMethod} • ` : ''}
+                        {tx.createdAt ? new Date(tx.createdAt).toLocaleDateString() : 'Today'}
+                      </Text>
+                    </View>
+                    <View style={styles.activityRight}>
+                      <Text style={[styles.activityAmount, { color: isIncoming ? colors.accent : '#FFFFFF' }]}>
+                        {isIncoming ? '+' : '-'} LKR {tx.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                      </Text>
+                      <View style={[styles.statusBadge, { backgroundColor: tx.status === 'COMPLETED' ? colors.accentMuted : '#FFB30022' }]}>
+                        <Text style={[styles.statusBadgeText, { color: tx.status === 'COMPLETED' ? colors.accent : '#FFB300' }]}>
+                          {tx.status}
+                        </Text>
+                      </View>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })
+            )}
+          </View>
+
           <View style={{ height: 40 }} />
         </ScrollView>
       )}
@@ -344,6 +444,21 @@ export const WalletOverviewScreen = () => {
         onClose={() => setIsWithdrawVisible(false)}
         availableBalance={availableCash}
         onSuccess={fetchWalletData}
+      />
+
+      {/* Internal Transfer Modal */}
+      <TransferModal
+        isVisible={isTransferVisible}
+        onClose={() => setIsTransferVisible(false)}
+        availableBalance={availableCash}
+        onSuccess={fetchWalletData}
+      />
+
+      {/* Transaction Details Modal */}
+      <TransactionDetailsModal
+        isVisible={isTxDetailsVisible}
+        onClose={() => setIsTxDetailsVisible(false)}
+        transaction={selectedTx}
       />
     </SafeAreaView>
   );
@@ -376,6 +491,13 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: colors.textPrimary,
     letterSpacing: -0.5,
+  },
+  headerUidText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.accent,
+    marginTop: 2,
+    letterSpacing: 0.5,
   },
   gridBtn: {
     width: 44,
@@ -474,6 +596,11 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: colors.accent,
   },
+  activitySubText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.textSecondary,
+  },
   holdingCard: {
     backgroundColor: colors.bgCard,
     borderRadius: 18,
@@ -569,5 +696,67 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: colors.textPrimary,
     textAlign: 'right',
+  },
+  emptyActivityCard: {
+    backgroundColor: colors.bgCard,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 24,
+    alignItems: 'center',
+  },
+  emptyActivityText: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    textAlign: 'center',
+  },
+  activityCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.bgCard,
+    borderRadius: 16,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginBottom: 10,
+  },
+  activityIconBox: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  activityInfo: {
+    flex: 1,
+  },
+  activityTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.textPrimary,
+  },
+  activityDate: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  activityRight: {
+    alignItems: 'flex-end',
+  },
+  activityAmount: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  statusBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    marginTop: 4,
+  },
+  statusBadgeText: {
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 0.3,
   },
 });

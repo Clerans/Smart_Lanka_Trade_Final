@@ -42,6 +42,7 @@ export const UserProfileScreen = () => {
   const [user, setUser] = useState<{
     name: string;
     email: string;
+    accountUid?: string | null;
     phoneNumber?: string | null;
     profileImage?: string | null
   } | null>(null);
