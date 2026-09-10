@@ -13,7 +13,8 @@ import {
   TextInput,
   Image,
   KeyboardAvoidingView,
-  Platform
+  Platform,
+  RefreshControl
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -46,6 +47,7 @@ export const UserProfileScreen = () => {
   } | null>(null);
   const [kycStatus, setKycStatus] = useState<string>('NOT_SUBMITTED');
   const [loadingKyc, setLoadingKyc] = useState<boolean>(true);
+  const [refreshing, setRefreshing] = useState<boolean>(false);
 
   // Functional Preferences
   const [biometricEnabled, setBiometricEnabled] = useState(true);
@@ -132,24 +134,31 @@ export const UserProfileScreen = () => {
     loadUserProfile();
   }, [isFocused]);
 
-  useEffect(() => {
-    async function fetchKyc() {
-      try {
-        setLoadingKyc(true);
-        const res = await kycService.getKYCStatus();
-        if (res?.data?.status) {
-          setKycStatus(res.data.status);
-        }
-      } catch (e) {
-        // Not authenticated or offline
-      } finally {
-        setLoadingKyc(false);
+  const fetchKyc = async () => {
+    try {
+      setLoadingKyc(true);
+      const res = await kycService.getKYCStatus();
+      if (res?.data?.status) {
+        setKycStatus(res.data.status);
       }
+    } catch (e) {
+      // Not authenticated or offline
+    } finally {
+      setLoadingKyc(false);
     }
+  };
+
+  useEffect(() => {
     if (isFocused) {
       fetchKyc();
     }
   }, [isFocused]);
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await Promise.all([loadUserProfile(), fetchKyc()]);
+    setRefreshing(false);
+  };
 
   const handleOpenEditModal = () => {
     setEditName(user?.name || '');
@@ -400,7 +409,17 @@ export const UserProfileScreen = () => {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <ScrollView contentContainerStyle={styles.container}>
+      <ScrollView 
+        contentContainerStyle={styles.container}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={colors.accent}
+            colors={[colors.accent]}
+          />
+        }
+      >
 
         {/* Header */}
         <View style={styles.header}>

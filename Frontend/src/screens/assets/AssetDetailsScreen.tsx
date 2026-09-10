@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions, ActivityIndicator, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
@@ -20,6 +20,7 @@ export const AssetDetailsScreen = () => {
   const [priceData, setPriceData] = useState<any>(null);
   const [aiData, setAiData] = useState<any>(null);
   const [loadingAi, setLoadingAi] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
   // Fetch AI Recommendation and Ticker
   const loadAiAndPrice = useCallback(async (interval: string) => {
@@ -40,12 +41,18 @@ export const AssetDetailsScreen = () => {
       console.error('Error loading asset details data:', e);
     } finally {
       setLoadingAi(false);
+      setRefreshing(false);
     }
   }, [symbol]);
 
   useEffect(() => {
     loadAiAndPrice(selectedInterval);
   }, [symbol, selectedInterval, loadAiAndPrice]);
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    loadAiAndPrice(selectedInterval);
+  };
 
   const handlePriceUpdate = (latestPriceLKR: number, change24h: number) => {
     setPriceData((prev: any) => ({
@@ -65,7 +72,18 @@ export const AssetDetailsScreen = () => {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        contentContainerStyle={styles.container} 
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={colors.accent}
+            colors={[colors.accent]}
+          />
+        }
+      >
 
         {/* Header */}
         <View style={styles.header}>

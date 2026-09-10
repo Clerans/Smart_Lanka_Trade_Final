@@ -1,6 +1,6 @@
 import * as React from 'react';
 const { useEffect, useState } = React;
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Image } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Image, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useIsFocused } from '@react-navigation/native';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -34,6 +34,7 @@ export const HomeScreen = () => {
   const [topLoser, setTopLoser] = useState<any>(null);
   const [trendTab, setTrendTab] = useState<'gainer' | 'loser'>('gainer');
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [balance, setBalance] = useState<number | null>(null);
   const [portfolioValue, setPortfolioValue] = useState<number | null>(null);
   const [todaysProfit, setTodaysProfit] = useState<number | null>(null);
@@ -43,86 +44,104 @@ export const HomeScreen = () => {
   const [isNotificationModalVisible, setIsNotificationModalVisible] = useState(false);
 
   // Reload user info on focus (e.g. after updating profile image or name)
-  useEffect(() => {
-    const loadUser = async () => {
-      try {
-        const userData = await storageService.getUserData();
-        if (userData) {
-          setUser(userData);
-        }
-        const profileRes = await authService.getProfile();
-        if (profileRes?.user) {
-          setUser(profileRes.user);
-          await storageService.setUserData(profileRes.user);
-        }
-      } catch (e) {
-        // Ignore offline error
+  const loadUser = async () => {
+    try {
+      const userData = await storageService.getUserData();
+      if (userData) {
+        setUser(userData);
       }
-    };
+      const profileRes = await authService.getProfile();
+      if (profileRes?.user) {
+        setUser(profileRes.user);
+        await storageService.setUserData(profileRes.user);
+      }
+    } catch (e) {
+      // Ignore offline error
+    }
+  };
+
+  useEffect(() => {
     if (isFocused) {
       loadUser();
     }
   }, [isFocused]);
 
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        // Fetch prices with sparkline data for all major pairs
-        const symbols = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'ADAUSDT', 'XRPUSDT', 'DOGEUSDT'];
-        const marketResponse = await marketService.getMultiplePricesLKR(symbols, true);
-        
-        // Fetch portfolio summary
-        const portfolioResponse = await portfolioService.getPortfolio();
-        
-        if (marketResponse.success && marketResponse.data?.prices) {
-          const prices = marketResponse.data.prices;
-          const formatted = prices.map((p: any) => ({
-            symbol: p.symbol,
-            pair: `${p.symbol.replace('USDT', '')}/LKR`,
-            change: `${p.changePercent >= 0 ? '+' : ''}${p.changePercent.toFixed(2)}%`,
-            changeVal: p.changePercent,
-            price: p.priceLKR < 10 
-              ? `Rs ${p.priceLKR.toFixed(4)}`
-              : `Rs ${p.priceLKR.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`,
-            rawPrice: p.priceLKR,
-            color: p.changePercent >= 0 ? colors.accent : colors.red,
-            path: generateSparklinePath(p.sparkline, 100, 40),
-            sparkline: p.sparkline || []
-          }));
-          setWatchlist(formatted);
-          setLkrPriceData(marketResponse.data);
+  const fetchData = async () => {
+    try {
+      // Fetch prices with sparkline data for all major pairs
+      const symbols = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'ADAUSDT', 'XRPUSDT', 'DOGEUSDT'];
+      const marketResponse = await marketService.getMultiplePricesLKR(symbols, true);
+      
+      // Fetch portfolio summary
+      const portfolioResponse = await portfolioService.getPortfolio();
+      
+      if (marketResponse.success && marketResponse.data?.prices) {
+        const prices = marketResponse.data.prices;
+        const formatted = prices.map((p: any) => ({
+          symbol: p.symbol,
+          pair: `${p.symbol.replace('USDT', '')}/LKR`,
+          change: `${p.changePercent >= 0 ? '+' : ''}${p.changePercent.toFixed(2)}%`,
+          changeVal: p.changePercent,
+          price: p.priceLKR < 10 
+            ? `Rs ${p.priceLKR.toFixed(4)}`
+            : `Rs ${p.priceLKR.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`,
+          rawPrice: p.priceLKR,
+          color: p.changePercent >= 0 ? colors.accent : colors.red,
+          path: generateSparklinePath(p.sparkline, 100, 40),
+          sparkline: p.sparkline || []
+        }));
+        setWatchlist(formatted);
+        setLkrPriceData(marketResponse.data);
 
-          // Find top gainer & loser
-          const sorted = [...formatted].sort((a, b) => b.changeVal - a.changeVal);
-          setTopGainer(sorted[0]);
-          setTopLoser(sorted[sorted.length - 1]);
-        }
-
-        if (portfolioResponse.success) {
-          const { summary } = portfolioResponse.data;
-          setBalance(summary.availableCash);
-          setPortfolioValue(summary.totalPortfolioValue);
-          setTodaysProfit(summary.todaysProfit);
-          setPnlPercent(summary.profitLossPercent);
-        }
-
-      } catch (error) {
-        console.error('Failed to fetch home data:', error);
-      } finally {
-        setLoading(false);
+        // Find top gainer & loser
+        const sorted = [...formatted].sort((a, b) => b.changeVal - a.changeVal);
+        setTopGainer(sorted[0]);
+        setTopLoser(sorted[sorted.length - 1]);
       }
-    };
 
+      if (portfolioResponse.success) {
+        const { summary } = portfolioResponse.data;
+        setBalance(summary.availableCash);
+        setPortfolioValue(summary.totalPortfolioValue);
+        setTodaysProfit(summary.todaysProfit);
+        setPnlPercent(summary.profitLossPercent);
+      }
+
+    } catch (error) {
+      console.error('Failed to fetch home data:', error);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  useEffect(() => {
     fetchData();
     const interval = setInterval(fetchData, 30000);
     return () => clearInterval(interval);
   }, []);
 
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await Promise.all([fetchData(), loadUser()]);
+  };
+
   const activeTrend = trendTab === 'gainer' ? topGainer : topLoser;
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        contentContainerStyle={styles.container} 
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={colors.accent}
+            colors={[colors.accent]}
+          />
+        }
+      >
 
         {/* Header */}
         <View style={styles.header}>

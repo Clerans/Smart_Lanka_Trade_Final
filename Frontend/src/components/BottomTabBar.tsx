@@ -9,7 +9,7 @@ export const BottomTabBar: React.FC<BottomTabBarProps> = ({ state, descriptors, 
     const insets = useSafeAreaInsets();
 
     return (
-        <View style={[styles.wrapper, { paddingBottom: Math.max(insets.bottom, 8) }]}>
+        <View style={[styles.wrapper, { paddingBottom: Math.max(insets.bottom, 10) }]}>
             <View style={styles.container}>
                 {state.routes.map((route, index) => {
                     const { options } = descriptors[route.key];
@@ -34,9 +34,8 @@ export const BottomTabBar: React.FC<BottomTabBarProps> = ({ state, descriptors, 
                         });
                     };
 
-                    // Icon selection matching premium fintech look
                     let iconName: keyof typeof MaterialIcons.glyphMap = 'help-outline';
-                    if (route.name === 'Home') iconName = isFocused ? 'home' : 'home';
+                    if (route.name === 'Home') iconName = 'home';
                     if (route.name === 'Markets') iconName = 'trending-up';
                     if (route.name === 'Trade') iconName = 'swap-horiz';
                     if (route.name === 'Wallet') iconName = 'account-balance-wallet';
@@ -54,13 +53,11 @@ export const BottomTabBar: React.FC<BottomTabBarProps> = ({ state, descriptors, 
                                 testID={(options as any).tabBarTestID}
                                 onPress={onPress}
                                 onLongPress={onLongPress}
-                                activeOpacity={0.85}
+                                activeOpacity={0.8}
                                 style={styles.tradeTabItem}
                             >
-                                <View style={styles.tradeOuterRing}>
-                                    <View style={[styles.tradeButton, isFocused && styles.tradeButtonActive]}>
-                                        <MaterialIcons name="compare-arrows" size={28} color="#000000" />
-                                    </View>
+                                <View style={[styles.tradeButton, isFocused && styles.tradeButtonActive]}>
+                                    <MaterialIcons name="swap-horiz" size={28} color="#000000" />
                                 </View>
                             </TouchableOpacity>
                         );
@@ -78,14 +75,11 @@ export const BottomTabBar: React.FC<BottomTabBarProps> = ({ state, descriptors, 
                             activeOpacity={0.7}
                             style={styles.tabItem}
                         >
-                            <View style={styles.iconContainer}>
-                                <MaterialIcons
-                                    name={iconName}
-                                    size={24}
-                                    color={isFocused ? '#00E676' : '#6B7A90'}
-                                />
-                                {isFocused && <View style={styles.activeDot} />}
-                            </View>
+                            <MaterialIcons
+                                name={iconName}
+                                size={26}
+                                color={isFocused ? colors.accent : colors.textSecondary}
+                            />
                         </TouchableOpacity>
                     );
                 })}
@@ -105,7 +99,7 @@ const styles = StyleSheet.create({
         height: 60,
         alignItems: 'center',
         justifyContent: 'space-around',
-        paddingHorizontal: 12,
+        paddingHorizontal: 8,
     },
     tabItem: {
         flex: 1,
@@ -113,59 +107,34 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'center',
     },
-    iconContainer: {
-        alignItems: 'center',
-        justifyContent: 'center',
-        position: 'relative',
-    },
-    activeDot: {
-        position: 'absolute',
-        bottom: -6,
-        width: 4,
-        height: 4,
-        borderRadius: 2,
-        backgroundColor: colors.accent,
-    },
     tradeTabItem: {
         flex: 1,
         alignItems: 'center',
         justifyContent: 'center',
-        zIndex: 10,
-    },
-    tradeOuterRing: {
-        top: -16,
-        width: 62,
-        height: 62,
-        borderRadius: 31,
-        backgroundColor: colors.bg,
-        padding: 3,
-        justifyContent: 'center',
-        alignItems: 'center',
-        borderWidth: 1,
-        borderColor: colors.border,
     },
     tradeButton: {
-        width: 54,
-        height: 54,
-        borderRadius: 27,
+        width: 52,
+        height: 52,
+        borderRadius: 26,
         backgroundColor: colors.accent,
         justifyContent: 'center',
         alignItems: 'center',
+        marginTop: -16,
         ...Platform.select({
             ios: {
                 shadowColor: colors.accent,
                 shadowOffset: { width: 0, height: 4 },
-                shadowOpacity: 0.55,
-                shadowRadius: 10,
+                shadowOpacity: 0.45,
+                shadowRadius: 8,
             },
             android: {
-                elevation: 10,
+                elevation: 6,
             },
         }),
     },
     tradeButtonActive: {
         backgroundColor: colors.accentDark,
-        transform: [{ scale: 0.96 }],
+        transform: [{ scale: 0.95 }],
     },
 });
 

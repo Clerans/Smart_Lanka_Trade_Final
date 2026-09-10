@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, KeyboardAvoidingView, Platform, ActivityIndicator, Modal } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, KeyboardAvoidingView, Platform, ActivityIndicator, Modal, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
@@ -23,6 +23,7 @@ export const DemoTradingScreen = () => {
   const [amountLKR, setAmountLKR] = useState('');
   const [quantityCoin, setQuantityCoin] = useState('');
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [tradeLoading, setTradeLoading] = useState(false);
   const [txHistory, setTxHistory] = useState<any[]>([]);
   
@@ -77,7 +78,13 @@ export const DemoTradingScreen = () => {
       }
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
+  };
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    fetchTradingData();
   };
 
   useEffect(() => {
