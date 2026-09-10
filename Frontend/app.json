@@ -2,6 +2,7 @@
   "expo": {
     "name": "SmartLankaTrade",
     "slug": "SmartLankaTrade",
+    "scheme": "smartlankatrade",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -41,7 +42,8 @@
           "color": "#00E5FF"
         }
       ],
-      "expo-secure-store"
+      "expo-secure-store",
+      "expo-web-browser"
     ]
   }
 }

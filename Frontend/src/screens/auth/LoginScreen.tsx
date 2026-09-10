@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,8 +7,6 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
-  Modal,
-  TextInput,
   Alert,
   ScrollView,
   TextInput as RNTextInput
@@ -18,10 +16,15 @@ import { useNavigation } from '@react-navigation/native';
 import { MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as LocalAuthentication from 'expo-local-authentication';
+import * as WebBrowser from 'expo-web-browser';
+import * as Google from 'expo-auth-session/providers/google';
 import { colors, typography, layout } from '../../theme';
 import { InputField, PrimaryButton, Toast, NetworkErrorScreen } from '../../components';
 import { authService } from '../../services/apiService';
 import { storageService } from '../../services/storageService';
+
+// Complete any pending auth sessions on web or native redirect
+WebBrowser.maybeCompleteAuthSession();
 
 export const LoginScreen = () => {
   const navigation = useNavigation<any>();
@@ -32,17 +35,67 @@ export const LoginScreen = () => {
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-
-  // Google sign-in state
-  const [googleModalVisible, setGoogleModalVisible] = useState(false);
-  const [googleIdToken, setGoogleIdToken] = useState('');
 
   // Toast & Network states
   const [toastVisible, setToastVisible] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
   const [toastType, setToastType] = useState<'success' | 'error' | 'warning'>('success');
   const [isNetworkError, setIsNetworkError] = useState(false);
+
+  // Google OAuth Configuration
+  const googleClientId =
+    process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID ||
+    '160639232948-kn3de7o83ot8vck102jjadi7m9astvfg.apps.googleusercontent.com';
+
+  const [request, response, promptAsync] = Google.useIdTokenAuthRequest({
+    clientId: googleClientId,
+    webClientId: googleClientId,
+    androidClientId: googleClientId,
+    iosClientId: googleClientId,
+    selectAccount: true,
+  });
+
+  // Load saved credentials on mount
+  useEffect(() => {
+    const loadSavedCredentials = async () => {
+      try {
+        const savedRemember = await AsyncStorage.getItem('rememberMe');
+        if (savedRemember === 'true') {
+          setRememberMe(true);
+          const savedEmail = await AsyncStorage.getItem('savedEmail');
+          if (savedEmail) {
+            setEmail(savedEmail);
+          }
+        }
+      } catch (err) {
+        console.error('Error loading saved credentials:', err);
+      }
+    };
+    loadSavedCredentials();
+  }, []);
+
+  // Handle Google OAuth response
+  useEffect(() => {
+    if (!response) return;
+
+    if (response.type === 'success') {
+      const idToken = response.params?.id_token;
+      if (idToken) {
+        handleGoogleLogin(idToken);
+      } else {
+        showToast('Google authentication could not be verified. Please try again.', 'error');
+        setGoogleLoading(false);
+      }
+    } else if (response.type === 'error') {
+      showToast('Google sign-in failed. Please try again.', 'error');
+      setGoogleLoading(false);
+    } else if (response.type === 'cancel' || response.type === 'dismiss') {
+      // User cancelled gracefully - return smoothly to the login screen
+      setGoogleLoading(false);
+    }
+  }, [response]);
 
   const showToast = (message: string, type: 'success' | 'error' | 'warning') => {
     setToastMessage(message);
@@ -51,31 +104,48 @@ export const LoginScreen = () => {
   };
 
   const handleGoogleLogin = async (idToken: string) => {
-    setGoogleModalVisible(false);
     setLoading(true);
     setIsNetworkError(false);
     try {
-      const response = await authService.googleLogin(idToken);
-      if (response.token) {
+      const authResult = await authService.googleLogin(idToken);
+      if (authResult && authResult.token) {
         await AsyncStorage.setItem('rememberMe', 'true');
         showToast('Successfully signed in with Google!', 'success');
         setTimeout(() => {
           navigation.replace('MainApp');
-        }, 1200);
+        }, 800);
       }
     } catch (error: any) {
       if (error.code === 'NETWORK_ERROR') {
         setIsNetworkError(true);
+      } else if (error.code === 'INVALID_GOOGLE_TOKEN' || error.code === 'UNVERIFIED_EMAIL') {
+        showToast('Google authentication could not be verified. Please try again.', 'error');
       } else {
-        showToast(error.message || 'Google Sign-In failed.', 'error');
+        showToast(error.message || 'Google sign-in failed. Please try again.', 'error');
       }
     } finally {
       setLoading(false);
+      setGoogleLoading(false);
+    }
+  };
+
+  const handleGooglePress = async () => {
+    if (loading || googleLoading) return;
+    setGoogleLoading(true);
+    try {
+      const result = await promptAsync();
+      if (result?.type !== 'success') {
+        setGoogleLoading(false);
+      }
+    } catch (err) {
+      console.error('Google Sign-In prompt error:', err);
+      showToast('Google sign-in failed. Please try again.', 'error');
+      setGoogleLoading(false);
     }
   };
 
   const handleLogin = async () => {
-    if (loading) return;
+    if (loading || googleLoading) return;
 
     if (!email.trim() || !password) {
       showToast('Please enter both email and password', 'warning');
@@ -85,9 +155,15 @@ export const LoginScreen = () => {
     setLoading(true);
     setIsNetworkError(false);
     try {
-      const response = await authService.login(email.trim(), password);
-      if (response.token) {
-        await AsyncStorage.setItem('rememberMe', rememberMe ? 'true' : 'false');
+      const authResult = await authService.login(email.trim(), password);
+      if (authResult && authResult.token) {
+        if (rememberMe) {
+          await AsyncStorage.setItem('rememberMe', 'true');
+          await AsyncStorage.setItem('savedEmail', email.trim());
+        } else {
+          await AsyncStorage.removeItem('rememberMe');
+          await AsyncStorage.removeItem('savedEmail');
+        }
         navigation.replace('MainApp');
       }
     } catch (error: any) {
@@ -107,15 +183,15 @@ export const LoginScreen = () => {
   };
 
   const handleBiometricLogin = async () => {
-    if (loading) return;
+    if (loading || googleLoading) return;
     try {
       const hasHardware = await LocalAuthentication.hasHardwareAsync();
       const isEnrolled = await LocalAuthentication.isEnrolledAsync();
 
       if (!hasHardware || !isEnrolled) {
         Alert.alert(
-          'Biometrics Not Set Up',
-          'Biometric hardware or enrolled fingerprint/Face ID was not detected on this device. Please log in with your email and password first, then enable it in Security Settings.'
+          'Biometric Login',
+          'Biometric hardware or enrolled fingerprint/Face ID was not detected on this device. Please log in with your email and password first.'
         );
         return;
       }
@@ -135,10 +211,10 @@ export const LoginScreen = () => {
           setTimeout(() => {
             navigation.replace('MainApp');
           }, 600);
-        } else if (email && password) {
+        } else if (email.trim() && password) {
           handleLogin();
         } else {
-          showToast('Biometrics verified! Sign in once with password to link your account.', 'success');
+          showToast('Biometrics verified! Sign in once with password to save your session.', 'warning');
         }
       } else {
         if (result.error !== 'user_cancel' && result.error !== 'system_cancel') {
@@ -287,7 +363,7 @@ export const LoginScreen = () => {
               </TouchableOpacity>
 
               {/* Login Button */}
-              {loading ? (
+              {loading && !googleLoading ? (
                 <View style={styles.loadingContainer}>
                   <ActivityIndicator color={colors.accent} size="large" />
                 </View>
@@ -295,7 +371,7 @@ export const LoginScreen = () => {
                 <PrimaryButton
                   title="Login to Dashboard"
                   onPress={handleLogin}
-                  disabled={loading}
+                  disabled={loading || googleLoading}
                   style={styles.loginBtn}
                   accessibilityLabel="Login to Dashboard"
                 />
@@ -310,18 +386,21 @@ export const LoginScreen = () => {
 
               {/* Google Button */}
               <TouchableOpacity
-                style={[styles.googleButton, loading && styles.buttonDisabled]}
+                style={[styles.googleButton, (loading || googleLoading) && styles.buttonDisabled]}
                 activeOpacity={0.8}
-                disabled={loading}
-                onPress={() => {
-                  setGoogleIdToken('');
-                  setGoogleModalVisible(true);
-                }}
+                disabled={loading || googleLoading}
+                onPress={handleGooglePress}
                 accessibilityRole="button"
                 accessibilityLabel="Continue with Google"
               >
-                <FontAwesome5 name="google" size={16} color="#FFFFFF" />
-                <Text style={styles.googleText}>Continue with Google</Text>
+                {googleLoading ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <>
+                    <FontAwesome5 name="google" size={16} color="#FFFFFF" />
+                    <Text style={styles.googleText}>Continue with Google</Text>
+                  </>
+                )}
               </TouchableOpacity>
             </View>
 
@@ -342,65 +421,6 @@ export const LoginScreen = () => {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
-
-      {/* Google Chooser Modal */}
-      <Modal
-        visible={googleModalVisible}
-        transparent={true}
-        animationType="fade"
-        onRequestClose={() => setGoogleModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <FontAwesome5 name="google" size={20} color="#4285F4" style={{ marginRight: 10 }} />
-              <Text style={styles.modalTitle}>Sign in with Google</Text>
-            </View>
-            <Text style={styles.modalSubtitle}>Provide your verified Google ID Token to authenticate</Text>
-
-            <View style={styles.customInputSection}>
-              <TextInput
-                placeholder="Paste Google ID Token"
-                placeholderTextColor={colors.textSecondary}
-                value={googleIdToken}
-                onChangeText={setGoogleIdToken}
-                autoCapitalize="none"
-                autoCorrect={false}
-                style={styles.customGoogleInput}
-              />
-              <View style={styles.customInputButtons}>
-                <TouchableOpacity
-                  style={styles.cancelBtn}
-                  onPress={() => setGoogleModalVisible(false)}
-                >
-                  <Text style={styles.cancelBtnText}>Cancel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.submitBtn}
-                  onPress={() => {
-                    if (!googleIdToken.trim()) {
-                      showToast('Please provide a valid Google ID token', 'warning');
-                      return;
-                    }
-                    handleGoogleLogin(googleIdToken.trim());
-                  }}
-                >
-                  <Text style={styles.submitBtnText}>Verify & Login</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-
-            <TouchableOpacity
-              style={styles.closeModalButton}
-              onPress={() => setGoogleModalVisible(false)}
-              accessibilityRole="button"
-              accessibilityLabel="Close Modal"
-            >
-              <Text style={styles.closeModalText}>CANCEL</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
     </SafeAreaView>
   );
 };
@@ -580,80 +600,5 @@ const styles = StyleSheet.create({
   registerLink: {
     color: colors.accent,
     fontWeight: '700',
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.85)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 24,
-  },
-  modalContent: {
-    backgroundColor: colors.bgCard,
-    borderRadius: 20,
-    width: '100%',
-    padding: 24,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  modalTitle: {
-    ...typography.h3,
-    color: colors.textPrimary,
-  },
-  modalSubtitle: {
-    ...typography.bodySmall,
-    color: colors.textSecondary,
-    marginBottom: 24,
-  },
-  customInputSection: {
-    marginTop: 12,
-    marginBottom: 8,
-  },
-  customGoogleInput: {
-    backgroundColor: colors.bgInput,
-    borderRadius: layout.borderRadiusSmall,
-    color: colors.textPrimary,
-    height: 48,
-    paddingHorizontal: 12,
-    marginBottom: 10,
-  },
-  customInputButtons: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    marginTop: 4,
-  },
-  cancelBtn: {
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    marginRight: 10,
-  },
-  cancelBtnText: {
-    color: colors.textSecondary,
-    fontWeight: '600',
-  },
-  submitBtn: {
-    backgroundColor: colors.accent,
-    borderRadius: 18,
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-  },
-  submitBtnText: {
-    color: '#000',
-    fontWeight: '700',
-  },
-  closeModalButton: {
-    alignSelf: 'center',
-    marginTop: 16,
-    paddingVertical: 8,
-  },
-  closeModalText: {
-    color: colors.textSecondary,
-    fontWeight: '700',
-    letterSpacing: 1.5,
   },
 });

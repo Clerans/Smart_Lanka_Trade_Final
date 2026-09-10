@@ -40,7 +40,7 @@ api.interceptors.response.use(
       const networkError = {
         success: false,
         code: 'NETWORK_ERROR',
-        message: 'Network connection failed. Please check your connection and try again.'
+        message: 'Unable to connect to SmartLanka Trade. Check your internet connection.'
       };
       return Promise.reject(networkError);
     }

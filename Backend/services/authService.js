@@ -294,6 +294,10 @@ exports.googleLoginUser = async (idToken) => {
     throw createError('INVALID_GOOGLE_TOKEN', 'Google token payload is missing email.', 401);
   }
 
+  if (payload.email_verified === false) {
+    throw createError('UNVERIFIED_EMAIL', 'Google email is not verified.', 401);
+  }
+
   const email = payload.email.toLowerCase().trim();
   const name = payload.name || payload.given_name || email.split('@')[0];
 
@@ -324,8 +328,9 @@ exports.googleLoginUser = async (idToken) => {
   // Reset attempts and log login timestamp
   await userModel.resetFailedAttemptsAndLogLogin(user.ID);
 
+  const userRole = user.ROLE || 'USER';
   const jwtToken = jwt.sign(
-    { id: user.ID, email: user.EMAIL },
+    { id: user.ID, email: user.EMAIL, role: userRole },
     process.env.JWT_SECRET,
     { expiresIn: '1d' }
   );
@@ -337,6 +342,7 @@ exports.googleLoginUser = async (idToken) => {
       accountUid: user.ACCOUNT_UID || null,
       name: user.NAME,
       email: user.EMAIL,
+      role: userRole,
       phoneNumber: user.PHONE_NUMBER || null,
       profileImage: user.PROFILE_IMAGE || null
     }
