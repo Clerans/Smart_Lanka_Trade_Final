@@ -6,6 +6,7 @@ import { MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
 import { colors, typography, layout } from '../../theme';
 import { PrimaryButton, Card, CandlestickChart } from '../../components';
 import { aiService, marketService } from '../../services/apiService';
+import { formatLKR, formatNumber } from '../../utils/formatters';
 
 const { width } = Dimensions.get('window');
 
@@ -104,7 +105,7 @@ export const AssetDetailsScreen = () => {
         {/* Price Display */}
         <View style={styles.priceSection}>
           <Text style={styles.priceValue}>
-            {priceLKR > 0 ? `රු ${priceLKR.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 'Loading...'}
+            {priceLKR > 0 ? `රු ${formatLKR(priceLKR, 2)}` : 'Loading...'}
           </Text>
           <View style={[styles.changePill, !isPositive && { backgroundColor: colors.red + '22' }]}>
             <MaterialIcons 
@@ -131,13 +132,13 @@ export const AssetDetailsScreen = () => {
           <View style={styles.statBox}>
             <Text style={styles.statLabel}>24H HIGH</Text>
             <Text style={styles.statValue}>
-              {priceLKR > 0 ? `රු ${(priceLKR * 1.025).toLocaleString(undefined, { maximumFractionDigits: 0 })}` : '---'}
+              {priceLKR > 0 ? `රු ${formatNumber(priceLKR * 1.025, 0)}` : '---'}
             </Text>
           </View>
           <View style={styles.statBox}>
             <Text style={styles.statLabel}>24H LOW</Text>
             <Text style={styles.statValue}>
-              {priceLKR > 0 ? `රු ${(priceLKR * 0.975).toLocaleString(undefined, { maximumFractionDigits: 0 })}` : '---'}
+              {priceLKR > 0 ? `රු ${formatNumber(priceLKR * 0.975, 0)}` : '---'}
             </Text>
           </View>
           <View style={styles.statBox}>
