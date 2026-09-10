@@ -250,7 +250,18 @@ export const DemoTradingScreen = () => {
               </View>
             )}
 
-            <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+            <ScrollView 
+              contentContainerStyle={styles.container} 
+              keyboardShouldPersistTaps="handled"
+              refreshControl={
+                <RefreshControl
+                  refreshing={refreshing}
+                  onRefresh={onRefresh}
+                  tintColor={colors.accent}
+                  colors={[colors.accent]}
+                />
+              }
+            >
 
             {/* Virtual Balance Card */}
             <Card style={styles.balanceCard}>
