@@ -1,10 +1,12 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
+const { OAuth2Client } = require('google-auth-library');
 const userModel = require('../models/userModel');
 const verificationModel = require('../models/verificationModel');
 const { sendVerificationEmail, sendVerificationOTPEmail, sendPasswordResetOTPEmail } = require('./emailService');
 const { validatePassword } = require('../utils/validator');
+
 
 const createError = (code, message, status = 400) => {
   const err = new Error(message);
@@ -257,7 +259,35 @@ exports.verifyEmailToken = async (token) => {
   return { message: 'Email verified successfully! You can now log in.' };
 };
 
-exports.googleLoginUser = async (email, name) => {
+exports.googleLoginUser = async (idToken) => {
+  if (!idToken || typeof idToken !== 'string') {
+    throw createError('MISSING_TOKEN', 'Google ID token is required.', 400);
+  }
+
+  const googleClientId = process.env.GOOGLE_CLIENT_ID;
+  if (!googleClientId) {
+    throw createError('SERVER_CONFIG_ERROR', 'Google OAuth client ID is not configured on the server.', 500);
+  }
+
+  let payload;
+  try {
+    const client = new OAuth2Client(googleClientId);
+    const ticket = await client.verifyIdToken({
+      idToken,
+      audience: googleClientId,
+    });
+    payload = ticket.getPayload();
+  } catch (verifyErr) {
+    throw createError('INVALID_GOOGLE_TOKEN', 'Google authentication failed: Invalid or expired ID token.', 401);
+  }
+
+  if (!payload || !payload.email) {
+    throw createError('INVALID_GOOGLE_TOKEN', 'Google token payload is missing email.', 401);
+  }
+
+  const email = payload.email.toLowerCase().trim();
+  const name = payload.name || payload.given_name || email.split('@')[0];
+
   let user = await userModel.findByEmail(email);
   if (!user) {
     // Create a new user with random password, automatically verified
