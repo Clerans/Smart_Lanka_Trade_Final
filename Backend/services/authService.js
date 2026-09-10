@@ -110,6 +110,7 @@ exports.loginUser = async (email, password) => {
     token,
     user: {
       id: user.ID,
+      accountUid: user.ACCOUNT_UID || null,
       name: user.NAME,
       email: user.EMAIL,
       role: userRole,
@@ -333,6 +334,7 @@ exports.googleLoginUser = async (idToken) => {
     token: jwtToken,
     user: {
       id: user.ID,
+      accountUid: user.ACCOUNT_UID || null,
       name: user.NAME,
       email: user.EMAIL,
       phoneNumber: user.PHONE_NUMBER || null,
@@ -349,6 +351,7 @@ exports.getUserProfile = async (userId) => {
 
   return {
     id: user.ID,
+    accountUid: user.ACCOUNT_UID || null,
     name: user.NAME,
     email: user.EMAIL,
     phoneNumber: user.PHONE_NUMBER || null,
@@ -394,6 +397,7 @@ exports.updateUserProfile = async (userId, { name, email, phoneNumber, profileIm
 
   return {
     id: updatedUser.ID,
+    accountUid: updatedUser.ACCOUNT_UID || null,
     name: updatedUser.NAME,
     email: updatedUser.EMAIL,
     phoneNumber: updatedUser.PHONE_NUMBER || null,
