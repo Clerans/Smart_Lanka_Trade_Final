@@ -1,15 +1,14 @@
 import * as React from 'react';
 const { useEffect, useState } = React;
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useIsFocused } from '@react-navigation/native';
 import { MaterialIcons } from '@expo/vector-icons';
 import Svg, { Path } from 'react-native-svg';
 import { colors, typography, layout } from '../../theme';
-import { Card } from '../../components';
+import { Card, NotificationModal, SetAlertModal } from '../../components';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { marketService, walletService, portfolioService } from '../../services/apiService';
-import { SetAlertModal } from '../../components/SetAlertModal';
+import { marketService, walletService, portfolioService, authService } from '../../services/apiService';
 
 // Helper to generate SVG path for sparklines
 const generateSparklinePath = (data: number[], width: number, height: number) => {
@@ -28,6 +27,7 @@ const generateSparklinePath = (data: number[], width: number, height: number) =>
 
 export const HomeScreen = () => {
   const navigation = useNavigation<any>();
+  const isFocused = useIsFocused();
   const [watchlist, setWatchlist] = useState<any[]>([]);
   const [lkrPriceData, setLkrPriceData] = useState<any>(null);
   const [topGainer, setTopGainer] = useState<any>(null);
@@ -38,18 +38,35 @@ export const HomeScreen = () => {
   const [portfolioValue, setPortfolioValue] = useState<number | null>(null);
   const [todaysProfit, setTodaysProfit] = useState<number | null>(null);
   const [pnlPercent, setPnlPercent] = useState<number | null>(null);
-  const [user, setUser] = useState<{ name: string } | null>(null);
+  const [user, setUser] = useState<{ name: string; profileImage?: string | null } | null>(null);
   const [isAlertModalVisible, setIsAlertModalVisible] = useState(false);
+  const [isNotificationModalVisible, setIsNotificationModalVisible] = useState(false);
 
+  // Reload user info on focus (e.g. after updating profile image or name)
   useEffect(() => {
-    const fetchData = async () => {
+    const loadUser = async () => {
       try {
-        // Load user info
         const userData = await AsyncStorage.getItem('userData');
         if (userData) {
           setUser(JSON.parse(userData));
         }
+        const profileRes = await authService.getProfile();
+        if (profileRes?.user) {
+          setUser(profileRes.user);
+          await AsyncStorage.setItem('userData', JSON.stringify(profileRes.user));
+        }
+      } catch (e) {
+        // Ignore offline error
+      }
+    };
+    if (isFocused) {
+      loadUser();
+    }
+  }, [isFocused]);
 
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
         // Fetch prices with sparkline data for all major pairs
         const symbols = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'ADAUSDT', 'XRPUSDT', 'DOGEUSDT'];
         const marketResponse = await marketService.getMultiplePricesLKR(symbols, true);
@@ -109,21 +126,38 @@ export const HomeScreen = () => {
 
         {/* Header */}
         <View style={styles.header}>
-          <View style={styles.headerLeft}>
+          <TouchableOpacity 
+            style={styles.headerLeft} 
+            activeOpacity={0.7}
+            onPress={() => navigation.navigate('Profile')}
+          >
             <View style={styles.avatar}>
-              <MaterialIcons name="person" size={24} color={colors.accent} />
+              {user?.profileImage ? (
+                <Image source={{ uri: user.profileImage }} style={styles.avatarImage} />
+              ) : (
+                <MaterialIcons name="person" size={24} color={colors.accent} />
+              )}
             </View>
             <View style={styles.headerTextContainer}>
               <Text style={styles.greetingText}>Ayubowan,</Text>
               <Text style={styles.userName}>{user?.name || 'Friend'}</Text>
             </View>
-          </View>
+          </TouchableOpacity>
           <View style={styles.headerIcons}>
-            <TouchableOpacity style={styles.iconButton}>
+            <TouchableOpacity 
+              style={styles.iconButton}
+              activeOpacity={0.7}
+              onPress={() => navigation.navigate('Markets')}
+            >
               <MaterialIcons name="search" size={24} color={colors.textPrimary} />
             </TouchableOpacity>
-            <TouchableOpacity style={styles.iconButton}>
+            <TouchableOpacity 
+              style={styles.iconButton}
+              activeOpacity={0.7}
+              onPress={() => setIsNotificationModalVisible(true)}
+            >
               <MaterialIcons name="notifications-none" size={24} color={colors.textPrimary} />
+              <View style={styles.notificationBadgeDot} />
             </TouchableOpacity>
           </View>
         </View>
@@ -337,6 +371,11 @@ export const HomeScreen = () => {
           currentPrice={lkrPriceData.usdToLkr}
         />
       )}
+      <NotificationModal
+        visible={isNotificationModalVisible}
+        onClose={() => setIsNotificationModalVisible(false)}
+        onOpenSetAlert={() => setIsAlertModalVisible(true)}
+      />
     </SafeAreaView>
   );
 };
@@ -359,18 +398,28 @@ const styles = StyleSheet.create({
   headerLeft: {
     flexDirection: 'row',
     alignItems: 'center',
+    flex: 1,
   },
   avatar: {
     width: 48,
     height: 48,
     borderRadius: 24,
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: colors.accent,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
+    backgroundColor: colors.bgCard,
+    overflow: 'hidden',
   },
-  headerTextContainer: {},
+  avatarImage: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+  },
+  headerTextContainer: {
+    flex: 1,
+  },
   greetingText: {
     ...typography.label,
   },
@@ -379,10 +428,24 @@ const styles = StyleSheet.create({
   },
   headerIcons: {
     flexDirection: 'row',
+    alignItems: 'center',
   },
   iconButton: {
     marginLeft: 16,
     justifyContent: 'center',
+    alignItems: 'center',
+    position: 'relative',
+  },
+  notificationBadgeDot: {
+    position: 'absolute',
+    top: 0,
+    right: 2,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: colors.accent,
+    borderWidth: 1,
+    borderColor: colors.bg,
   },
   balanceCard: {
     marginHorizontal: 24,
