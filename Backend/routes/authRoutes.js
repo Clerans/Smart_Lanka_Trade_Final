@@ -18,11 +18,12 @@ const {
   updateProfile
 } = require('../controllers/authController');
 const { protect } = require('../middleware/authMiddleware');
+const { requireAdmin } = require('../middleware/adminMiddleware');
 
 router.post('/register', register);
 router.post('/login', login);
 router.post('/google-login', googleLogin);
-router.get('/users', getUsers);
+router.get('/users', protect, requireAdmin, getUsers);
 router.get('/verify/:token', verifyEmailToken); // Legacy HTML verification support
 
 // New OTP & security endpoints

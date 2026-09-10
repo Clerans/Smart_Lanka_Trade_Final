@@ -14,6 +14,7 @@ import { MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
 import { colors, typography, layout } from '../../theme';
 import { Card } from '../../components';
 import { aiService } from '../../services/apiService';
+import { formatLKR, formatNumber } from '../../utils/formatters';
 
 const intervals = ['1h', '4h', '1d'];
 
@@ -204,7 +205,7 @@ export const AIAnalyticsScreen = () => {
                   <View>
                     <Text style={styles.priceLabel}>Current Price (LKR)</Text>
                     <Text style={styles.priceValue}>
-                      රු {item.priceLKR ? item.priceLKR.toLocaleString() : '---'}
+                      රු {item.priceLKR ? formatLKR(item.priceLKR, 2) : '---'}
                     </Text>
                   </View>
                   <View style={styles.trendContainer}>
@@ -270,15 +271,15 @@ export const AIAnalyticsScreen = () => {
                       </View>
                       <View style={styles.indicatorBox}>
                         <Text style={styles.indicatorName}>SMA 20</Text>
-                        <Text style={styles.indicatorValue}>${item.indicators?.sma20 ? item.indicators.sma20.toLocaleString() : 'N/A'}</Text>
+                        <Text style={styles.indicatorValue}>${item.indicators?.sma20 ? formatNumber(item.indicators.sma20, 2) : 'N/A'}</Text>
                       </View>
                       <View style={styles.indicatorBox}>
                         <Text style={styles.indicatorName}>SMA 50</Text>
-                        <Text style={styles.indicatorValue}>${item.indicators?.sma50 ? item.indicators.sma50.toLocaleString() : 'N/A'}</Text>
+                        <Text style={styles.indicatorValue}>${item.indicators?.sma50 ? formatNumber(item.indicators.sma50, 2) : 'N/A'}</Text>
                       </View>
                       <View style={styles.indicatorBox}>
                         <Text style={styles.indicatorName}>EMA 20</Text>
-                        <Text style={styles.indicatorValue}>${item.indicators?.ema20 ? item.indicators.ema20.toLocaleString() : 'N/A'}</Text>
+                        <Text style={styles.indicatorValue}>${item.indicators?.ema20 ? formatNumber(item.indicators.ema20, 2) : 'N/A'}</Text>
                       </View>
                       <View style={styles.indicatorBox}>
                         <Text style={styles.indicatorName}>MACD Hist</Text>

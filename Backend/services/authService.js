@@ -1,10 +1,12 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
+const { OAuth2Client } = require('google-auth-library');
 const userModel = require('../models/userModel');
 const verificationModel = require('../models/verificationModel');
 const { sendVerificationEmail, sendVerificationOTPEmail, sendPasswordResetOTPEmail } = require('./emailService');
 const { validatePassword } = require('../utils/validator');
+
 
 const createError = (code, message, status = 400) => {
   const err = new Error(message);
@@ -35,14 +37,16 @@ exports.registerUser = async (name, email, password) => {
   const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes expiry
   await verificationModel.createEmailVerificationOTP(userId, otp, expiresAt);
 
-  console.log(`\n=================================================`);
-  console.log(`📧 Email Verification OTP for ${email}: ${otp}`);
-  console.log(`=================================================\n`);
+  if (process.env.NODE_ENV !== 'production') {
+    console.log(`\n=================================================`);
+    console.log(`📧 Email Verification OTP for ${email}: ${otp}`);
+    console.log(`=================================================\n`);
+  }
 
   // Send verification OTP email (async)
   sendVerificationOTPEmail(email, otp);
 
-  return { userId, otp };
+  return { userId };
 };
 
 exports.loginUser = async (email, password) => {
@@ -106,6 +110,7 @@ exports.loginUser = async (email, password) => {
     token,
     user: {
       id: user.ID,
+      accountUid: user.ACCOUNT_UID || null,
       name: user.NAME,
       email: user.EMAIL,
       role: userRole,
@@ -125,13 +130,15 @@ exports.sendVerificationOTP = async (email) => {
   const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
   await verificationModel.createEmailVerificationOTP(user.ID, otp, expiresAt);
 
-  console.log(`\n=================================================`);
-  console.log(`📧 Sent Email Verification OTP to ${email}: ${otp}`);
-  console.log(`=================================================\n`);
+  if (process.env.NODE_ENV !== 'production') {
+    console.log(`\n=================================================`);
+    console.log(`📧 Sent Email Verification OTP to ${email}: ${otp}`);
+    console.log(`=================================================\n`);
+  }
 
   sendVerificationOTPEmail(email, otp);
 
-  return { otp };
+  return { success: true };
 };
 
 exports.verifyEmailOTP = async (email, otp) => {
@@ -170,13 +177,15 @@ exports.resendVerificationOTP = async (email) => {
   const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
   await verificationModel.createEmailVerificationOTP(user.ID, otp, expiresAt);
 
-  console.log(`\n=================================================`);
-  console.log(`📧 Resent Email Verification OTP to ${email}: ${otp}`);
-  console.log(`=================================================\n`);
+  if (process.env.NODE_ENV !== 'production') {
+    console.log(`\n=================================================`);
+    console.log(`📧 Resent Email Verification OTP to ${email}: ${otp}`);
+    console.log(`=================================================\n`);
+  }
 
   sendVerificationOTPEmail(email, otp);
 
-  return { otp };
+  return { success: true };
 };
 
 exports.forgotPassword = async (email) => {
@@ -189,13 +198,15 @@ exports.forgotPassword = async (email) => {
   const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
   await verificationModel.createPasswordResetOTP(user.ID, otp, expiresAt);
 
-  console.log(`\n=================================================`);
-  console.log(`🔑 Password Reset OTP for ${email}: ${otp}`);
-  console.log(`=================================================\n`);
+  if (process.env.NODE_ENV !== 'production') {
+    console.log(`\n=================================================`);
+    console.log(`🔑 Password Reset OTP for ${email}: ${otp}`);
+    console.log(`=================================================\n`);
+  }
 
   sendPasswordResetOTPEmail(email, otp);
 
-  return { otp };
+  return { success: true };
 };
 
 exports.verifyResetOTP = async (email, otp) => {
@@ -257,7 +268,39 @@ exports.verifyEmailToken = async (token) => {
   return { message: 'Email verified successfully! You can now log in.' };
 };
 
-exports.googleLoginUser = async (email, name) => {
+exports.googleLoginUser = async (idToken) => {
+  if (!idToken || typeof idToken !== 'string') {
+    throw createError('MISSING_TOKEN', 'Google ID token is required.', 400);
+  }
+
+  const googleClientId = process.env.GOOGLE_CLIENT_ID;
+  if (!googleClientId) {
+    throw createError('SERVER_CONFIG_ERROR', 'Google OAuth client ID is not configured on the server.', 500);
+  }
+
+  let payload;
+  try {
+    const client = new OAuth2Client(googleClientId);
+    const ticket = await client.verifyIdToken({
+      idToken,
+      audience: googleClientId,
+    });
+    payload = ticket.getPayload();
+  } catch (verifyErr) {
+    throw createError('INVALID_GOOGLE_TOKEN', 'Google authentication failed: Invalid or expired ID token.', 401);
+  }
+
+  if (!payload || !payload.email) {
+    throw createError('INVALID_GOOGLE_TOKEN', 'Google token payload is missing email.', 401);
+  }
+
+  if (payload.email_verified === false) {
+    throw createError('UNVERIFIED_EMAIL', 'Google email is not verified.', 401);
+  }
+
+  const email = payload.email.toLowerCase().trim();
+  const name = payload.name || payload.given_name || email.split('@')[0];
+
   let user = await userModel.findByEmail(email);
   if (!user) {
     // Create a new user with random password, automatically verified
@@ -285,8 +328,9 @@ exports.googleLoginUser = async (email, name) => {
   // Reset attempts and log login timestamp
   await userModel.resetFailedAttemptsAndLogLogin(user.ID);
 
+  const userRole = user.ROLE || 'USER';
   const jwtToken = jwt.sign(
-    { id: user.ID, email: user.EMAIL },
+    { id: user.ID, email: user.EMAIL, role: userRole },
     process.env.JWT_SECRET,
     { expiresIn: '1d' }
   );
@@ -295,8 +339,10 @@ exports.googleLoginUser = async (email, name) => {
     token: jwtToken,
     user: {
       id: user.ID,
+      accountUid: user.ACCOUNT_UID || null,
       name: user.NAME,
       email: user.EMAIL,
+      role: userRole,
       phoneNumber: user.PHONE_NUMBER || null,
       profileImage: user.PROFILE_IMAGE || null
     }
@@ -311,6 +357,7 @@ exports.getUserProfile = async (userId) => {
 
   return {
     id: user.ID,
+    accountUid: user.ACCOUNT_UID || null,
     name: user.NAME,
     email: user.EMAIL,
     phoneNumber: user.PHONE_NUMBER || null,
@@ -356,6 +403,7 @@ exports.updateUserProfile = async (userId, { name, email, phoneNumber, profileIm
 
   return {
     id: updatedUser.ID,
+    accountUid: updatedUser.ACCOUNT_UID || null,
     name: updatedUser.NAME,
     email: updatedUser.EMAIL,
     phoneNumber: updatedUser.PHONE_NUMBER || null,

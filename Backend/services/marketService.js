@@ -1,6 +1,18 @@
 const axios = require("axios");
 const { fetchBinanceData } = require("../utils/binanceClient");
 
+// Canonical list of supported market symbols
+const ALLOWED_SYMBOLS = ['BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'SOLUSDT', 'ADAUSDT', 'XRPUSDT', 'DOGEUSDT'];
+
+function normalizeSymbol(symbol) {
+  if (!symbol || typeof symbol !== 'string') return null;
+  let normalized = symbol.toUpperCase().trim().replace('/', '');
+  if (!normalized.endsWith('USDT')) {
+    normalized = normalized + 'USDT';
+  }
+  return normalized;
+}
+
 // Shared rate & inflight caches
 let cachedUsdToLkr = null;
 let cachedUsdToLkrTime = 0;
@@ -8,6 +20,7 @@ let inflightLivePricesPromise = null;
 
 // 1. Get crypto ticker from Binance (Price + 24h Change)
 async function getCryptoTicker(symbol = "BTCUSDT") {
+  const norm = normalizeSymbol(symbol);
   // Special case for USDT/USDT (used for LKR/USDT rate alerts)
   if (symbol === "USDTUSDT" || symbol === "USDT") {
     return {
@@ -16,7 +29,11 @@ async function getCryptoTicker(symbol = "BTCUSDT") {
     };
   }
 
-  const data = await fetchBinanceData('/ticker/24hr', { symbol }, 4000);
+  if (!norm || !ALLOWED_SYMBOLS.includes(norm)) {
+    throw new Error(`Symbol '${symbol}' is not allowed. Allowed symbols: ${ALLOWED_SYMBOLS.join(', ')}`);
+  }
+
+  const data = await fetchBinanceData('/ticker/24hr', { symbol: norm }, 4000);
 
   return {
     price: parseFloat(data.lastPrice),
@@ -270,6 +287,8 @@ async function getLivePrices() {
 }
 
 module.exports = {
+  ALLOWED_SYMBOLS,
+  normalizeSymbol,
   getPriceInLKR,
   getMultiplePricesInLKR,
   getAllPricesInLKR,

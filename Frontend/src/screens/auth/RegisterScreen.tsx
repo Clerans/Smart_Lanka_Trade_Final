@@ -245,15 +245,15 @@ export const RegisterScreen = () => {
               }
             />
 
-            <TouchableOpacity 
-              style={styles.termsContainer} 
+            <TouchableOpacity
+              style={styles.termsContainer}
               activeOpacity={0.8}
               onPress={() => setAgree(!agree)}
             >
-              <MaterialIcons 
-                name={agree ? "radio-button-checked" : "radio-button-unchecked"} 
-                size={24} 
-                color={agree ? colors.accent : colors.textSecondary} 
+              <MaterialIcons
+                name={agree ? "radio-button-checked" : "radio-button-unchecked"}
+                size={24}
+                color={agree ? colors.accent : colors.textSecondary}
               />
               <Text style={styles.termsText}>
                 By creating an account, I agree to the <Text style={styles.greenLink}>Terms of Service</Text> and <Text style={styles.greenLink}>Privacy Policy</Text>.

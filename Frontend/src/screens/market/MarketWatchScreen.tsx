@@ -1,10 +1,11 @@
 import * as React from 'react';
 const { useState, useEffect } = React;
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
 import { colors, typography, layout } from '../../theme';
 import { marketService } from '../../services/apiService';
+import { formatLKR } from '../../utils/formatters';
 
 const filters = ['All Assets', 'Crypto', 'Stocks', 'Indices'];
 
@@ -28,6 +29,7 @@ export const MarketWatchScreen = () => {
   const [activeFilter, setActiveFilter] = useState('All Assets');
   const [assets, setAssets] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
   const filteredAssets = assets.filter(asset => {
@@ -46,34 +48,40 @@ export const MarketWatchScreen = () => {
     return matchesSearch && matchesCategory;
   });
 
-  useEffect(() => {
-    const fetchMarketData = async () => {
-      try {
-        const response = await marketService.getAllPricesLKR();
-        if (response.success) {
-          const formatted = response.data.prices.map((p: any, index: number) => ({
-            id: index,
-            name: assetMeta[p.symbol]?.name || p.symbol.replace('USDT', ''),
-            ticker: p.symbol.replace('USDT', ''),
-            price: p.priceLKR.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
-            change: `${p.changePercent >= 0 ? '+' : ''}${p.changePercent.toFixed(2)}%`,
-            isPositive: p.changePercent >= 0,
-            color: assetMeta[p.symbol]?.color || '#888',
-            icon: assetMeta[p.symbol]?.icon || 'chart-line',
-          }));
-          setAssets(formatted);
-        }
-      } catch (error) {
-        console.error('Failed to fetch market data:', error);
-      } finally {
-        setLoading(false);
+  const fetchMarketData = async () => {
+    try {
+      const response = await marketService.getAllPricesLKR();
+      if (response.success) {
+        const formatted = response.data.prices.map((p: any, index: number) => ({
+          id: index,
+          name: assetMeta[p.symbol]?.name || p.symbol.replace('USDT', ''),
+          ticker: p.symbol.replace('USDT', ''),
+          price: formatLKR(p.priceLKR, 2),
+          change: `${p.changePercent >= 0 ? '+' : ''}${p.changePercent.toFixed(2)}%`,
+          isPositive: p.changePercent >= 0,
+          color: assetMeta[p.symbol]?.color || '#888',
+          icon: assetMeta[p.symbol]?.icon || 'chart-line',
+        }));
+        setAssets(formatted);
       }
-    };
+    } catch (error) {
+      console.error('Failed to fetch market data:', error);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
 
+  useEffect(() => {
     fetchMarketData();
     const interval = setInterval(fetchMarketData, 30000);
     return () => clearInterval(interval);
   }, []);
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    fetchMarketData();
+  };
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -132,7 +140,17 @@ export const MarketWatchScreen = () => {
           <ActivityIndicator size="large" color={colors.accent} />
         </View>
       ) : (
-        <ScrollView contentContainerStyle={styles.listContainer}>
+        <ScrollView 
+          contentContainerStyle={styles.listContainer}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor={colors.accent}
+              colors={[colors.accent]}
+            />
+          }
+        >
           {filteredAssets.length > 0 ? (
             filteredAssets.map((asset) => (
               <View key={asset.id}>

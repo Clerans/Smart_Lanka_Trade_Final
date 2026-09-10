@@ -1,5 +1,7 @@
 const oracledb = require('oracledb');
 
+const { generateAccountUID } = require('../utils/uidGenerator');
+
 // Configure CLOB columns to fetch as string automatically
 oracledb.fetchAsString = [ oracledb.CLOB ];
 
@@ -8,11 +10,21 @@ exports.findByEmail = async (email) => {
   try {
     connection = await oracledb.getConnection();
     const result = await connection.execute(
-      `SELECT ID, NAME, EMAIL, PASSWORD, IS_VERIFIED, ROLE, KYC_STATUS, NIC_NUMBER, PHONE_NUMBER, PROFILE_IMAGE, FAILED_ATTEMPTS, ACCOUNT_LOCKED_UNTIL, LAST_LOGIN FROM SL_USERS WHERE EMAIL = :email`,
+      `SELECT ID, ACCOUNT_UID, NAME, EMAIL, PASSWORD, IS_VERIFIED, ROLE, KYC_STATUS, NIC_NUMBER, PHONE_NUMBER, PROFILE_IMAGE, FAILED_ATTEMPTS, ACCOUNT_LOCKED_UNTIL, LAST_LOGIN FROM SL_USERS WHERE EMAIL = :email`,
       [email],
       { outFormat: oracledb.OUT_FORMAT_OBJECT }
     );
-    return result.rows[0];
+    const user = result.rows[0];
+    if (user && !user.ACCOUNT_UID) {
+      const newUid = generateAccountUID();
+      await connection.execute(
+        `UPDATE SL_USERS SET ACCOUNT_UID = :newUid WHERE ID = :id`,
+        { newUid, id: user.ID }
+      );
+      await connection.commit();
+      user.ACCOUNT_UID = newUid;
+    }
+    return user;
   } finally {
     if (connection) await connection.close();
   }
@@ -23,8 +35,34 @@ exports.findById = async (id) => {
   try {
     connection = await oracledb.getConnection();
     const result = await connection.execute(
-      `SELECT ID, NAME, EMAIL, PASSWORD, IS_VERIFIED, ROLE, KYC_STATUS, NIC_NUMBER, PHONE_NUMBER, PROFILE_IMAGE, CREATED_AT FROM SL_USERS WHERE ID = :id`,
+      `SELECT ID, ACCOUNT_UID, NAME, EMAIL, PASSWORD, IS_VERIFIED, ROLE, KYC_STATUS, NIC_NUMBER, PHONE_NUMBER, PROFILE_IMAGE, CREATED_AT FROM SL_USERS WHERE ID = :id`,
       [id],
+      { outFormat: oracledb.OUT_FORMAT_OBJECT }
+    );
+    const user = result.rows[0] || null;
+    if (user && !user.ACCOUNT_UID) {
+      const newUid = generateAccountUID();
+      await connection.execute(
+        `UPDATE SL_USERS SET ACCOUNT_UID = :newUid WHERE ID = :id`,
+        { newUid, id: user.ID }
+      );
+      await connection.commit();
+      user.ACCOUNT_UID = newUid;
+    }
+    return user;
+  } finally {
+    if (connection) await connection.close();
+  }
+};
+
+exports.findByUid = async (uid) => {
+  let connection;
+  try {
+    connection = await oracledb.getConnection();
+    const cleanUid = (uid || '').trim().toUpperCase();
+    const result = await connection.execute(
+      `SELECT ID, ACCOUNT_UID, NAME, EMAIL, IS_VERIFIED, ROLE, KYC_STATUS, CREATED_AT FROM SL_USERS WHERE UPPER(ACCOUNT_UID) = :cleanUid`,
+      [cleanUid],
       { outFormat: oracledb.OUT_FORMAT_OBJECT }
     );
     return result.rows[0] || null;
@@ -65,7 +103,7 @@ exports.findByToken = async (token) => {
   try {
     connection = await oracledb.getConnection();
     const result = await connection.execute(
-      `SELECT ID FROM SL_USERS WHERE VERIFICATION_TOKEN = :token`,
+      `SELECT ID, ACCOUNT_UID FROM SL_USERS WHERE VERIFICATION_TOKEN = :token`,
       [token],
       { outFormat: oracledb.OUT_FORMAT_OBJECT }
     );
@@ -94,12 +132,16 @@ exports.createUser = async (name, email, password, token) => {
   try {
     connection = await oracledb.getConnection();
     
-    // Insert User with token
+    // Generate unique account UID
+    const accountUid = generateAccountUID();
+
+    // Insert User with token and unique UID
     const result = await connection.execute(
-      `INSERT INTO SL_USERS (NAME, EMAIL, PASSWORD, VERIFICATION_TOKEN) 
-       VALUES (:name, :email, :password, :token) 
+      `INSERT INTO SL_USERS (ACCOUNT_UID, NAME, EMAIL, PASSWORD, VERIFICATION_TOKEN) 
+       VALUES (:accountUid, :name, :email, :password, :token) 
        RETURNING ID INTO :id`,
       {
+        accountUid,
         name,
         email,
         password,
@@ -137,7 +179,7 @@ exports.findAllUsers = async () => {
   try {
     connection = await oracledb.getConnection();
     const result = await connection.execute(
-      `SELECT ID, NAME, EMAIL, IS_VERIFIED, CREATED_AT FROM SL_USERS`,
+      `SELECT ID, ACCOUNT_UID, NAME, EMAIL, IS_VERIFIED, CREATED_AT FROM SL_USERS`,
       [],
       { outFormat: oracledb.OUT_FORMAT_OBJECT }
     );

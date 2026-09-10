@@ -1,15 +1,15 @@
 import * as React from 'react';
 const { useEffect, useState } = React;
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Image, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useIsFocused } from '@react-navigation/native';
 import { MaterialIcons } from '@expo/vector-icons';
 import Svg, { Path } from 'react-native-svg';
 import { colors, typography, layout } from '../../theme';
-import { Card } from '../../components';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { marketService, walletService, portfolioService } from '../../services/apiService';
-import { SetAlertModal } from '../../components/SetAlertModal';
+import { Card, NotificationModal, SetAlertModal } from '../../components';
+import { storageService } from '../../services/storageService';
+import { marketService, walletService, portfolioService, authService } from '../../services/apiService';
+import { formatLKR, formatNumber } from '../../utils/formatters';
 
 // Helper to generate SVG path for sparklines
 const generateSparklinePath = (data: number[], width: number, height: number) => {
@@ -28,102 +28,156 @@ const generateSparklinePath = (data: number[], width: number, height: number) =>
 
 export const HomeScreen = () => {
   const navigation = useNavigation<any>();
+  const isFocused = useIsFocused();
   const [watchlist, setWatchlist] = useState<any[]>([]);
   const [lkrPriceData, setLkrPriceData] = useState<any>(null);
   const [topGainer, setTopGainer] = useState<any>(null);
   const [topLoser, setTopLoser] = useState<any>(null);
   const [trendTab, setTrendTab] = useState<'gainer' | 'loser'>('gainer');
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [balance, setBalance] = useState<number | null>(null);
   const [portfolioValue, setPortfolioValue] = useState<number | null>(null);
   const [todaysProfit, setTodaysProfit] = useState<number | null>(null);
   const [pnlPercent, setPnlPercent] = useState<number | null>(null);
-  const [user, setUser] = useState<{ name: string } | null>(null);
+  const [user, setUser] = useState<{ name: string; profileImage?: string | null } | null>(null);
   const [isAlertModalVisible, setIsAlertModalVisible] = useState(false);
+  const [isNotificationModalVisible, setIsNotificationModalVisible] = useState(false);
+
+  // Reload user info on focus (e.g. after updating profile image or name)
+  const loadUser = async () => {
+    try {
+      const userData = await storageService.getUserData();
+      if (userData) {
+        setUser(userData);
+      }
+      const profileRes = await authService.getProfile();
+      if (profileRes?.user) {
+        setUser(profileRes.user);
+        await storageService.setUserData(profileRes.user);
+      }
+    } catch (e) {
+      // Ignore offline error
+    }
+  };
 
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        // Load user info
-        const userData = await AsyncStorage.getItem('userData');
-        if (userData) {
-          setUser(JSON.parse(userData));
-        }
+    if (isFocused) {
+      loadUser();
+    }
+  }, [isFocused]);
 
-        // Fetch prices with sparkline data for all major pairs
-        const symbols = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'ADAUSDT', 'XRPUSDT', 'DOGEUSDT'];
-        const marketResponse = await marketService.getMultiplePricesLKR(symbols, true);
-        
-        // Fetch portfolio summary
-        const portfolioResponse = await portfolioService.getPortfolio();
-        
-        if (marketResponse.success && marketResponse.data?.prices) {
-          const prices = marketResponse.data.prices;
-          const formatted = prices.map((p: any) => ({
-            symbol: p.symbol,
-            pair: `${p.symbol.replace('USDT', '')}/LKR`,
-            change: `${p.changePercent >= 0 ? '+' : ''}${p.changePercent.toFixed(2)}%`,
-            changeVal: p.changePercent,
-            price: p.priceLKR < 10 
-              ? `Rs ${p.priceLKR.toFixed(4)}`
-              : `Rs ${p.priceLKR.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`,
-            rawPrice: p.priceLKR,
-            color: p.changePercent >= 0 ? colors.accent : colors.red,
-            path: generateSparklinePath(p.sparkline, 100, 40),
-            sparkline: p.sparkline || []
-          }));
-          setWatchlist(formatted);
-          setLkrPriceData(marketResponse.data);
+  const fetchData = async () => {
+    try {
+      // Fetch prices with sparkline data for all major pairs
+      const symbols = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'ADAUSDT', 'XRPUSDT', 'DOGEUSDT'];
+      const marketResponse = await marketService.getMultiplePricesLKR(symbols, true);
+      
+      // Fetch portfolio summary
+      const portfolioResponse = await portfolioService.getPortfolio();
+      
+      if (marketResponse.success && marketResponse.data?.prices) {
+        const prices = marketResponse.data.prices;
+        const formatted = prices.map((p: any) => ({
+          symbol: p.symbol,
+          pair: `${p.symbol.replace('USDT', '')}/LKR`,
+          change: `${p.changePercent >= 0 ? '+' : ''}${p.changePercent.toFixed(2)}%`,
+          changeVal: p.changePercent,
+          price: (p.priceLKR !== undefined && p.priceLKR !== null && p.priceLKR < 10)
+            ? `Rs ${Number(p.priceLKR).toFixed(4)}`
+            : `Rs ${formatNumber(p.priceLKR, 0, 0)}`,
+          rawPrice: p.priceLKR || 0,
+          color: p.changePercent >= 0 ? colors.accent : colors.red,
+          path: generateSparklinePath(p.sparkline, 100, 40),
+          sparkline: p.sparkline || []
+        }));
+        setWatchlist(formatted);
+        setLkrPriceData(marketResponse.data);
 
-          // Find top gainer & loser
-          const sorted = [...formatted].sort((a, b) => b.changeVal - a.changeVal);
-          setTopGainer(sorted[0]);
-          setTopLoser(sorted[sorted.length - 1]);
-        }
-
-        if (portfolioResponse.success) {
-          const { summary } = portfolioResponse.data;
-          setBalance(summary.availableCash);
-          setPortfolioValue(summary.totalPortfolioValue);
-          setTodaysProfit(summary.todaysProfit);
-          setPnlPercent(summary.profitLossPercent);
-        }
-
-      } catch (error) {
-        console.error('Failed to fetch home data:', error);
-      } finally {
-        setLoading(false);
+        // Find top gainer & loser
+        const sorted = [...formatted].sort((a, b) => b.changeVal - a.changeVal);
+        setTopGainer(sorted[0]);
+        setTopLoser(sorted[sorted.length - 1]);
       }
-    };
 
+      if (portfolioResponse.success) {
+        const { summary } = portfolioResponse.data;
+        setBalance(summary.availableCash);
+        setPortfolioValue(summary.totalPortfolioValue);
+        setTodaysProfit(summary.todaysProfit);
+        setPnlPercent(summary.profitLossPercent);
+      }
+
+    } catch (error) {
+      console.error('Failed to fetch home data:', error);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  useEffect(() => {
     fetchData();
     const interval = setInterval(fetchData, 30000);
     return () => clearInterval(interval);
   }, []);
 
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await Promise.all([fetchData(), loadUser()]);
+  };
+
   const activeTrend = trendTab === 'gainer' ? topGainer : topLoser;
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        contentContainerStyle={styles.container} 
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={colors.accent}
+            colors={[colors.accent]}
+          />
+        }
+      >
 
         {/* Header */}
         <View style={styles.header}>
-          <View style={styles.headerLeft}>
+          <TouchableOpacity 
+            style={styles.headerLeft} 
+            activeOpacity={0.7}
+            onPress={() => navigation.navigate('Profile')}
+          >
             <View style={styles.avatar}>
-              <MaterialIcons name="person" size={24} color={colors.accent} />
+              {user?.profileImage ? (
+                <Image source={{ uri: user.profileImage }} style={styles.avatarImage} />
+              ) : (
+                <MaterialIcons name="person" size={24} color={colors.accent} />
+              )}
             </View>
             <View style={styles.headerTextContainer}>
               <Text style={styles.greetingText}>Ayubowan,</Text>
               <Text style={styles.userName}>{user?.name || 'Friend'}</Text>
             </View>
-          </View>
+          </TouchableOpacity>
           <View style={styles.headerIcons}>
-            <TouchableOpacity style={styles.iconButton}>
+            <TouchableOpacity 
+              style={styles.iconButton}
+              activeOpacity={0.7}
+              onPress={() => navigation.navigate('Markets')}
+            >
               <MaterialIcons name="search" size={24} color={colors.textPrimary} />
             </TouchableOpacity>
-            <TouchableOpacity style={styles.iconButton}>
+            <TouchableOpacity 
+              style={styles.iconButton}
+              activeOpacity={0.7}
+              onPress={() => setIsNotificationModalVisible(true)}
+            >
               <MaterialIcons name="notifications-none" size={24} color={colors.textPrimary} />
+              <View style={styles.notificationBadgeDot} />
             </TouchableOpacity>
           </View>
         </View>
@@ -132,28 +186,28 @@ export const HomeScreen = () => {
         <Card style={styles.balanceCard}>
           <Text style={styles.balanceLabel}>Est. Total Value</Text>
           <Text style={styles.balanceValue}>
-            LKR {portfolioValue !== null ? portfolioValue.toLocaleString(undefined, { minimumFractionDigits: 2 }) : '1,000,000.00'}
+            LKR {formatLKR(portfolioValue, 2)}
           </Text>
           <View style={styles.balanceFooterRow}>
             <View style={[
               styles.pnlPill,
-              todaysProfit !== null && todaysProfit < 0 ? styles.pnlPillRed : styles.pnlPillGreen
+              todaysProfit !== null && todaysProfit !== undefined && todaysProfit < 0 ? styles.pnlPillRed : styles.pnlPillGreen
             ]}>
               <MaterialIcons 
-                name={todaysProfit !== null && todaysProfit >= 0 ? "trending-up" : "trending-down"} 
+                name={todaysProfit !== null && todaysProfit !== undefined && todaysProfit >= 0 ? "trending-up" : "trending-down"} 
                 size={14} 
-                color={todaysProfit !== null && todaysProfit >= 0 ? colors.accent : colors.red} 
+                color={todaysProfit !== null && todaysProfit !== undefined && todaysProfit >= 0 ? colors.accent : colors.red} 
               />
               <Text style={[
                 styles.pnlText,
-                todaysProfit !== null && todaysProfit >= 0 ? { color: colors.accent } : { color: colors.red }
+                todaysProfit !== null && todaysProfit !== undefined && todaysProfit >= 0 ? { color: colors.accent } : { color: colors.red }
               ]}>
-                {todaysProfit !== null && todaysProfit >= 0 ? '+' : ''}{pnlPercent !== null ? pnlPercent.toFixed(2) : '0.00'}% PNL
+                {todaysProfit !== null && todaysProfit !== undefined && todaysProfit >= 0 ? '+' : ''}{pnlPercent !== null && pnlPercent !== undefined ? pnlPercent.toFixed(2) : '0.00'}% PNL
               </Text>
             </View>
             <View style={styles.walletBalanceContainer}>
               <Text style={styles.walletBalanceLabel}>Available: </Text>
-              <Text style={styles.walletBalanceValue}>LKR {balance !== null ? balance.toLocaleString(undefined, { maximumFractionDigits: 0 }) : '1,000,000'}</Text>
+              <Text style={styles.walletBalanceValue}>LKR {formatNumber(balance, 0)}</Text>
             </View>
           </View>
           <MaterialIcons
@@ -337,6 +391,11 @@ export const HomeScreen = () => {
           currentPrice={lkrPriceData.usdToLkr}
         />
       )}
+      <NotificationModal
+        visible={isNotificationModalVisible}
+        onClose={() => setIsNotificationModalVisible(false)}
+        onOpenSetAlert={() => setIsAlertModalVisible(true)}
+      />
     </SafeAreaView>
   );
 };
@@ -359,18 +418,28 @@ const styles = StyleSheet.create({
   headerLeft: {
     flexDirection: 'row',
     alignItems: 'center',
+    flex: 1,
   },
   avatar: {
     width: 48,
     height: 48,
     borderRadius: 24,
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: colors.accent,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
+    backgroundColor: colors.bgCard,
+    overflow: 'hidden',
   },
-  headerTextContainer: {},
+  avatarImage: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+  },
+  headerTextContainer: {
+    flex: 1,
+  },
   greetingText: {
     ...typography.label,
   },
@@ -379,10 +448,24 @@ const styles = StyleSheet.create({
   },
   headerIcons: {
     flexDirection: 'row',
+    alignItems: 'center',
   },
   iconButton: {
     marginLeft: 16,
     justifyContent: 'center',
+    alignItems: 'center',
+    position: 'relative',
+  },
+  notificationBadgeDot: {
+    position: 'absolute',
+    top: 0,
+    right: 2,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: colors.accent,
+    borderWidth: 1,
+    borderColor: colors.bg,
   },
   balanceCard: {
     marginHorizontal: 24,

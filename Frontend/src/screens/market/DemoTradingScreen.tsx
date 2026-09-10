@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, KeyboardAvoidingView, Platform, ActivityIndicator, Modal } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, KeyboardAvoidingView, Platform, ActivityIndicator, Modal, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
@@ -7,6 +7,7 @@ import Svg, { Path } from 'react-native-svg';
 import { colors, typography, layout } from '../../theme';
 import { PrimaryButton, Card, Toast, NetworkErrorScreen } from '../../components';
 import { marketService, walletService, tradeService, transactionService, portfolioService } from '../../services/apiService';
+import { formatLKR, formatNumber } from '../../utils/formatters';
 
 export const DemoTradingScreen = () => {
   const navigation = useNavigation<any>();
@@ -23,6 +24,7 @@ export const DemoTradingScreen = () => {
   const [amountLKR, setAmountLKR] = useState('');
   const [quantityCoin, setQuantityCoin] = useState('');
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [tradeLoading, setTradeLoading] = useState(false);
   const [txHistory, setTxHistory] = useState<any[]>([]);
   
@@ -77,7 +79,13 @@ export const DemoTradingScreen = () => {
       }
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
+  };
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    fetchTradingData();
   };
 
   useEffect(() => {
@@ -235,7 +243,7 @@ export const DemoTradingScreen = () => {
                         {coin.coin} / LKR
                       </Text>
                       <Text style={styles.pickerItemPrice}>
-                        Rs {coin.priceLKR.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        Rs {formatLKR(coin.priceLKR, 2)}
                       </Text>
                     </TouchableOpacity>
                   ))}
@@ -243,7 +251,18 @@ export const DemoTradingScreen = () => {
               </View>
             )}
 
-            <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+            <ScrollView 
+              contentContainerStyle={styles.container} 
+              keyboardShouldPersistTaps="handled"
+              refreshControl={
+                <RefreshControl
+                  refreshing={refreshing}
+                  onRefresh={onRefresh}
+                  tintColor={colors.accent}
+                  colors={[colors.accent]}
+                />
+              }
+            >
 
             {/* Virtual Balance Card */}
             <Card style={styles.balanceCard}>
@@ -254,13 +273,13 @@ export const DemoTradingScreen = () => {
                 </TouchableOpacity>
               </View>
               <Text style={styles.balanceValue}>
-                LKR {walletDetails ? walletDetails.balanceLKR.toLocaleString(undefined, { minimumFractionDigits: 2 }) : '1,000,000.00'}
+                LKR {formatLKR(walletDetails?.balanceLKR ?? walletDetails?.balance ?? 1000000, 2)}
               </Text>
               <Text style={[
                 styles.balanceSubtitle,
                 portfolioSummary && portfolioSummary.todaysProfit >= 0 ? { color: colors.accent } : { color: colors.red }
               ]}>
-                PNL: {portfolioSummary && portfolioSummary.todaysProfit >= 0 ? '+' : ''}{portfolioSummary ? portfolioSummary.todaysProfit.toLocaleString(undefined, { maximumFractionDigits: 0 }) : '0'} LKR ({portfolioSummary ? (portfolioSummary.profitLossPercent >= 0 ? '+' : '') + portfolioSummary.profitLossPercent.toFixed(2) : '0.00'}%)
+                PNL: {portfolioSummary && portfolioSummary.todaysProfit >= 0 ? '+' : ''}{formatNumber(portfolioSummary?.todaysProfit, 0)} LKR ({portfolioSummary ? (portfolioSummary.profitLossPercent >= 0 ? '+' : '') + Number(portfolioSummary.profitLossPercent || 0).toFixed(2) : '0.00'}%)
               </Text>
             </Card>
 
@@ -269,10 +288,10 @@ export const DemoTradingScreen = () => {
               <View style={styles.priceRow}>
                 <View>
                   <Text style={styles.livePrice}>
-                    Rs {activeCoinPriceLKR.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                    Rs {formatLKR(activeCoinPriceLKR, 2)}
                   </Text>
                   <Text style={[styles.liveChange, activeCoinChange >= 0 ? { color: colors.accent } : { color: colors.red }]}>
-                    {activeCoinChange >= 0 ? '+' : ''}{activeCoinChange.toFixed(2)}%
+                    {activeCoinChange >= 0 ? '+' : ''}{Number(activeCoinChange || 0).toFixed(2)}%
                   </Text>
                 </View>
                 <View style={styles.timeFilter}>
@@ -365,14 +384,14 @@ export const DemoTradingScreen = () => {
               <View style={styles.balanceInfoRow}>
                 <Text style={styles.availableText}>
                   {tradeType === 'BUY' 
-                    ? `Available: ${walletDetails ? walletDetails.availableBalance.toLocaleString(undefined, { maximumFractionDigits: 0 }) : '1,000,000'} LKR`
+                    ? `Available: ${formatNumber(walletDetails?.availableBalance ?? 1000000, 0)} LKR`
                     : `Holding: ${getOwnedQuantity().toFixed(6)} ${selectedSymbol.replace('USDT', '')}`
                   }
                 </Text>
                 <TouchableOpacity onPress={() => {
                   if (tradeType === 'BUY') {
                     if (walletDetails) {
-                      handleAmountLKRChange(walletDetails.availableBalance.toString());
+                      handleAmountLKRChange((walletDetails.availableBalance ?? 0).toString());
                     }
                   } else {
                     handleQuantityCoinChange(getOwnedQuantity().toString());
@@ -416,7 +435,7 @@ export const DemoTradingScreen = () => {
                       </View>
                       <View>
                         <Text style={styles.txPair}>{tx.action} {tx.coin}</Text>
-                        <Text style={styles.txTime}>{new Date(tx.date).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })}</Text>
+                        <Text style={styles.txTime}>{tx.date ? new Date(tx.date).toLocaleDateString() : 'Recent'}</Text>
                       </View>
                     </View>
                     <View style={styles.txRight}>
@@ -424,9 +443,9 @@ export const DemoTradingScreen = () => {
                         styles.txAmount,
                         tx.action === 'BUY' || tx.action === 'DEPOSIT' ? styles.txAmountGreen : styles.txAmountRed
                       ]}>
-                        {tx.action === 'BUY' || tx.action === 'DEPOSIT' ? '+' : '-'}{tx.quantity.toFixed(4)} {tx.coin}
+                        {tx.action === 'BUY' || tx.action === 'DEPOSIT' ? '+' : '-'}{Number(tx.quantity || 0).toFixed(4)} {tx.coin}
                       </Text>
-                      <Text style={styles.txTotalVal}>LKR {tx.total.toLocaleString(undefined, { maximumFractionDigits: 0 })}</Text>
+                      <Text style={styles.txTotalVal}>LKR {formatNumber(tx.total, 0)}</Text>
                     </View>
                   </View>
                 ))
@@ -455,11 +474,11 @@ export const DemoTradingScreen = () => {
             <Text style={styles.modalText}>
               Are you sure you want to {tradeType === 'BUY' ? 'buy' : 'sell'}{' '}
               <Text style={{ fontWeight: '700', color: colors.accent }}>
-                {parseFloat(quantityCoin).toFixed(6)} {selectedSymbol.replace('USDT', '')}
+                {parseFloat(quantityCoin || '0').toFixed(6)} {selectedSymbol.replace('USDT', '')}
               </Text>{' '}
               for{' '}
               <Text style={{ fontWeight: '700', color: colors.accent }}>
-                LKR {parseFloat(amountLKR).toLocaleString()}
+                LKR {formatLKR(amountLKR, 2)}
               </Text>?
             </Text>
             <View style={styles.modalButtons}>

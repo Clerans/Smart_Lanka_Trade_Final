@@ -6,5 +6,8 @@ export { DepositModal } from './DepositModal';
 export { Toast } from './Toast';
 export { NetworkErrorScreen } from './NetworkErrorScreen';
 export { CandlestickChart } from './CandlestickChart';
-
-
+export { NotificationModal } from './NotificationModal';
+export { SetAlertModal } from './SetAlertModal';
+export { WithdrawModal } from './WithdrawModal';
+export { TransferModal } from './TransferModal';
+export { TransactionDetailsModal } from './TransactionDetailsModal';

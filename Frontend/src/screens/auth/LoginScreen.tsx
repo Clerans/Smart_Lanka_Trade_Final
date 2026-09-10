@@ -1,37 +1,101 @@
-import * as React from 'react';
-const { useState } = React;
-import { View, Text, StyleSheet, TouchableOpacity, KeyboardAvoidingView, Platform, Dimensions, ActivityIndicator, Modal, TextInput, Alert } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import React, { useState, useRef, useEffect } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  KeyboardAvoidingView,
+  Platform,
+  ActivityIndicator,
+  Alert,
+  ScrollView,
+  TextInput as RNTextInput
+} from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as LocalAuthentication from 'expo-local-authentication';
+import * as WebBrowser from 'expo-web-browser';
+import * as Google from 'expo-auth-session/providers/google';
 import { colors, typography, layout } from '../../theme';
 import { InputField, PrimaryButton, Toast, NetworkErrorScreen } from '../../components';
 import { authService } from '../../services/apiService';
+import { storageService } from '../../services/storageService';
 
-const { height } = Dimensions.get('window');
-const isSmallDevice = height < 700;
+// Complete any pending auth sessions on web or native redirect
+WebBrowser.maybeCompleteAuthSession();
 
 export const LoginScreen = () => {
   const navigation = useNavigation<any>();
+  const insets = useSafeAreaInsets();
+  const passwordInputRef = useRef<RNTextInput>(null);
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
-  // Google sign-in simulation states
-  const [googleModalVisible, setGoogleModalVisible] = useState(false);
-  const [customGoogleEmail, setCustomGoogleEmail] = useState('');
-  const [customGoogleName, setCustomGoogleName] = useState('');
-  const [showCustomGoogleInput, setShowCustomGoogleInput] = useState(false);
-
-  // Toast states
+  // Toast & Network states
   const [toastVisible, setToastVisible] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
   const [toastType, setToastType] = useState<'success' | 'error' | 'warning'>('success');
   const [isNetworkError, setIsNetworkError] = useState(false);
+
+  // Google OAuth Configuration
+  const googleClientId =
+    process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID ||
+    '160639232948-kn3de7o83ot8vck102jjadi7m9astvfg.apps.googleusercontent.com';
+
+  const [request, response, promptAsync] = Google.useIdTokenAuthRequest({
+    clientId: googleClientId,
+    webClientId: googleClientId,
+    androidClientId: googleClientId,
+    iosClientId: googleClientId,
+    selectAccount: true,
+  });
+
+  // Load saved credentials on mount
+  useEffect(() => {
+    const loadSavedCredentials = async () => {
+      try {
+        const savedRemember = await AsyncStorage.getItem('rememberMe');
+        if (savedRemember === 'true') {
+          setRememberMe(true);
+          const savedEmail = await AsyncStorage.getItem('savedEmail');
+          if (savedEmail) {
+            setEmail(savedEmail);
+          }
+        }
+      } catch (err) {
+        console.error('Error loading saved credentials:', err);
+      }
+    };
+    loadSavedCredentials();
+  }, []);
+
+  // Handle Google OAuth response
+  useEffect(() => {
+    if (!response) return;
+
+    if (response.type === 'success') {
+      const idToken = response.params?.id_token;
+      if (idToken) {
+        handleGoogleLogin(idToken);
+      } else {
+        showToast('Google authentication could not be verified. Please try again.', 'error');
+        setGoogleLoading(false);
+      }
+    } else if (response.type === 'error') {
+      showToast('Google sign-in failed. Please try again.', 'error');
+      setGoogleLoading(false);
+    } else if (response.type === 'cancel' || response.type === 'dismiss') {
+      // User cancelled gracefully - return smoothly to the login screen
+      setGoogleLoading(false);
+    }
+  }, [response]);
 
   const showToast = (message: string, type: 'success' | 'error' | 'warning') => {
     setToastMessage(message);
@@ -39,32 +103,51 @@ export const LoginScreen = () => {
     setToastVisible(true);
   };
 
-  const handleGoogleLogin = async (selectedEmail: string, selectedName: string) => {
-    setGoogleModalVisible(false);
+  const handleGoogleLogin = async (idToken: string) => {
     setLoading(true);
     setIsNetworkError(false);
     try {
-      const response = await authService.googleLogin(selectedEmail, selectedName);
-      if (response.token) {
-        await AsyncStorage.setItem('rememberMe', 'true'); // Auto-login on startup for Google OAuth
+      const authResult = await authService.googleLogin(idToken);
+      if (authResult && authResult.token) {
+        await AsyncStorage.setItem('rememberMe', 'true');
         showToast('Successfully signed in with Google!', 'success');
         setTimeout(() => {
           navigation.replace('MainApp');
-        }, 1200);
+        }, 800);
       }
     } catch (error: any) {
       if (error.code === 'NETWORK_ERROR') {
         setIsNetworkError(true);
+      } else if (error.code === 'INVALID_GOOGLE_TOKEN' || error.code === 'UNVERIFIED_EMAIL') {
+        showToast('Google authentication could not be verified. Please try again.', 'error');
       } else {
-        showToast(error.message || 'Google Sign-In failed.', 'error');
+        showToast(error.message || 'Google sign-in failed. Please try again.', 'error');
       }
     } finally {
       setLoading(false);
+      setGoogleLoading(false);
+    }
+  };
+
+  const handleGooglePress = async () => {
+    if (loading || googleLoading) return;
+    setGoogleLoading(true);
+    try {
+      const result = await promptAsync();
+      if (result?.type !== 'success') {
+        setGoogleLoading(false);
+      }
+    } catch (err) {
+      console.error('Google Sign-In prompt error:', err);
+      showToast('Google sign-in failed. Please try again.', 'error');
+      setGoogleLoading(false);
     }
   };
 
   const handleLogin = async () => {
-    if (!email || !password) {
+    if (loading || googleLoading) return;
+
+    if (!email.trim() || !password) {
       showToast('Please enter both email and password', 'warning');
       return;
     }
@@ -72,9 +155,15 @@ export const LoginScreen = () => {
     setLoading(true);
     setIsNetworkError(false);
     try {
-      const response = await authService.login(email, password);
-      if (response.token) {
-        await AsyncStorage.setItem('rememberMe', rememberMe ? 'true' : 'false');
+      const authResult = await authService.login(email.trim(), password);
+      if (authResult && authResult.token) {
+        if (rememberMe) {
+          await AsyncStorage.setItem('rememberMe', 'true');
+          await AsyncStorage.setItem('savedEmail', email.trim());
+        } else {
+          await AsyncStorage.removeItem('rememberMe');
+          await AsyncStorage.removeItem('savedEmail');
+        }
         navigation.replace('MainApp');
       }
     } catch (error: any) {
@@ -83,7 +172,7 @@ export const LoginScreen = () => {
       } else if (error.code === 'EMAIL_NOT_VERIFIED') {
         showToast('Please verify your email before logging in. Redirecting...', 'warning');
         setTimeout(() => {
-          navigation.navigate('OTPVerification', { email });
+          navigation.navigate('OTPVerification', { email: email.trim() });
         }, 2000);
       } else {
         showToast(error.message || 'Login failed. Please check your credentials.', 'error');
@@ -94,14 +183,15 @@ export const LoginScreen = () => {
   };
 
   const handleBiometricLogin = async () => {
+    if (loading || googleLoading) return;
     try {
       const hasHardware = await LocalAuthentication.hasHardwareAsync();
       const isEnrolled = await LocalAuthentication.isEnrolledAsync();
 
       if (!hasHardware || !isEnrolled) {
         Alert.alert(
-          'Biometrics Not Set Up',
-          'Biometric hardware or enrolled fingerprint/Face ID was not detected on this device. Please log in with your email and password first, then enable it in Security Settings.'
+          'Biometric Login',
+          'Biometric hardware or enrolled fingerprint/Face ID was not detected on this device. Please log in with your email and password first.'
         );
         return;
       }
@@ -113,18 +203,18 @@ export const LoginScreen = () => {
       });
 
       if (result.success) {
-        const storedToken = await AsyncStorage.getItem('userToken');
-        const storedUser = await AsyncStorage.getItem('userData');
+        const storedToken = await storageService.getToken();
+        const storedUser = await storageService.getUserData();
 
         if (storedToken && storedUser) {
           showToast('Biometric verified! Signing in...', 'success');
           setTimeout(() => {
             navigation.replace('MainApp');
           }, 600);
-        } else if (email && password) {
+        } else if (email.trim() && password) {
           handleLogin();
         } else {
-          showToast('Biometrics verified! Sign in once with password to link your account.', 'success');
+          showToast('Biometrics verified! Sign in once with password to save your session.', 'warning');
         }
       } else {
         if (result.error !== 'user_cancel' && result.error !== 'system_cancel') {
@@ -138,7 +228,7 @@ export const LoginScreen = () => {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right', 'bottom']}>
       {isNetworkError && (
         <NetworkErrorScreen
           onRetry={() => {
@@ -157,237 +247,179 @@ export const LoginScreen = () => {
         style={styles.keyboardAvoiding}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        <View style={styles.container}>
-
-          <View style={styles.spacer} />
-
-          {/* Header Section */}
-          <View style={styles.header}>
-            <View style={styles.logoContainer}>
-              <MaterialIcons name="trending-up" size={isSmallDevice ? 20 : 24} color={colors.accent} />
+        <ScrollView
+          contentContainerStyle={[
+            styles.scrollContainer,
+            {
+              paddingTop: Math.max(insets.top > 0 ? insets.top * 0.3 : 10, 10),
+              paddingBottom: Math.max(insets.bottom > 0 ? insets.bottom + 6 : 16, 16),
+            }
+          ]}
+          bounces={false}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
+          <View style={styles.innerWrapper}>
+            {/* Header Section */}
+            <View style={styles.header}>
+              <View style={styles.logoContainer}>
+                <MaterialIcons name="trending-up" size={24} color={colors.accent} />
+              </View>
+              <Text style={styles.appName}>SmartLanka Trade</Text>
+              <Text style={styles.headline}>Welcome Back</Text>
+              <Text style={styles.subtitle}>Trade Smarter. Securely.</Text>
             </View>
-            <Text style={styles.appName}>SmartLanka Trade</Text>
 
-            <Text style={styles.headline}>Welcome Back</Text>
-            <Text style={styles.subtitle}>Trade Smarter. Securely.</Text>
-          </View>
+            {/* Form Section */}
+            <View style={styles.formSection}>
+              {/* Email Address */}
+              <Text style={styles.label}>Email Address</Text>
+              <InputField
+                placeholder="yourname@example.com"
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoCorrect={false}
+                autoComplete="email"
+                textContentType="emailAddress"
+                returnKeyType="next"
+                onSubmitEditing={() => passwordInputRef.current?.focus()}
+                value={email}
+                onChangeText={setEmail}
+                accessibilityLabel="Email Address"
+                iconLeft={<MaterialIcons name="mail-outline" size={18} color={colors.accent} />}
+              />
 
-          <View style={styles.spacer} />
+              {/* Password Header */}
+              <View style={styles.passwordHeader}>
+                <Text style={styles.label}>Password</Text>
+                <TouchableOpacity
+                  onPress={() => navigation.navigate('ForgotPassword')}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  accessibilityRole="button"
+                  accessibilityLabel="Forgot Password"
+                >
+                  <Text style={styles.forgotPassword}>Forgot Password?</Text>
+                </TouchableOpacity>
+              </View>
 
-          {/* Form Section */}
-          <View style={styles.formSection}>
-            <Text style={styles.label}>Email Address</Text>
-            <InputField
-              placeholder="yourname@example.com"
-              keyboardType="email-address"
-              autoCapitalize="none"
-              value={email}
-              onChangeText={setEmail}
-              iconLeft={<MaterialIcons name="mail-outline" size={20} color={colors.accent} />}
-            />
+              {/* Password Input */}
+              <InputField
+                ref={passwordInputRef}
+                placeholder="••••••••••••"
+                secureTextEntry={!showPassword}
+                autoCapitalize="none"
+                autoCorrect={false}
+                autoComplete="password"
+                textContentType="password"
+                returnKeyType="done"
+                onSubmitEditing={handleLogin}
+                value={password}
+                onChangeText={setPassword}
+                accessibilityLabel="Password"
+                iconLeft={<MaterialIcons name="lock-outline" size={18} color={colors.accent} />}
+                iconRight={
+                  <TouchableOpacity
+                    onPress={() => setShowPassword(!showPassword)}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    accessibilityRole="button"
+                    accessibilityLabel={showPassword ? "Hide password" : "Show password"}
+                  >
+                    <MaterialIcons
+                      name={showPassword ? "visibility" : "visibility-off"}
+                      size={18}
+                      color={colors.textSecondary}
+                    />
+                  </TouchableOpacity>
+                }
+              />
 
-            <View style={styles.passwordHeader}>
-              <Text style={styles.label}>Password</Text>
-              <TouchableOpacity onPress={() => navigation.navigate('ForgotPassword')}>
-                <Text style={styles.forgotPassword}>Forgot Password?</Text>
+              {/* Remember Me Checkbox (Own Row) */}
+              <TouchableOpacity
+                style={styles.rememberMeContainer}
+                activeOpacity={0.8}
+                onPress={() => setRememberMe(!rememberMe)}
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: rememberMe }}
+                accessibilityLabel="Remember Me"
+              >
+                <MaterialIcons
+                  name={rememberMe ? "check-box" : "check-box-outline-blank"}
+                  size={18}
+                  color={rememberMe ? colors.accent : colors.textSecondary}
+                />
+                <Text style={styles.rememberMeText}>Remember Me</Text>
+              </TouchableOpacity>
+
+              {/* Use Biometrics Button (Centered Pill) */}
+              <TouchableOpacity 
+                style={styles.biometricsButton} 
+                activeOpacity={0.7} 
+                onPress={handleBiometricLogin}
+                accessibilityRole="button"
+                accessibilityLabel="Use Biometrics to login"
+              >
+                <MaterialIcons name="fingerprint" size={18} color={colors.accent} />
+                <Text style={styles.biometricsText}>Use Biometrics</Text>
+              </TouchableOpacity>
+
+              {/* Login Button */}
+              {loading && !googleLoading ? (
+                <View style={styles.loadingContainer}>
+                  <ActivityIndicator color={colors.accent} size="large" />
+                </View>
+              ) : (
+                <PrimaryButton
+                  title="Login to Dashboard"
+                  onPress={handleLogin}
+                  disabled={loading || googleLoading}
+                  style={styles.loginBtn}
+                  accessibilityLabel="Login to Dashboard"
+                />
+              )}
+
+              {/* OR Divider */}
+              <View style={styles.dividerContainer}>
+                <View style={styles.dividerLine} />
+                <Text style={styles.dividerText}>OR</Text>
+                <View style={styles.dividerLine} />
+              </View>
+
+              {/* Google Button */}
+              <TouchableOpacity
+                style={[styles.googleButton, (loading || googleLoading) && styles.buttonDisabled]}
+                activeOpacity={0.8}
+                disabled={loading || googleLoading}
+                onPress={handleGooglePress}
+                accessibilityRole="button"
+                accessibilityLabel="Continue with Google"
+              >
+                {googleLoading ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <>
+                    <FontAwesome5 name="google" size={16} color="#FFFFFF" />
+                    <Text style={styles.googleText}>Continue with Google</Text>
+                  </>
+                )}
               </TouchableOpacity>
             </View>
 
-            <InputField
-              placeholder="••••••••••••"
-              secureTextEntry={!showPassword}
-              value={password}
-              onChangeText={setPassword}
-              iconLeft={<MaterialIcons name="lock-outline" size={20} color={colors.accent} />}
-              iconRight={
-                <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
-                  <MaterialIcons name={showPassword ? "visibility" : "visibility-off"} size={20} color={colors.textSecondary} />
-                </TouchableOpacity>
-              }
-            />
-
-            {/* Remember Me Checkbox */}
-            <TouchableOpacity
-              style={styles.rememberMeContainer}
-              activeOpacity={0.8}
-              onPress={() => setRememberMe(!rememberMe)}
-            >
-              <MaterialIcons
-                name={rememberMe ? "check-box" : "check-box-outline-blank"}
-                size={20}
-                color={rememberMe ? colors.accent : colors.textSecondary}
-              />
-              <Text style={styles.rememberMeText}>Remember Me</Text>
-            </TouchableOpacity>
-
-            {/* Biometrics Button */}
-            <TouchableOpacity 
-              style={styles.biometricsButton} 
-              activeOpacity={0.7} 
-              onPress={handleBiometricLogin}
-            >
-              <MaterialIcons name="fingerprint" size={20} color={colors.accent} />
-              <Text style={styles.biometricsText}>Use Biometrics</Text>
-            </TouchableOpacity>
-
-            {/* Primary CTA */}
-            {loading ? (
-              <ActivityIndicator color={colors.accent} size="large" style={{ marginVertical: 20 }} />
-            ) : (
-              <PrimaryButton
-                title="Login to Dashboard"
-                onPress={handleLogin}
-                style={styles.loginBtn}
-              />
-            )}
-          </View>
-
-          <View style={styles.smallSpacer} />
-
-          {/* Divider */}
-          <View style={styles.dividerContainer}>
-            <View style={styles.dividerLine} />
-            <Text style={styles.dividerText}>OR</Text>
-            <View style={styles.dividerLine} />
-          </View>
-
-          <View style={styles.smallSpacer} />
-
-          {/* Google Button */}
-          <TouchableOpacity
-            style={styles.googleButton}
-            onPress={() => {
-              setShowCustomGoogleInput(false);
-              setCustomGoogleEmail('');
-              setCustomGoogleName('');
-              setGoogleModalVisible(true);
-            }}
-          >
-            <FontAwesome5 name="google" size={18} color="#FFFFFF" />
-            <Text style={styles.googleText}>Continue with Google</Text>
-          </TouchableOpacity>
-
-          {/* Google Chooser Modal */}
-          <Modal
-            visible={googleModalVisible}
-            transparent={true}
-            animationType="fade"
-            onRequestClose={() => setGoogleModalVisible(false)}
-          >
-            <View style={styles.modalOverlay}>
-              <View style={styles.modalContent}>
-                <View style={styles.modalHeader}>
-                  <FontAwesome5 name="google" size={20} color="#4285F4" style={{ marginRight: 10 }} />
-                  <Text style={styles.modalTitle}>Sign in with Google (Demo)</Text>
-                </View>
-                <Text style={styles.modalSubtitle}>Choose a demo account or enter your email to continue</Text>
-
-                {/* Demo Account List */}
-                <TouchableOpacity
-                  style={styles.googleAccountItem}
-                  onPress={() => handleGoogleLogin('demo.trader@smartlanka.com', 'Demo Trader')}
+            {/* Footer */}
+            <View style={styles.footer}>
+              <Text style={styles.footerText}>
+                Don't have an account?{' '}
+                <Text
+                  style={styles.registerLink}
+                  onPress={() => navigation.navigate('Register')}
+                  accessibilityRole="button"
+                  accessibilityLabel="Register Now"
                 >
-                  <View style={styles.avatarCircle}>
-                    <Text style={styles.avatarText}>DT</Text>
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.accountName}>Demo Trader</Text>
-                    <Text style={styles.accountEmail}>demo.trader@smartlanka.com</Text>
-                  </View>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={styles.googleAccountItem}
-                  onPress={() => handleGoogleLogin('investor.demo@smartlanka.com', 'Institutional Demo')}
-                >
-                  <View style={styles.avatarCircle}>
-                    <Text style={styles.avatarText}>ID</Text>
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.accountName}>Institutional Demo</Text>
-                    <Text style={styles.accountEmail}>investor.demo@smartlanka.com</Text>
-                  </View>
-                </TouchableOpacity>
-
-                {!showCustomGoogleInput ? (
-                  <TouchableOpacity
-                    style={styles.addAccountButton}
-                    onPress={() => setShowCustomGoogleInput(true)}
-                  >
-                    <MaterialIcons name="person-add-alt-1" size={20} color={colors.accent} style={{ marginRight: 12 }} />
-                    <Text style={styles.addAccountText}>Use another account</Text>
-                  </TouchableOpacity>
-                ) : (
-                  <View style={styles.customInputSection}>
-                    <TextInput
-                      placeholder="Enter Name"
-                      placeholderTextColor={colors.textSecondary}
-                      value={customGoogleName}
-                      onChangeText={setCustomGoogleName}
-                      style={styles.customGoogleInput}
-                    />
-                    <TextInput
-                      placeholder="Enter Google Email"
-                      placeholderTextColor={colors.textSecondary}
-                      value={customGoogleEmail}
-                      onChangeText={setCustomGoogleEmail}
-                      keyboardType="email-address"
-                      autoCapitalize="none"
-                      style={styles.customGoogleInput}
-                    />
-                    <View style={styles.customInputButtons}>
-                      <TouchableOpacity
-                        style={styles.cancelBtn}
-                        onPress={() => setShowCustomGoogleInput(false)}
-                      >
-                        <Text style={styles.cancelBtnText}>Cancel</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={styles.submitBtn}
-                        onPress={() => {
-                          if (!customGoogleEmail || !customGoogleName) {
-                            showToast('Please enter both name and email', 'warning');
-                            return;
-                          }
-                          const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-                          if (!emailRegex.test(customGoogleEmail)) {
-                            showToast('Please enter a valid email address', 'warning');
-                            return;
-                          }
-                          handleGoogleLogin(customGoogleEmail, customGoogleName);
-                        }}
-                      >
-                        <Text style={styles.submitBtnText}>Continue</Text>
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                )}
-
-                <TouchableOpacity style={styles.closeModalButton} onPress={() => setGoogleModalVisible(false)}>
-                  <Text style={styles.closeModalText}>CANCEL</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </Modal>
-
-          <View style={styles.spacer} />
-
-          {/* Footer */}
-          <View style={styles.footer}>
-            <Text style={styles.footerText}>
-              Don't have an account?{' '}
-              <Text
-                style={styles.registerLink}
-                onPress={() => navigation.navigate('Register')}
-              >
-                Register Now
+                  Register Now
+                </Text>
               </Text>
-            </Text>
+            </View>
           </View>
-
-          <View style={styles.spacer} />
-
-        </View>
+        </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -401,105 +433,127 @@ const styles = StyleSheet.create({
   keyboardAvoiding: {
     flex: 1,
   },
-  container: {
-    flex: 1,
-    paddingHorizontal: 24,
+  scrollContainer: {
+    flexGrow: 1,
     justifyContent: 'center',
+    paddingHorizontal: 24,
   },
-  spacer: {
-    flex: 1,
-  },
-  smallSpacer: {
-    flex: 0.5,
-    minHeight: isSmallDevice ? 16 : 24,
+  innerWrapper: {
+    width: '100%',
+    alignSelf: 'center',
+    maxWidth: 420,
   },
   header: {
     alignItems: 'center',
+    marginBottom: 16,
   },
   logoContainer: {
-    width: isSmallDevice ? 36 : 48,
-    height: isSmallDevice ? 36 : 48,
-    borderRadius: isSmallDevice ? 18 : 24,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     backgroundColor: colors.bgInput,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: isSmallDevice ? 8 : 16,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   appName: {
-    ...typography.h3,
-    marginBottom: isSmallDevice ? 16 : 32,
+    ...typography.body,
+    color: colors.textPrimary,
+    fontWeight: '700',
+    fontSize: 18,
+    marginBottom: 6,
   },
   headline: {
     ...typography.h1,
-    fontSize: isSmallDevice ? 28 : 32,
-    marginBottom: 8,
+    fontSize: 30,
+    fontWeight: '800',
+    color: colors.textPrimary,
+    marginBottom: 4,
   },
   subtitle: {
-    ...typography.body,
-    fontSize: isSmallDevice ? 14 : 16,
+    ...typography.bodySmall,
     color: colors.accent,
+    fontSize: 14,
+    fontWeight: '500',
   },
   formSection: {
     width: '100%',
+    marginTop: 8,
   },
   label: {
     ...typography.bodySmall,
     color: colors.textPrimary,
-    marginBottom: 8,
+    fontSize: 13,
+    fontWeight: '600',
+    marginBottom: 6,
   },
   passwordHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
-    marginTop: isSmallDevice ? 8 : 12,
+    marginBottom: 6,
+    marginTop: 6,
   },
   forgotPassword: {
     ...typography.bodySmall,
     color: colors.accent,
+    fontSize: 13,
+    fontWeight: '600',
   },
   rememberMeContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 8,
-    marginBottom: 16,
+    marginTop: 6,
+    marginBottom: 12,
   },
   rememberMeText: {
     ...typography.bodySmall,
     color: colors.textPrimary,
     marginLeft: 8,
+    fontSize: 13,
     fontWeight: '500',
   },
   biometricsButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 12,
+    paddingVertical: 10,
     paddingHorizontal: 24,
     borderRadius: layout.borderRadiusPill,
     borderWidth: 1,
     borderColor: colors.accentMuted,
+    backgroundColor: colors.bgInput,
     alignSelf: 'center',
-    marginBottom: isSmallDevice ? 16 : 24,
-    marginTop: isSmallDevice ? 8 : 12,
+    marginBottom: 16,
   },
   biometricsText: {
     ...typography.bodySmall,
     color: colors.accent,
     marginLeft: 8,
+    fontSize: 13,
     fontWeight: '600',
+  },
+  loadingContainer: {
+    height: 52,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   loginBtn: {
     shadowColor: colors.accent,
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 12,
-    elevation: 8,
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    elevation: 6,
+    height: 52,
+    borderRadius: layout.borderRadiusPill,
   },
   dividerContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     width: '100%',
+    marginVertical: 14,
   },
   dividerLine: {
     flex: 1,
@@ -509,150 +563,42 @@ const styles = StyleSheet.create({
   dividerText: {
     ...typography.bodySmall,
     color: colors.textMuted,
-    paddingHorizontal: 16,
+    paddingHorizontal: 14,
+    fontSize: 11,
+    fontWeight: '600',
   },
   googleButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     width: '100%',
-    height: isSmallDevice ? 48 : 56,
+    height: 50,
     borderRadius: layout.borderRadiusPill,
     borderWidth: 1,
     borderColor: colors.border,
+    backgroundColor: colors.bgCard,
+  },
+  buttonDisabled: {
+    opacity: 0.6,
   },
   googleText: {
     ...typography.body,
     color: '#FFFFFF',
-    marginLeft: 12,
+    marginLeft: 10,
     fontWeight: '600',
+    fontSize: 14,
   },
   footer: {
     alignItems: 'center',
+    marginTop: 18,
   },
   footerText: {
     ...typography.body,
-    fontSize: isSmallDevice ? 14 : 16,
+    fontSize: 14,
     color: colors.textSecondary,
   },
   registerLink: {
     color: colors.accent,
     fontWeight: '700',
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.85)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 24,
-  },
-  modalContent: {
-    backgroundColor: colors.bgCard,
-    borderRadius: 20,
-    width: '100%',
-    padding: 24,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  modalTitle: {
-    ...typography.h3,
-    color: colors.textPrimary,
-  },
-  modalSubtitle: {
-    ...typography.bodySmall,
-    color: colors.textSecondary,
-    marginBottom: 24,
-  },
-  googleAccountItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  avatarCircle: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: colors.bgInput,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  avatarText: {
-    color: colors.accent,
-    fontWeight: '700',
-    fontSize: 14,
-  },
-  accountName: {
-    ...typography.body,
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  accountEmail: {
-    ...typography.bodySmall,
-    fontSize: 12,
-  },
-  addAccountButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 16,
-    marginBottom: 8,
-  },
-  addAccountText: {
-    color: colors.accent,
-    fontWeight: '600',
-    fontSize: 14,
-  },
-  customInputSection: {
-    marginTop: 12,
-    marginBottom: 8,
-  },
-  customGoogleInput: {
-    backgroundColor: colors.bgInput,
-    borderRadius: layout.borderRadiusSmall,
-    color: colors.textPrimary,
-    height: 48,
-    paddingHorizontal: 12,
-    marginBottom: 10,
-  },
-  customInputButtons: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    marginTop: 4,
-  },
-  cancelBtn: {
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    marginRight: 10,
-  },
-  cancelBtnText: {
-    color: colors.textSecondary,
-    fontWeight: '600',
-  },
-  submitBtn: {
-    backgroundColor: colors.accent,
-    borderRadius: 18,
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-  },
-  submitBtnText: {
-    color: '#000',
-    fontWeight: '700',
-  },
-  closeModalButton: {
-    alignSelf: 'center',
-    marginTop: 16,
-    paddingVertical: 8,
-  },
-  closeModalText: {
-    color: colors.textSecondary,
-    fontWeight: '700',
-    letterSpacing: 1.5,
   },
 });

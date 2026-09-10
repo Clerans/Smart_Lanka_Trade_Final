@@ -1,9 +1,35 @@
 const express = require('express');
 const cors = require('cors');
+const { rateLimit } = require('express-rate-limit');
 require('dotenv').config();
 const connectDB = require('./config/db');
 
 const app = express();
+
+// Rate Limiters
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 20, // 20 requests per 15 minutes per IP
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    code: 'TOO_MANY_REQUESTS',
+    message: 'Too many authentication attempts from this IP, please try again after 15 minutes.'
+  }
+});
+
+const marketLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 120, // 120 requests per 15 minutes per IP
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    code: 'TOO_MANY_REQUESTS',
+    message: 'Too many market requests from this IP, please try again later.'
+  }
+});
 
 // Middleware
 app.use(cors());
@@ -17,9 +43,9 @@ app.use((req, res, next) => {
 });
 
 // Routes
-app.use('/api/auth', require('./routes/authRoutes'));
+app.use('/api/auth', authLimiter, require('./routes/authRoutes'));
 app.use('/api/wallet', require('./routes/walletRoutes'));
-app.use('/api/market', require('./routes/marketRoutes'));
+app.use('/api/market', marketLimiter, require('./routes/marketRoutes'));
 app.use('/api/alerts', require('./routes/alertRoutes'));
 app.use('/api/trade', require('./routes/tradeRoutes'));
 app.use('/api/portfolio', require('./routes/portfolioRoutes'));

@@ -1,6 +1,7 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
+import { storageService } from './storageService';
 
 // Dynamic Backend Base URL resolver with environment override and production fallback
 const getBaseUrl = () => {
@@ -21,9 +22,9 @@ const api = axios.create({
   },
 });
 
-// Add interceptor to include JWT token
+// Add interceptor to include JWT token from SecureStore
 api.interceptors.request.use(async (config) => {
-  const token = await AsyncStorage.getItem('userToken');
+  const token = await storageService.getToken();
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
@@ -39,7 +40,7 @@ api.interceptors.response.use(
       const networkError = {
         success: false,
         code: 'NETWORK_ERROR',
-        message: 'Network connection failed. Please check your connection and try again.'
+        message: 'Unable to connect to SmartLanka Trade. Check your internet connection.'
       };
       return Promise.reject(networkError);
     }
@@ -57,8 +58,8 @@ export const authService = {
     try {
       const response = await api.post('/auth/login', { email, password });
       if (response.data.token) {
-        await AsyncStorage.setItem('userToken', response.data.token);
-        await AsyncStorage.setItem('userData', JSON.stringify(response.data.user));
+        await storageService.setToken(response.data.token);
+        await storageService.setUserData(response.data.user);
       }
       return response.data;
     } catch (error: any) {
@@ -74,8 +75,7 @@ export const authService = {
     }
   },
   logout: async () => {
-    await AsyncStorage.removeItem('userToken');
-    await AsyncStorage.removeItem('userData');
+    await storageService.clearAuthSession();
     await AsyncStorage.removeItem('rememberMe');
   },
   forgotPassword: async (email: string) => {
@@ -134,12 +134,12 @@ export const authService = {
       throw error;
     }
   },
-  googleLogin: async (email: string, name: string) => {
+  googleLogin: async (idToken: string) => {
     try {
-      const response = await api.post('/auth/google-login', { email, name });
+      const response = await api.post('/auth/google-login', { idToken });
       if (response.data.token) {
-        await AsyncStorage.setItem('userToken', response.data.token);
-        await AsyncStorage.setItem('userData', JSON.stringify(response.data.user));
+        await storageService.setToken(response.data.token);
+        await storageService.setUserData(response.data.user);
       }
       return response.data;
     } catch (error: any) {
@@ -158,7 +158,7 @@ export const authService = {
     try {
       const response = await api.get('/auth/profile');
       if (response.data && response.data.user) {
-        await AsyncStorage.setItem('userData', JSON.stringify(response.data.user));
+        await storageService.setUserData(response.data.user);
       }
       return response.data;
     } catch (error: any) {
@@ -169,7 +169,7 @@ export const authService = {
     try {
       const response = await api.put('/auth/profile', data);
       if (response.data && response.data.user) {
-        await AsyncStorage.setItem('userData', JSON.stringify(response.data.user));
+        await storageService.setUserData(response.data.user);
       }
       return response.data;
     } catch (error: any) {
@@ -245,30 +245,98 @@ export const walletService = {
       throw error;
     }
   },
-  deposit: async (amount: number) => {
-    try {
-      const response = await api.post('/wallet/deposit', { amount });
-      return response.data;
-    } catch (error) {
-      console.error('Error depositing money:', error);
-      throw error;
-    }
-  },
-  getTransactions: async () => {
-    try {
-      const response = await api.get('/wallet/transactions');
-      return response.data;
-    } catch (error) {
-      console.error('Error fetching transactions:', error);
-      throw error;
-    }
-  },
   getWalletDetails: async () => {
     try {
       const response = await api.get('/wallet');
       return response.data;
     } catch (error) {
       console.error('Error fetching wallet details:', error);
+      throw error;
+    }
+  },
+  deposit: async (amount: number, method: string = 'CARD', idempotencyKey?: string) => {
+    try {
+      const response = await api.post('/wallet/deposit', { amount, method, idempotencyKey });
+      return response.data;
+    } catch (error) {
+      console.error('Error depositing money:', error);
+      throw error;
+    }
+  },
+  initiateDeposit: async (amount: number, method: string = 'CARD', idempotencyKey?: string) => {
+    try {
+      const response = await api.post('/wallet/deposit/initiate', { amount, method, idempotencyKey });
+      return response.data;
+    } catch (error) {
+      console.error('Error initiating deposit:', error);
+      throw error;
+    }
+  },
+  verifyDeposit: async (transactionId: number, providerReference: string) => {
+    try {
+      const response = await api.post('/wallet/deposit/verify', { transactionId, providerReference });
+      return response.data;
+    } catch (error) {
+      console.error('Error verifying deposit:', error);
+      throw error;
+    }
+  },
+  withdraw: async (amount: number, method: string, destination: string, bankName?: string, idempotencyKey?: string) => {
+    try {
+      const response = await api.post('/wallet/withdraw', {
+        amount,
+        method,
+        destination,
+        bankName,
+        idempotencyKey
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Error requesting withdrawal:', error);
+      throw error;
+    }
+  },
+  lookupRecipient: async (uid: string) => {
+    try {
+      const cleanUid = encodeURIComponent(uid.trim().toUpperCase());
+      const response = await api.get(`/wallet/recipient/${cleanUid}`);
+      return response.data;
+    } catch (error) {
+      console.error('Error looking up recipient:', error);
+      throw error;
+    }
+  },
+  transfer: async (recipientUid: string, amount: number, message?: string, idempotencyKey?: string) => {
+    try {
+      const response = await api.post('/wallet/transfer', {
+        recipientUid,
+        amount,
+        message,
+        idempotencyKey
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Error executing transfer:', error);
+      throw error;
+    }
+  },
+  getTransactions: async (type: string = 'ALL', limit: number = 20) => {
+    try {
+      const response = await api.get('/wallet/transactions', {
+        params: { type, limit }
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching transactions:', error);
+      throw error;
+    }
+  },
+  getTransactionDetails: async (id: number) => {
+    try {
+      const response = await api.get(`/wallet/transactions/${id}`);
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching transaction details:', error);
       throw error;
     }
   },
@@ -409,7 +477,7 @@ export const aiService = {
 export const kycService = {
   submitKYC: async (formData: FormData) => {
     try {
-      const token = await AsyncStorage.getItem('userToken');
+      const token = await storageService.getToken();
       const url = `${BASE_URL}/kyc/verify`;
       
       const response = await fetch(url, {

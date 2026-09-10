@@ -1,5 +1,11 @@
 const oracledb = require('oracledb');
+const paymentService = require('../services/paymentService');
+const walletFundingService = require('../services/walletFundingService');
+const userModel = require('../models/userModel');
 
+/**
+ * 1. Get complete wallet details
+ */
 const getWalletDetails = async (req, res) => {
   let connection;
   try {
@@ -29,11 +35,15 @@ const getWalletDetails = async (req, res) => {
     const investedAmount = portfolioResult.rows[0].TOTAL_INVESTED ? parseFloat(portfolioResult.rows[0].TOTAL_INVESTED) : 0.0;
     const balanceLKR = availableBalance + investedAmount;
 
+    // 3. Get user UID
+    const user = await userModel.findById(userId);
+
     res.json({
       success: true,
       balanceLKR,
       investedAmount,
-      availableBalance
+      availableBalance,
+      accountUid: user ? user.ACCOUNT_UID : null
     });
   } catch (error) {
     console.error('Wallet Fetch Details Error:', error.message);
@@ -45,6 +55,9 @@ const getWalletDetails = async (req, res) => {
   }
 };
 
+/**
+ * 2. Get wallet balance
+ */
 const getWalletBalance = async (req, res) => {
   let connection;
   try {
@@ -78,93 +91,204 @@ const getWalletBalance = async (req, res) => {
   }
 };
 
+/**
+ * 3. Deposit Money (Full Payment Lifecycle via PaymentService)
+ */
 const depositMoney = async (req, res) => {
-  let connection;
   try {
-    const { amount } = req.body;
+    const { amount, method = 'CARD', idempotencyKey, simulateFailure } = req.body;
     const userId = req.user ? req.user.id : 1;
 
-    if (!amount || isNaN(amount) || parseFloat(amount) <= 0) {
-      return res.status(400).json({ success: false, message: 'Invalid deposit amount' });
+    // Phase 1: Initiate payment intent via payment provider
+    const initResult = await paymentService.initiateDeposit({
+      userId,
+      amount,
+      method,
+      idempotencyKey,
+      metadata: { simulateFail: !!simulateFailure }
+    });
+
+    if (!initResult.success) {
+      return res.status(400).json({
+        success: false,
+        message: 'Deposit initialization failed.'
+      });
     }
 
-    const numAmount = parseFloat(amount);
-    connection = await oracledb.getConnection();
-
-    // 1. Update balance in new WALLETS table
-    await connection.execute(
-      `UPDATE WALLETS SET BALANCE_LKR = BALANCE_LKR + :numAmount, UPDATED_AT = CURRENT_TIMESTAMP WHERE USER_ID = :userId`,
-      { numAmount, userId }
-    );
-
-    // Also update legacy SL_WALLETS for backward compatibility
-    try {
-      await connection.execute(
-        `UPDATE SL_WALLETS SET BALANCE = BALANCE + :numAmount, LAST_UPDATED = CURRENT_TIMESTAMP WHERE USER_ID = :userId`,
-        { numAmount, userId }
-      );
-    } catch (err) {
-      console.warn('Syncing SL_WALLETS failed (non-blocking):', err.message);
-    }
-
-    // 2. Log transaction in new TRANSACTIONS table
-    await connection.execute(
-      `INSERT INTO TRANSACTIONS (USER_ID, SYMBOL, TRANSACTION_TYPE, QUANTITY, PRICE, TOTAL_AMOUNT, STATUS) 
-       VALUES (:userId, 'LKR', 'DEPOSIT', 1, :numAmount, :numAmount, 'COMPLETED')`,
-      { userId, numAmount }
-    );
-
-    // Also log to legacy SL_TRANSACTIONS
-    try {
-      await connection.execute(
-        `INSERT INTO SL_TRANSACTIONS (USER_ID, AMOUNT, TYPE, STATUS) VALUES (:userId, :numAmount, 'DEPOSIT', 'COMPLETED')`,
-        { userId, numAmount }
-      );
-    } catch (err) {
-      console.warn('Syncing SL_TRANSACTIONS failed (non-blocking):', err.message);
-    }
-
-    await connection.commit();
+    // Phase 2: Settle payment with provider
+    const settleResult = await paymentService.verifyAndSettleDeposit({
+      userId,
+      transactionId: initResult.transactionId,
+      providerReference: initResult.providerReference,
+      simulateFailure: !!simulateFailure
+    });
 
     res.json({
       success: true,
-      message: `Successfully deposited LKR ${numAmount.toLocaleString()}`
+      message: settleResult.message,
+      data: settleResult
     });
   } catch (error) {
-    if (connection) await connection.rollback();
     console.error('Deposit Error:', error.message);
-    res.status(500).json({ success: false, error: 'Server error during deposit' });
-  } finally {
-    if (connection) {
-      try { await connection.close(); } catch (err) {}
-    }
+    res.status(error.status || 500).json({
+      success: false,
+      message: error.message || 'Server error during deposit processing.'
+    });
   }
 };
 
+/**
+ * 4. Initiate Deposit (2-step flow)
+ */
+const initiateDeposit = async (req, res) => {
+  try {
+    const { amount, method = 'CARD', idempotencyKey } = req.body;
+    const userId = req.user ? req.user.id : 1;
+
+    const result = await paymentService.initiateDeposit({
+      userId,
+      amount,
+      method,
+      idempotencyKey
+    });
+
+    res.json({
+      success: true,
+      data: result
+    });
+  } catch (error) {
+    console.error('Initiate Deposit Error:', error.message);
+    res.status(error.status || 500).json({
+      success: false,
+      message: error.message || 'Server error initiating deposit.'
+    });
+  }
+};
+
+/**
+ * 5. Verify Deposit (2-step flow)
+ */
+const verifyDeposit = async (req, res) => {
+  try {
+    const { transactionId, providerReference, simulateFailure } = req.body;
+    const userId = req.user ? req.user.id : 1;
+
+    const result = await paymentService.verifyAndSettleDeposit({
+      userId,
+      transactionId,
+      providerReference,
+      simulateFailure: !!simulateFailure
+    });
+
+    res.json({
+      success: true,
+      data: result
+    });
+  } catch (error) {
+    console.error('Verify Deposit Error:', error.message);
+    res.status(error.status || 500).json({
+      success: false,
+      message: error.message || 'Server error verifying deposit.'
+    });
+  }
+};
+
+/**
+ * 6. Request Withdrawal
+ */
+const requestWithdrawal = async (req, res) => {
+  try {
+    const { amount, method = 'BANK_ACCOUNT', destination, bankName, idempotencyKey } = req.body;
+    const userId = req.user ? req.user.id : 1;
+
+    const result = await walletFundingService.requestWithdrawal({
+      userId,
+      amount,
+      method,
+      destination,
+      bankName,
+      idempotencyKey
+    });
+
+    res.json({
+      success: true,
+      message: result.message,
+      data: result
+    });
+  } catch (error) {
+    console.error('Withdrawal Error:', error.message);
+    res.status(error.status || 500).json({
+      success: false,
+      message: error.message || 'Server error processing withdrawal.'
+    });
+  }
+};
+
+/**
+ * 7. Recipient Lookup by UID
+ */
+const lookupRecipient = async (req, res) => {
+  try {
+    const { uid } = req.params;
+    const senderUserId = req.user ? req.user.id : null;
+
+    const result = await walletFundingService.lookupRecipient(uid, senderUserId);
+    res.json({
+      success: true,
+      data: result.recipient
+    });
+  } catch (error) {
+    console.error('Recipient Lookup Error:', error.message);
+    res.status(error.status || 500).json({
+      success: false,
+      message: error.message || 'Error looking up recipient.'
+    });
+  }
+};
+
+/**
+ * 8. Internal Transfer
+ */
+const executeTransfer = async (req, res) => {
+  try {
+    const { recipientUid, amount, message, idempotencyKey } = req.body;
+    const senderUserId = req.user ? req.user.id : 1;
+
+    const result = await walletFundingService.executeInternalTransfer({
+      senderUserId,
+      recipientUid,
+      amount,
+      message,
+      idempotencyKey
+    });
+
+    res.json({
+      success: true,
+      message: result.message,
+      data: result
+    });
+  } catch (error) {
+    console.error('Transfer Error:', error.message);
+    res.status(error.status || 500).json({
+      success: false,
+      message: error.message || 'Server error executing internal transfer.'
+    });
+  }
+};
+
+/**
+ * 9. Get Transactions History
+ */
 const getTransactions = async (req, res) => {
-  let connection;
   try {
     const userId = req.user ? req.user.id : 1;
-    
-    connection = await oracledb.getConnection();
-    const result = await connection.execute(
-      `SELECT TRANSACTION_ID AS ID, TOTAL_AMOUNT AS AMOUNT, TRANSACTION_TYPE AS TYPE, STATUS, CREATED_AT 
-       FROM TRANSACTIONS 
-       WHERE USER_ID = :userId 
-       ORDER BY CREATED_AT DESC 
-       FETCH NEXT 5 ROWS ONLY`,
-      [userId],
-      { outFormat: oracledb.OUT_FORMAT_OBJECT }
-    );
+    const { limit = 20, type = 'ALL' } = req.query;
 
-    // Parse numeric attributes to float
-    const formatted = result.rows.map(row => ({
-      ID: row.ID,
-      AMOUNT: parseFloat(row.AMOUNT),
-      TYPE: row.TYPE,
-      STATUS: row.STATUS,
-      CREATED_AT: row.CREATED_AT
-    }));
+    const formatted = await walletFundingService.getTransactionHistory({
+      userId,
+      limit: parseInt(limit, 10),
+      type
+    });
 
     res.json({
       success: true,
@@ -172,11 +296,32 @@ const getTransactions = async (req, res) => {
     });
   } catch (error) {
     console.error('Transactions Fetch Error:', error.message);
-    res.status(500).json({ success: false, error: 'Server error fetching transactions' });
-  } finally {
-    if (connection) {
-      try { await connection.close(); } catch (err) {}
-    }
+    res.status(500).json({
+      success: false,
+      error: 'Server error fetching transactions'
+    });
+  }
+};
+
+/**
+ * 10. Get Single Transaction Details
+ */
+const getTransactionDetails = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user ? req.user.id : 1;
+
+    const details = await walletFundingService.getTransactionDetails(id, userId);
+    res.json({
+      success: true,
+      data: details
+    });
+  } catch (error) {
+    console.error('Transaction Details Fetch Error:', error.message);
+    res.status(error.status || 500).json({
+      success: false,
+      message: error.message || 'Server error fetching transaction details.'
+    });
   }
 };
 
@@ -184,5 +329,11 @@ module.exports = {
   getWalletDetails,
   getWalletBalance,
   depositMoney,
-  getTransactions
+  initiateDeposit,
+  verifyDeposit,
+  requestWithdrawal,
+  lookupRecipient,
+  executeTransfer,
+  getTransactions,
+  getTransactionDetails
 };

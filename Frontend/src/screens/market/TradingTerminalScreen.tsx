@@ -1,12 +1,13 @@
 import * as React from 'react';
 const { useState, useEffect } = React;
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, KeyboardAvoidingView, Platform, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, KeyboardAvoidingView, Platform, ActivityIndicator, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { colors, typography, layout } from '../../theme';
 import { PrimaryButton, Card } from '../../components';
 import { marketService, aiService } from '../../services/apiService';
+import { formatLKR, formatNumber } from '../../utils/formatters';
 
 const tradeableSymbols = ['BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'SOLUSDT', 'ADAUSDT', 'XRPUSDT', 'DOGEUSDT'];
 
@@ -20,11 +21,40 @@ export const TradingTerminalScreen = () => {
   const [aiRec, setAiRec] = useState<any>(null);
   const [loadingAi, setLoadingAi] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [quantity, setQuantity] = useState('0.0025');
   const [limitPrice, setLimitPrice] = useState('0');
   const [showPicker, setShowPicker] = useState(false);
   const [allCoins, setAllCoins] = useState<any[]>([]);
   const [pickerSearchQuery, setPickerSearchQuery] = useState('');
+
+  const fetchPriceAndAI = async () => {
+    try {
+      setLoadingAi(true);
+      const [priceRes, aiRes] = await Promise.allSettled([
+        marketService.getPriceLKR(selectedSymbol),
+        aiService.getRecommendation(selectedSymbol, '1h')
+      ]);
+
+      if (priceRes.status === 'fulfilled' && priceRes.value.success) {
+        setLkrPriceData(priceRes.value.data);
+        const price = priceRes.value.data.priceLKR;
+        const formattedPrice = price < 10 
+          ? price.toFixed(4) 
+          : Math.round(price).toString();
+        setLimitPrice(formattedPrice);
+      }
+      if (aiRes.status === 'fulfilled' && aiRes.value?.data) {
+        setAiRec(aiRes.value.data);
+      }
+    } catch (error) {
+      console.error('Failed to fetch price and AI data:', error);
+    } finally {
+      setLoading(false);
+      setLoadingAi(false);
+      setRefreshing(false);
+    }
+  };
 
   useEffect(() => {
     const fetchInitialData = async () => {
@@ -41,45 +71,15 @@ export const TradingTerminalScreen = () => {
   }, []);
 
   useEffect(() => {
-    let isMounted = true;
-    const fetchPriceAndAI = async () => {
-      try {
-        setLoadingAi(true);
-        const [priceRes, aiRes] = await Promise.allSettled([
-          marketService.getPriceLKR(selectedSymbol),
-          aiService.getRecommendation(selectedSymbol, '1h')
-        ]);
-
-        if (isMounted) {
-          if (priceRes.status === 'fulfilled' && priceRes.value.success) {
-            setLkrPriceData(priceRes.value.data);
-            const price = priceRes.value.data.priceLKR;
-            const formattedPrice = price < 10 
-              ? price.toFixed(4) 
-              : Math.round(price).toString();
-            setLimitPrice(formattedPrice);
-          }
-          if (aiRes.status === 'fulfilled' && aiRes.value?.data) {
-            setAiRec(aiRes.value.data);
-          }
-        }
-      } catch (error) {
-        console.error('Failed to fetch price and AI data:', error);
-      } finally {
-        if (isMounted) {
-          setLoading(false);
-          setLoadingAi(false);
-        }
-      }
-    };
-
     fetchPriceAndAI();
     const interval = setInterval(fetchPriceAndAI, 30000);
-    return () => {
-      isMounted = false;
-      clearInterval(interval);
-    };
+    return () => clearInterval(interval);
   }, [selectedSymbol]);
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    fetchPriceAndAI();
+  };
 
   const filteredPickerCoins = allCoins.filter(coin => 
     coin.symbol.toLowerCase().includes(pickerSearchQuery.toLowerCase())
@@ -93,7 +93,17 @@ export const TradingTerminalScreen = () => {
         style={styles.keyboardAvoiding}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        <ScrollView contentContainerStyle={styles.container}>
+        <ScrollView 
+          contentContainerStyle={styles.container}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor={colors.accent}
+              colors={[colors.accent]}
+            />
+          }
+        >
 
           {/* Header */}
           <View style={styles.header}>
@@ -173,7 +183,7 @@ export const TradingTerminalScreen = () => {
                       </Text>
                       <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                         <Text style={styles.pickerItemPrice}>
-                          Rs {coin.priceLKR < 1 ? coin.priceLKR.toFixed(4) : coin.priceLKR.toLocaleString()}
+                          Rs {formatLKR(coin.priceLKR, 2)}
                         </Text>
                         {selectedSymbol === coin.symbol && <MaterialIcons name="check" size={20} color={colors.accent} style={{ marginLeft: 8 }} />}
                       </View>
@@ -254,7 +264,7 @@ export const TradingTerminalScreen = () => {
                   <TouchableOpacity 
                     style={styles.syncBtn} 
                     onPress={() => {
-                      if (lkrPriceData) setLimitPrice(Math.round(lkrPriceData.priceLKR).toString());
+                      if (lkrPriceData) setLimitPrice(Math.round(lkrPriceData.priceLKR || 0).toString());
                     }}
                   >
                     <MaterialIcons name="sync" size={20} color={colors.accent} />
@@ -266,7 +276,7 @@ export const TradingTerminalScreen = () => {
             <Card style={styles.totalCard}>
               <View>
                 <Text style={styles.totalLabel}>Estimated Total</Text>
-                <Text style={styles.totalValue}>{isNaN(total) ? '0.00' : total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} LKR</Text>
+                <Text style={styles.totalValue}>{formatLKR(total, 2)} LKR</Text>
               </View>
               <TouchableOpacity style={styles.calcIcon}>
                 <MaterialIcons name="calculate" size={24} color={colors.textSecondary} />
