@@ -9,6 +9,7 @@ import { colors, typography, layout } from '../../theme';
 import { Card, NotificationModal, SetAlertModal } from '../../components';
 import { storageService } from '../../services/storageService';
 import { marketService, walletService, portfolioService, authService } from '../../services/apiService';
+import { formatLKR, formatNumber } from '../../utils/formatters';
 
 // Helper to generate SVG path for sparklines
 const generateSparklinePath = (data: number[], width: number, height: number) => {
@@ -82,10 +83,10 @@ export const HomeScreen = () => {
           pair: `${p.symbol.replace('USDT', '')}/LKR`,
           change: `${p.changePercent >= 0 ? '+' : ''}${p.changePercent.toFixed(2)}%`,
           changeVal: p.changePercent,
-          price: p.priceLKR < 10 
-            ? `Rs ${p.priceLKR.toFixed(4)}`
-            : `Rs ${p.priceLKR.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`,
-          rawPrice: p.priceLKR,
+          price: (p.priceLKR !== undefined && p.priceLKR !== null && p.priceLKR < 10)
+            ? `Rs ${Number(p.priceLKR).toFixed(4)}`
+            : `Rs ${formatNumber(p.priceLKR, 0, 0)}`,
+          rawPrice: p.priceLKR || 0,
           color: p.changePercent >= 0 ? colors.accent : colors.red,
           path: generateSparklinePath(p.sparkline, 100, 40),
           sparkline: p.sparkline || []
@@ -185,28 +186,28 @@ export const HomeScreen = () => {
         <Card style={styles.balanceCard}>
           <Text style={styles.balanceLabel}>Est. Total Value</Text>
           <Text style={styles.balanceValue}>
-            LKR {portfolioValue !== null ? portfolioValue.toLocaleString(undefined, { minimumFractionDigits: 2 }) : '1,000,000.00'}
+            LKR {formatLKR(portfolioValue, 2)}
           </Text>
           <View style={styles.balanceFooterRow}>
             <View style={[
               styles.pnlPill,
-              todaysProfit !== null && todaysProfit < 0 ? styles.pnlPillRed : styles.pnlPillGreen
+              todaysProfit !== null && todaysProfit !== undefined && todaysProfit < 0 ? styles.pnlPillRed : styles.pnlPillGreen
             ]}>
               <MaterialIcons 
-                name={todaysProfit !== null && todaysProfit >= 0 ? "trending-up" : "trending-down"} 
+                name={todaysProfit !== null && todaysProfit !== undefined && todaysProfit >= 0 ? "trending-up" : "trending-down"} 
                 size={14} 
-                color={todaysProfit !== null && todaysProfit >= 0 ? colors.accent : colors.red} 
+                color={todaysProfit !== null && todaysProfit !== undefined && todaysProfit >= 0 ? colors.accent : colors.red} 
               />
               <Text style={[
                 styles.pnlText,
-                todaysProfit !== null && todaysProfit >= 0 ? { color: colors.accent } : { color: colors.red }
+                todaysProfit !== null && todaysProfit !== undefined && todaysProfit >= 0 ? { color: colors.accent } : { color: colors.red }
               ]}>
-                {todaysProfit !== null && todaysProfit >= 0 ? '+' : ''}{pnlPercent !== null ? pnlPercent.toFixed(2) : '0.00'}% PNL
+                {todaysProfit !== null && todaysProfit !== undefined && todaysProfit >= 0 ? '+' : ''}{pnlPercent !== null && pnlPercent !== undefined ? pnlPercent.toFixed(2) : '0.00'}% PNL
               </Text>
             </View>
             <View style={styles.walletBalanceContainer}>
               <Text style={styles.walletBalanceLabel}>Available: </Text>
-              <Text style={styles.walletBalanceValue}>LKR {balance !== null ? balance.toLocaleString(undefined, { maximumFractionDigits: 0 }) : '1,000,000'}</Text>
+              <Text style={styles.walletBalanceValue}>LKR {formatNumber(balance, 0)}</Text>
             </View>
           </View>
           <MaterialIcons

@@ -13,8 +13,9 @@ import {
   ScrollView,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
-import { colors, typography } from '../theme';
+import { colors } from '../theme';
 import { walletService } from '../services/apiService';
+import { formatLKR, formatNumber } from '../utils/formatters';
 
 interface DepositModalProps {
   isVisible: boolean;
@@ -186,7 +187,7 @@ export const DepositModal: React.FC<DepositModalProps> = ({ isVisible, onClose, 
                         amount === amt.toString() && styles.quickAmountTextActive
                       ]}
                     >
-                      +{amt.toLocaleString()}
+                      +{formatNumber(amt, 0)}
                     </Text>
                   </TouchableOpacity>
                 ))}
@@ -251,7 +252,7 @@ export const DepositModal: React.FC<DepositModalProps> = ({ isVisible, onClose, 
                 <View style={styles.confirmRow}>
                   <Text style={styles.confirmLabel}>Deposit Amount</Text>
                   <Text style={styles.confirmValueBold}>
-                    LKR {parseFloat(amount || '0').toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                    LKR {formatLKR(amount, 2)}
                   </Text>
                 </View>
                 <View style={styles.confirmDivider} />
@@ -317,7 +318,7 @@ export const DepositModal: React.FC<DepositModalProps> = ({ isVisible, onClose, 
 
               <View style={styles.receiptBox}>
                 <Text style={styles.receiptAmount}>
-                  + LKR {receipt.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  + LKR {formatLKR(receipt.amount, 2)}
                 </Text>
                 <Text style={styles.receiptSub}>Deposit Settled Successfully</Text>
 
@@ -343,7 +344,7 @@ export const DepositModal: React.FC<DepositModalProps> = ({ isVisible, onClose, 
                   <View style={styles.confirmRow}>
                     <Text style={styles.confirmLabel}>Updated Cash</Text>
                     <Text style={styles.confirmValueBold}>
-                      LKR {receipt.availableBalance.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                      LKR {formatLKR(receipt.availableBalance, 2)}
                     </Text>
                   </View>
                 )}

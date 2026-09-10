@@ -509,6 +509,27 @@ export const UserProfileScreen = () => {
               </TouchableOpacity>
             </View>
           </View>
+
+          {/* Account UID Row */}
+          {user?.accountUid && (
+            <View style={[styles.infoRow, { marginTop: 14 }]}>
+              <Text style={styles.infoLabel}>Account UID</Text>
+              <View style={styles.infoValueGroup}>
+                <Text style={[styles.infoValueText, { color: colors.accent, fontWeight: '700' }]}>
+                  {user.accountUid}
+                </Text>
+                <TouchableOpacity
+                  style={styles.eyeBtn}
+                  onPress={() => {
+                    Alert.alert('Account UID', `Your SmartLanka Trade UID is ${user.accountUid}. Share this with other users to receive instant P2P transfers.`);
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <MaterialIcons name="content-copy" size={16} color={colors.accent} />
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
         </Card>
 
         {/* Preferences Toggle Row */}

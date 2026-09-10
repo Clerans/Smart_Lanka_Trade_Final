@@ -5,6 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
 import { colors, typography, layout } from '../../theme';
 import { marketService } from '../../services/apiService';
+import { formatLKR } from '../../utils/formatters';
 
 const filters = ['All Assets', 'Crypto', 'Stocks', 'Indices'];
 
@@ -55,7 +56,7 @@ export const MarketWatchScreen = () => {
           id: index,
           name: assetMeta[p.symbol]?.name || p.symbol.replace('USDT', ''),
           ticker: p.symbol.replace('USDT', ''),
-          price: p.priceLKR.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+          price: formatLKR(p.priceLKR, 2),
           change: `${p.changePercent >= 0 ? '+' : ''}${p.changePercent.toFixed(2)}%`,
           isPositive: p.changePercent >= 0,
           color: assetMeta[p.symbol]?.color || '#888',

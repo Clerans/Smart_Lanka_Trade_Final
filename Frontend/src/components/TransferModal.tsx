@@ -15,6 +15,7 @@ import {
 import { MaterialIcons } from '@expo/vector-icons';
 import { colors } from '../theme';
 import { walletService } from '../services/apiService';
+import { formatLKR } from '../utils/formatters';
 
 interface TransferModalProps {
   isVisible: boolean;
@@ -95,10 +96,10 @@ export const TransferModal: React.FC<TransferModalProps> = ({
       return;
     }
 
-    if (numAmount > availableBalance) {
+    if (numAmount > (availableBalance || 0)) {
       Alert.alert(
         'Insufficient Balance',
-        `Available balance: LKR ${availableBalance.toLocaleString(undefined, { minimumFractionDigits: 2 })}.`
+        `Available balance: LKR ${formatLKR(availableBalance, 2)}.`
       );
       return;
     }
@@ -238,7 +239,7 @@ export const TransferModal: React.FC<TransferModalProps> = ({
               <View style={styles.availableBox}>
                 <Text style={styles.availableLabel}>AVAILABLE CASH</Text>
                 <Text style={styles.availableValue}>
-                  LKR {availableBalance.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  LKR {formatLKR(availableBalance, 2)}
                 </Text>
               </View>
 
@@ -257,7 +258,7 @@ export const TransferModal: React.FC<TransferModalProps> = ({
                   />
                   <TouchableOpacity
                     style={styles.maxBtn}
-                    onPress={() => setAmount(availableBalance.toFixed(2))}
+                    onPress={() => setAmount((availableBalance || 0).toFixed(2))}
                     activeOpacity={0.8}
                   >
                     <Text style={styles.maxBtnText}>MAX</Text>
@@ -328,7 +329,7 @@ export const TransferModal: React.FC<TransferModalProps> = ({
                 <View style={styles.confirmRow}>
                   <Text style={styles.confirmLabel}>Amount</Text>
                   <Text style={styles.confirmValueBold}>
-                    LKR {numAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                    LKR {formatLKR(numAmount, 2)}
                   </Text>
                 </View>
                 <View style={styles.confirmRow}>
@@ -341,7 +342,7 @@ export const TransferModal: React.FC<TransferModalProps> = ({
                 <View style={styles.confirmRow}>
                   <Text style={styles.confirmLabelBold}>Total Deducted</Text>
                   <Text style={styles.confirmValueAccentLarge}>
-                    LKR {numAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                    LKR {formatLKR(numAmount, 2)}
                   </Text>
                 </View>
               </View>
@@ -387,7 +388,7 @@ export const TransferModal: React.FC<TransferModalProps> = ({
 
               <View style={styles.receiptBox}>
                 <Text style={styles.receiptAmount}>
-                  LKR {receipt.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  LKR {formatLKR(receipt.amount, 2)}
                 </Text>
                 <Text style={styles.receiptSub}>Transfer Sent Successfully</Text>
 
@@ -413,7 +414,7 @@ export const TransferModal: React.FC<TransferModalProps> = ({
                   <View style={styles.confirmRow}>
                     <Text style={styles.confirmLabel}>Remaining Balance</Text>
                     <Text style={styles.confirmValueBold}>
-                      LKR {receipt.availableBalance.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                      LKR {formatLKR(receipt.availableBalance, 2)}
                     </Text>
                   </View>
                 )}

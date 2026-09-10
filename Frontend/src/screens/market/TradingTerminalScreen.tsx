@@ -7,6 +7,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { colors, typography, layout } from '../../theme';
 import { PrimaryButton, Card } from '../../components';
 import { marketService, aiService } from '../../services/apiService';
+import { formatLKR, formatNumber } from '../../utils/formatters';
 
 const tradeableSymbols = ['BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'SOLUSDT', 'ADAUSDT', 'XRPUSDT', 'DOGEUSDT'];
 
@@ -182,7 +183,7 @@ export const TradingTerminalScreen = () => {
                       </Text>
                       <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                         <Text style={styles.pickerItemPrice}>
-                          Rs {coin.priceLKR < 1 ? coin.priceLKR.toFixed(4) : coin.priceLKR.toLocaleString()}
+                          Rs {formatLKR(coin.priceLKR, 2)}
                         </Text>
                         {selectedSymbol === coin.symbol && <MaterialIcons name="check" size={20} color={colors.accent} style={{ marginLeft: 8 }} />}
                       </View>
@@ -263,7 +264,7 @@ export const TradingTerminalScreen = () => {
                   <TouchableOpacity 
                     style={styles.syncBtn} 
                     onPress={() => {
-                      if (lkrPriceData) setLimitPrice(Math.round(lkrPriceData.priceLKR).toString());
+                      if (lkrPriceData) setLimitPrice(Math.round(lkrPriceData.priceLKR || 0).toString());
                     }}
                   >
                     <MaterialIcons name="sync" size={20} color={colors.accent} />
@@ -275,7 +276,7 @@ export const TradingTerminalScreen = () => {
             <Card style={styles.totalCard}>
               <View>
                 <Text style={styles.totalLabel}>Estimated Total</Text>
-                <Text style={styles.totalValue}>{isNaN(total) ? '0.00' : total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} LKR</Text>
+                <Text style={styles.totalValue}>{formatLKR(total, 2)} LKR</Text>
               </View>
               <TouchableOpacity style={styles.calcIcon}>
                 <MaterialIcons name="calculate" size={24} color={colors.textSecondary} />

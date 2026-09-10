@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { colors } from '../theme';
+import { formatLKR } from '../utils/formatters';
 
 export interface TransactionItem {
   id: number;
@@ -39,9 +40,15 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
 }) => {
   if (!transaction) return null;
 
+  const rawType = transaction.type || (transaction as any).TYPE || 'TRANSACTION';
   const isIncoming = transaction.isIncoming !== undefined 
     ? transaction.isIncoming 
-    : ['DEPOSIT', 'TRANSFER_RECEIVED', 'SELL'].includes(transaction.type);
+    : ['DEPOSIT', 'TRANSFER_RECEIVED', 'SELL'].includes(rawType);
+
+  const rawStatus = transaction.status || (transaction as any).STATUS || 'COMPLETED';
+  const rawAmount = transaction.amount !== undefined 
+    ? transaction.amount 
+    : ((transaction as any).AMOUNT !== undefined ? (transaction as any).AMOUNT : ((transaction as any).total || 0));
 
   const getStatusColor = (st: string) => {
     switch ((st || '').toUpperCase()) {
@@ -111,12 +118,20 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
     }
   };
 
-  const formattedDate = transaction.createdAt 
-    ? new Date(transaction.createdAt).toLocaleString(undefined, {
+  const dateStr = transaction.createdAt || (transaction as any).CREATED_AT;
+  const formattedDate = dateStr 
+    ? new Date(dateStr).toLocaleString(undefined, {
         dateStyle: 'medium',
         timeStyle: 'short'
       })
     : 'Recent';
+
+  const txId = transaction.id || (transaction as any).ID || '---';
+  const method = transaction.paymentMethod || (transaction as any).PAYMENT_METHOD || null;
+  const ref = transaction.reference || (transaction as any).PROVIDER_REF || null;
+  const recipientUid = transaction.recipientUid || (transaction as any).RECIPIENT_UID || null;
+  const desc = transaction.description || (transaction as any).DESCRIPTION || '';
+  const failureReason = transaction.failureReason || (transaction as any).FAILURE_REASON || null;
 
   return (
     <Modal
@@ -140,21 +155,21 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
             <View style={styles.heroCard}>
               <View style={[styles.typeIconCircle, { backgroundColor: isIncoming ? colors.accentMuted : '#FF525222' }]}>
                 <MaterialIcons
-                  name={getTypeIcon(transaction.type)}
+                  name={getTypeIcon(rawType)}
                   size={26}
                   color={isIncoming ? colors.accent : '#FF5252'}
                 />
               </View>
 
               <Text style={[styles.amountText, { color: isIncoming ? colors.accent : '#FFFFFF' }]}>
-                {isIncoming ? '+' : '-'} LKR {transaction.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                {isIncoming ? '+' : '-'} LKR {formatLKR(rawAmount, 2)}
               </Text>
-              <Text style={styles.typeLabel}>{getFormattedType(transaction.type)}</Text>
+              <Text style={styles.typeLabel}>{getFormattedType(rawType)}</Text>
 
               {/* Status Pill */}
-              <View style={[styles.statusPill, { backgroundColor: getStatusBg(transaction.status) }]}>
-                <Text style={[styles.statusText, { color: getStatusColor(transaction.status) }]}>
-                  {transaction.status}
+              <View style={[styles.statusPill, { backgroundColor: getStatusBg(rawStatus) }]}>
+                <Text style={[styles.statusText, { color: getStatusColor(rawStatus) }]}>
+                  {rawStatus}
                 </Text>
               </View>
             </View>
@@ -163,7 +178,7 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
             <View style={styles.detailsCard}>
               <View style={styles.detailRow}>
                 <Text style={styles.detailLabel}>Transaction ID</Text>
-                <Text style={styles.detailValue}>#{transaction.id}</Text>
+                <Text style={styles.detailValue}>#{txId}</Text>
               </View>
 
               <View style={styles.divider} />
@@ -173,48 +188,48 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
                 <Text style={styles.detailValue}>{formattedDate}</Text>
               </View>
 
-              {transaction.paymentMethod && (
+              {method ? (
                 <View style={styles.detailRow}>
                   <Text style={styles.detailLabel}>Payment Method</Text>
-                  <Text style={styles.detailValueAccent}>{transaction.paymentMethod}</Text>
+                  <Text style={styles.detailValueAccent}>{method}</Text>
                 </View>
-              )}
+              ) : null}
 
-              {transaction.reference && (
+              {ref ? (
                 <View style={styles.detailRow}>
                   <Text style={styles.detailLabel}>Reference ID</Text>
-                  <Text style={[styles.detailValue, { fontSize: 11 }]}>{transaction.reference}</Text>
+                  <Text style={[styles.detailValue, { fontSize: 11 }]}>{ref}</Text>
                 </View>
-              )}
+              ) : null}
 
-              {transaction.recipientUid && (
+              {recipientUid ? (
                 <View style={styles.detailRow}>
                   <Text style={styles.detailLabel}>Counterparty UID</Text>
-                  <Text style={styles.detailValueAccent}>{transaction.recipientUid}</Text>
+                  <Text style={styles.detailValueAccent}>{recipientUid}</Text>
                 </View>
-              )}
+              ) : null}
 
               <View style={styles.detailRow}>
                 <Text style={styles.detailLabel}>Network Fee</Text>
                 <Text style={styles.detailFree}>LKR 0.00 (Free)</Text>
               </View>
 
-              {transaction.description ? (
+              {desc ? (
                 <>
                   <View style={styles.divider} />
                   <View style={styles.noteGroup}>
                     <Text style={styles.detailLabel}>Description / Note</Text>
-                    <Text style={styles.noteText}>{transaction.description}</Text>
+                    <Text style={styles.noteText}>{desc}</Text>
                   </View>
                 </>
               ) : null}
 
-              {transaction.failureReason ? (
+              {failureReason ? (
                 <>
                   <View style={styles.divider} />
                   <View style={styles.noteGroup}>
                     <Text style={[styles.detailLabel, { color: '#FF5252' }]}>Failure Reason</Text>
-                    <Text style={[styles.noteText, { color: '#FF5252' }]}>{transaction.failureReason}</Text>
+                    <Text style={[styles.noteText, { color: '#FF5252' }]}>{failureReason}</Text>
                   </View>
                 </>
               ) : null}

@@ -22,6 +22,7 @@ import {
 } from '../../components';
 import { colors } from '../../theme';
 import { walletService, portfolioService } from '../../services/apiService';
+import { formatLKR, formatNumber } from '../../utils/formatters';
 
 interface HoldingItem {
   coin: string;
@@ -167,8 +168,12 @@ export const WalletOverviewScreen = () => {
     fetchWalletData();
   }, []);
 
-  const availableCash = walletDetails?.availableBalance !== undefined ? walletDetails.availableBalance : 892300.00;
-  const totalAssetVal = walletDetails?.balanceLKR !== undefined ? walletDetails.balanceLKR : 1247850.40;
+  const availableCash = walletDetails?.availableBalance !== undefined && walletDetails?.availableBalance !== null
+    ? Number(walletDetails.availableBalance) 
+    : 892300.00;
+  const totalAssetVal = walletDetails?.balanceLKR !== undefined && walletDetails?.balanceLKR !== null
+    ? Number(walletDetails.balanceLKR) 
+    : 1247850.40;
 
   const handleOpenTxDetails = (tx: any) => {
     setSelectedTx(tx);
@@ -258,12 +263,12 @@ export const WalletOverviewScreen = () => {
           <Card style={styles.totalAssetCard}>
             <Text style={styles.totalAssetLabel}>TOTAL ASSET VALUE</Text>
             <Text style={styles.totalAssetNumber}>
-              LKR {totalAssetVal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              LKR {formatLKR(totalAssetVal, 2)}
             </Text>
             <View style={styles.cashRow}>
               <Text style={styles.cashLabel}>Available Cash: </Text>
               <Text style={styles.cashValue}>
-                LKR {availableCash.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                LKR {formatLKR(availableCash, 2)}
               </Text>
             </View>
           </Card>
@@ -318,9 +323,9 @@ export const WalletOverviewScreen = () => {
 
             {/* Holdings Cards List */}
             {holdings.map((item, index) => {
-              const isProfit = item.floatingPnl >= 0;
+              const isProfit = (item.floatingPnl || 0) >= 0;
               const sign = isProfit ? '+' : '-';
-              const pnlText = `${sign}LKR ${Math.abs(item.floatingPnl).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })} (${sign}${Math.abs(item.floatingPnlPct).toFixed(1)}%)`;
+              const pnlText = `${sign}LKR ${formatNumber(Math.abs(item.floatingPnl || 0), 0)} (${sign}${Math.abs(item.floatingPnlPct || 0).toFixed(1)}%)`;
 
               return (
                 <View key={item.coin + index} style={styles.holdingCard}>
@@ -340,10 +345,10 @@ export const WalletOverviewScreen = () => {
 
                     <View style={styles.holdingRightInfo}>
                       <Text style={styles.coinQuantityText}>
-                        {item.quantity.toFixed(6)} {item.symbol}
+                        {(item.quantity || 0).toFixed(6)} {item.symbol}
                       </Text>
                       <Text style={styles.coinValueText}>
-                        LKR {item.currentValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        LKR {formatLKR(item.currentValue, 2)}
                       </Text>
                     </View>
                   </View>
@@ -363,7 +368,7 @@ export const WalletOverviewScreen = () => {
                     <View style={styles.costColumn}>
                       <Text style={styles.statLabelRight}>AVG. COST</Text>
                       <Text style={styles.avgCostText}>
-                        LKR {item.avgCost.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                        LKR {formatNumber(item.avgCost, 0)}
                       </Text>
                     </View>
                   </View>
@@ -385,39 +390,41 @@ export const WalletOverviewScreen = () => {
                 <Text style={styles.emptyActivityText}>No recent funding or transfer activity.</Text>
               </View>
             ) : (
-              transactions.slice(0, 5).map((tx) => {
+              transactions.slice(0, 5).map((tx, idx) => {
                 const isIncoming = tx.isIncoming !== undefined 
                   ? tx.isIncoming 
-                  : ['DEPOSIT', 'TRANSFER_RECEIVED', 'SELL'].includes(tx.type);
+                  : ['DEPOSIT', 'TRANSFER_RECEIVED', 'SELL'].includes(tx.type || tx.TYPE);
+                
+                const rawAmount = tx.amount !== undefined ? tx.amount : (tx.AMOUNT !== undefined ? tx.AMOUNT : (tx.total || 0));
 
                 return (
                   <TouchableOpacity
-                    key={tx.id}
+                    key={(tx.id || tx.ID || idx).toString()}
                     style={styles.activityCard}
                     onPress={() => handleOpenTxDetails(tx)}
                     activeOpacity={0.75}
                   >
                     <View style={[styles.activityIconBox, { backgroundColor: isIncoming ? colors.accentMuted : '#FF525222' }]}>
                       <MaterialIcons
-                        name={getTxIcon(tx.type)}
+                        name={getTxIcon(tx.type || tx.TYPE)}
                         size={20}
                         color={isIncoming ? colors.accent : '#FF5252'}
                       />
                     </View>
                     <View style={styles.activityInfo}>
-                      <Text style={styles.activityTitle}>{getTxTypeTitle(tx.type)}</Text>
+                      <Text style={styles.activityTitle}>{getTxTypeTitle(tx.type || tx.TYPE)}</Text>
                       <Text style={styles.activityDate}>
                         {tx.paymentMethod ? `${tx.paymentMethod} • ` : ''}
-                        {tx.createdAt ? new Date(tx.createdAt).toLocaleDateString() : 'Today'}
+                        {tx.createdAt || tx.CREATED_AT ? new Date(tx.createdAt || tx.CREATED_AT).toLocaleDateString() : 'Today'}
                       </Text>
                     </View>
                     <View style={styles.activityRight}>
                       <Text style={[styles.activityAmount, { color: isIncoming ? colors.accent : '#FFFFFF' }]}>
-                        {isIncoming ? '+' : '-'} LKR {tx.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                        {isIncoming ? '+' : '-'} LKR {formatLKR(rawAmount, 2)}
                       </Text>
-                      <View style={[styles.statusBadge, { backgroundColor: tx.status === 'COMPLETED' ? colors.accentMuted : '#FFB30022' }]}>
-                        <Text style={[styles.statusBadgeText, { color: tx.status === 'COMPLETED' ? colors.accent : '#FFB300' }]}>
-                          {tx.status}
+                      <View style={[styles.statusBadge, { backgroundColor: (tx.status || tx.STATUS) === 'COMPLETED' ? colors.accentMuted : '#FFB30022' }]}>
+                        <Text style={[styles.statusBadgeText, { color: (tx.status || tx.STATUS) === 'COMPLETED' ? colors.accent : '#FFB300' }]}>
+                          {tx.status || tx.STATUS || 'COMPLETED'}
                         </Text>
                       </View>
                     </View>

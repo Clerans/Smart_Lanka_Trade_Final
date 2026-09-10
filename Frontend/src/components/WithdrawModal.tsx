@@ -15,6 +15,7 @@ import {
 import { MaterialIcons } from '@expo/vector-icons';
 import { colors } from '../theme';
 import { walletService } from '../services/apiService';
+import { formatLKR } from '../utils/formatters';
 
 interface WithdrawModalProps {
   isVisible: boolean;
@@ -77,10 +78,10 @@ export const WithdrawModal: React.FC<WithdrawModalProps> = ({
       return;
     }
 
-    if (numAmount > availableBalance) {
+    if (numAmount > (availableBalance || 0)) {
       Alert.alert(
         'Insufficient Balance',
-        `You can withdraw up to LKR ${availableBalance.toLocaleString(undefined, { minimumFractionDigits: 2 })}.`
+        `You can withdraw up to LKR ${formatLKR(availableBalance, 2)}.`
       );
       return;
     }
@@ -176,7 +177,7 @@ export const WithdrawModal: React.FC<WithdrawModalProps> = ({
               <View style={styles.availableBox}>
                 <Text style={styles.availableLabel}>AVAILABLE FOR WITHDRAWAL</Text>
                 <Text style={styles.availableValue}>
-                  LKR {availableBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  LKR {formatLKR(availableBalance, 2)}
                 </Text>
               </View>
 
@@ -195,7 +196,7 @@ export const WithdrawModal: React.FC<WithdrawModalProps> = ({
                   />
                   <TouchableOpacity
                     style={styles.maxBtn}
-                    onPress={() => setAmount(availableBalance.toFixed(2))}
+                    onPress={() => setAmount((availableBalance || 0).toFixed(2))}
                     activeOpacity={0.8}
                   >
                     <Text style={styles.maxBtnText}>MAX</Text>
@@ -254,7 +255,7 @@ export const WithdrawModal: React.FC<WithdrawModalProps> = ({
                 <View style={styles.summaryRow}>
                   <Text style={styles.summaryLabelBold}>You Receive</Text>
                   <Text style={styles.summaryValueBold}>
-                    LKR {youReceive.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    LKR {formatLKR(youReceive, 2)}
                   </Text>
                 </View>
               </View>
@@ -276,7 +277,7 @@ export const WithdrawModal: React.FC<WithdrawModalProps> = ({
                 <View style={styles.confirmRow}>
                   <Text style={styles.confirmLabel}>Amount</Text>
                   <Text style={styles.confirmValueBold}>
-                    LKR {numAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                    LKR {formatLKR(numAmount, 2)}
                   </Text>
                 </View>
                 <View style={styles.confirmDivider} />
@@ -296,7 +297,7 @@ export const WithdrawModal: React.FC<WithdrawModalProps> = ({
                 <View style={styles.confirmRow}>
                   <Text style={styles.confirmLabelBold}>You Receive</Text>
                   <Text style={styles.confirmValueAccentLarge}>
-                    LKR {youReceive.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                    LKR {formatLKR(youReceive, 2)}
                   </Text>
                 </View>
               </View>
@@ -342,7 +343,7 @@ export const WithdrawModal: React.FC<WithdrawModalProps> = ({
 
               <View style={styles.receiptBox}>
                 <Text style={styles.receiptAmount}>
-                  - LKR {receipt.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  - LKR {formatLKR(receipt.amount, 2)}
                 </Text>
                 <Text style={styles.receiptSub}>Withdrawal Request Placed</Text>
 
@@ -368,7 +369,7 @@ export const WithdrawModal: React.FC<WithdrawModalProps> = ({
                   <View style={styles.confirmRow}>
                     <Text style={styles.confirmLabel}>Remaining Cash</Text>
                     <Text style={styles.confirmValueBold}>
-                      LKR {receipt.availableBalance.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                      LKR {formatLKR(receipt.availableBalance, 2)}
                     </Text>
                   </View>
                 )}
