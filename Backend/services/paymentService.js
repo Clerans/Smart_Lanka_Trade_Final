@@ -85,13 +85,13 @@ class PaymentService {
           STATUS, PAYMENT_METHOD, DESCRIPTION, IDEMPOTENCY_KEY
         ) VALUES (
           :userId, 'LKR', 'DEPOSIT', 1, :numAmount, :numAmount, 
-          'PENDING', :method, :desc, :idempotencyKey
+          'PENDING', :method, :txDescription, :idempotencyKey
         ) RETURNING TRANSACTION_ID INTO :txId`,
         {
           userId,
           numAmount,
           method,
-          desc,
+          txDescription: desc,
           idempotencyKey: idempotencyKey || null,
           txId: { type: oracledb.NUMBER, dir: oracledb.BIND_OUT }
         }
