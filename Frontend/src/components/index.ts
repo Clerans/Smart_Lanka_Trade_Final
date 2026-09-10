@@ -9,3 +9,5 @@ export { CandlestickChart } from './CandlestickChart';
 export { NotificationModal } from './NotificationModal';
 export { SetAlertModal } from './SetAlertModal';
 export { WithdrawModal } from './WithdrawModal';
+export { TransferModal } from './TransferModal';
+export { TransactionDetailsModal } from './TransactionDetailsModal';
