@@ -14,6 +14,7 @@ import { MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
 import { colors, typography, layout } from '../../theme';
 import { Card } from '../../components';
 import { aiService } from '../../services/apiService';
+import { formatLKR, formatNumber } from '../../utils/formatters';
 
 const intervals = ['1h', '4h', '1d'];
 

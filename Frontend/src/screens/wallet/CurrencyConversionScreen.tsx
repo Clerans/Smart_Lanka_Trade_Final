@@ -19,6 +19,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { colors, typography, layout } from '../../theme';
 import { PrimaryButton, Card } from '../../components';
 import { marketService, walletService } from '../../services/apiService';
+import { formatLKR, formatNumber } from '../../utils/formatters';
 
 export const CurrencyConversionScreen = () => {
   const navigation = useNavigation<any>();
@@ -103,7 +104,7 @@ export const CurrencyConversionScreen = () => {
       await new Promise(r => setTimeout(r, 800));
       Alert.alert(
         'Conversion Successful',
-        `Successfully converted ${parseFloat(fromAmount).toLocaleString()} ${isLkrToUsd ? 'LKR' : 'USD'} to ${parseFloat(toAmount).toLocaleString()} ${isLkrToUsd ? 'USD' : 'LKR'}.`,
+        `Successfully converted ${formatNumber(fromAmount, 2)} ${isLkrToUsd ? 'LKR' : 'USD'} to ${formatNumber(toAmount, 2)} ${isLkrToUsd ? 'USD' : 'LKR'}.`,
         [{ text: 'OK', onPress: () => navigation.goBack() }]
       );
     } catch (e: any) {
@@ -217,7 +218,7 @@ export const CurrencyConversionScreen = () => {
                   <Text style={styles.confirmTitle}>Conversion Ready</Text>
                 </View>
                 <Text style={styles.confirmDesc}>
-                  Convert {parseFloat(fromAmount || '0').toLocaleString()} {isLkrToUsd ? 'LKR' : 'USD'} to your {isLkrToUsd ? 'USD' : 'LKR'} wallet instantly.
+                  Convert {formatNumber(fromAmount || '0', 2)} {isLkrToUsd ? 'LKR' : 'USD'} to your {isLkrToUsd ? 'USD' : 'LKR'} wallet instantly.
                 </Text>
               </Card>
 
