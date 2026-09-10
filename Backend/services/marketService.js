@@ -1,4 +1,5 @@
 const axios = require("axios");
+const { fetchBinanceData } = require("../utils/binanceClient");
 
 // Shared rate & inflight caches
 let cachedUsdToLkr = null;
@@ -15,14 +16,11 @@ async function getCryptoTicker(symbol = "BTCUSDT") {
     };
   }
 
-  const response = await axios.get(
-    `https://api.binance.com/api/v3/ticker/24hr?symbol=${symbol}`,
-    { timeout: 4000 }
-  );
+  const data = await fetchBinanceData('/ticker/24hr', { symbol }, 4000);
 
   return {
-    price: parseFloat(response.data.lastPrice),
-    changePercent: parseFloat(response.data.priceChangePercent)
+    price: parseFloat(data.lastPrice),
+    changePercent: parseFloat(data.priceChangePercent)
   };
 }
 
@@ -77,8 +75,12 @@ async function getMultiplePricesInLKR(symbols = ["BTCUSDT", "ETHUSDT"], includeS
           sparkline = Array(24).fill(1.0);
         } else {
           // Fetch last 24 1-hour candles
-          const klines = await axios.get(`https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=1h&limit=24`, { timeout: 3500 });
-          sparkline = klines.data.map(k => parseFloat(k[4])); // Closing prices
+          try {
+            const klinesData = await fetchBinanceData('/klines', { symbol, interval: '1h', limit: 24 }, 3500);
+            sparkline = klinesData.map(k => parseFloat(k[4])); // Closing prices
+          } catch (e) {
+            sparkline = [];
+          }
         }
       }
 
@@ -113,11 +115,11 @@ async function getMultiplePricesInLKR(symbols = ["BTCUSDT", "ETHUSDT"], includeS
 async function getAllPricesInLKR() {
   const usdToLkr = await getUSDToLKR();
   
-  // Call 24hr ticker without symbol to get ALL symbols
-  const response = await axios.get("https://api.binance.com/api/v3/ticker/24hr");
+  // Call 24hr ticker without symbol to get ALL symbols with failover
+  const data = await fetchBinanceData('/ticker/24hr', {}, 5000);
   
-  const results = response.data
-    .filter(ticker => ticker.symbol.endsWith("USDT"))
+  const results = data
+    .filter(ticker => ticker.symbol && ticker.symbol.endsWith("USDT"))
     .map(ticker => ({
       symbol: ticker.symbol,
       priceUSDT: parseFloat(ticker.lastPrice),
@@ -135,12 +137,12 @@ async function getAllPricesInLKR() {
 // Internal worker for fetching live prices
 async function fetchFreshLivePrices() {
   const symbols = ['BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'SOLUSDT', 'XRPUSDT', 'ADAUSDT', 'DOGEUSDT'];
-  const response = await axios.get("https://api.binance.com/api/v3/ticker/24hr", { timeout: 4000 });
+  const data = await fetchBinanceData('/ticker/24hr', {}, 4000);
   const usdToLkr = await getUSDToLKR();
   
   const tickerMap = {};
-  if (Array.isArray(response.data)) {
-    response.data.forEach(t => {
+  if (Array.isArray(data)) {
+    data.forEach(t => {
       if (symbols.includes(t.symbol)) {
         tickerMap[t.symbol] = t;
       }

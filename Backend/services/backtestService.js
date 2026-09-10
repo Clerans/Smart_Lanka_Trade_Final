@@ -79,13 +79,18 @@ function validateAndSanitizeCandles(candles) {
  * @param {number|null} startTime 
  * @param {number|null} endTime 
  */
-async function fetchHistoricalKlines(symbol = 'BTCUSDT', interval = '1h', limit = 500, startTime = null, endTime = null) {
-  let url = `https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=${Math.min(limit, 1000)}`;
-  if (startTime) url += `&startTime=${startTime}`;
-  if (endTime) url += `&endTime=${endTime}`;
+const { fetchBinanceData } = require('../utils/binanceClient');
 
-  const response = await axios.get(url, { timeout: 15000 });
-  return response.data;
+async function fetchHistoricalKlines(symbol = 'BTCUSDT', interval = '1h', limit = 500, startTime = null, endTime = null) {
+  const params = {
+    symbol,
+    interval,
+    limit: Math.min(limit, 1000)
+  };
+  if (startTime) params.startTime = startTime;
+  if (endTime) params.endTime = endTime;
+
+  return await fetchBinanceData('/klines', params, 15000);
 }
 
 /**
