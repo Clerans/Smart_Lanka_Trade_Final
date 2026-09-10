@@ -1,5 +1,4 @@
-import * as React from 'react';
-const { useState } = React;
+import React, { useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -7,12 +6,12 @@ import {
   TouchableOpacity,
   KeyboardAvoidingView,
   Platform,
-  Dimensions,
   ActivityIndicator,
   Modal,
   TextInput,
   Alert,
-  ScrollView
+  ScrollView,
+  TextInput as RNTextInput
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
@@ -24,12 +23,11 @@ import { InputField, PrimaryButton, Toast, NetworkErrorScreen } from '../../comp
 import { authService } from '../../services/apiService';
 import { storageService } from '../../services/storageService';
 
-const { height: screenHeight } = Dimensions.get('window');
-const isSmallDevice = screenHeight < 720;
-
 export const LoginScreen = () => {
   const navigation = useNavigation<any>();
   const insets = useSafeAreaInsets();
+  const passwordInputRef = useRef<RNTextInput>(null);
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
@@ -40,7 +38,7 @@ export const LoginScreen = () => {
   const [googleModalVisible, setGoogleModalVisible] = useState(false);
   const [googleIdToken, setGoogleIdToken] = useState('');
 
-  // Toast states
+  // Toast & Network states
   const [toastVisible, setToastVisible] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
   const [toastType, setToastType] = useState<'success' | 'error' | 'warning'>('success');
@@ -77,7 +75,9 @@ export const LoginScreen = () => {
   };
 
   const handleLogin = async () => {
-    if (!email || !password) {
+    if (loading) return;
+
+    if (!email.trim() || !password) {
       showToast('Please enter both email and password', 'warning');
       return;
     }
@@ -85,7 +85,7 @@ export const LoginScreen = () => {
     setLoading(true);
     setIsNetworkError(false);
     try {
-      const response = await authService.login(email, password);
+      const response = await authService.login(email.trim(), password);
       if (response.token) {
         await AsyncStorage.setItem('rememberMe', rememberMe ? 'true' : 'false');
         navigation.replace('MainApp');
@@ -96,7 +96,7 @@ export const LoginScreen = () => {
       } else if (error.code === 'EMAIL_NOT_VERIFIED') {
         showToast('Please verify your email before logging in. Redirecting...', 'warning');
         setTimeout(() => {
-          navigation.navigate('OTPVerification', { email });
+          navigation.navigate('OTPVerification', { email: email.trim() });
         }, 2000);
       } else {
         showToast(error.message || 'Login failed. Please check your credentials.', 'error');
@@ -107,6 +107,7 @@ export const LoginScreen = () => {
   };
 
   const handleBiometricLogin = async () => {
+    if (loading) return;
     try {
       const hasHardware = await LocalAuthentication.hasHardwareAsync();
       const isEnrolled = await LocalAuthentication.isEnrolledAsync();
@@ -151,7 +152,7 @@ export const LoginScreen = () => {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
+    <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right', 'bottom']}>
       {isNetworkError && (
         <NetworkErrorScreen
           onRetry={() => {
@@ -174,8 +175,8 @@ export const LoginScreen = () => {
           contentContainerStyle={[
             styles.scrollContainer,
             {
-              paddingTop: Math.max(insets.top, 16),
-              paddingBottom: Math.max(insets.bottom + 16, 24)
+              paddingTop: Math.max(insets.top > 0 ? insets.top * 0.3 : 10, 10),
+              paddingBottom: Math.max(insets.bottom > 0 ? insets.bottom + 6 : 16, 16),
             }
           ]}
           bounces={false}
@@ -195,73 +196,112 @@ export const LoginScreen = () => {
 
             {/* Form Section */}
             <View style={styles.formSection}>
+              {/* Email Address */}
               <Text style={styles.label}>Email Address</Text>
               <InputField
                 placeholder="yourname@example.com"
                 keyboardType="email-address"
                 autoCapitalize="none"
+                autoCorrect={false}
+                autoComplete="email"
+                textContentType="emailAddress"
+                returnKeyType="next"
+                onSubmitEditing={() => passwordInputRef.current?.focus()}
                 value={email}
                 onChangeText={setEmail}
+                accessibilityLabel="Email Address"
                 iconLeft={<MaterialIcons name="mail-outline" size={18} color={colors.accent} />}
               />
 
+              {/* Password Header */}
               <View style={styles.passwordHeader}>
                 <Text style={styles.label}>Password</Text>
-                <TouchableOpacity onPress={() => navigation.navigate('ForgotPassword')} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                <TouchableOpacity
+                  onPress={() => navigation.navigate('ForgotPassword')}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  accessibilityRole="button"
+                  accessibilityLabel="Forgot Password"
+                >
                   <Text style={styles.forgotPassword}>Forgot Password?</Text>
                 </TouchableOpacity>
               </View>
 
+              {/* Password Input */}
               <InputField
+                ref={passwordInputRef}
                 placeholder="••••••••••••"
                 secureTextEntry={!showPassword}
+                autoCapitalize="none"
+                autoCorrect={false}
+                autoComplete="password"
+                textContentType="password"
+                returnKeyType="done"
+                onSubmitEditing={handleLogin}
                 value={password}
                 onChangeText={setPassword}
+                accessibilityLabel="Password"
                 iconLeft={<MaterialIcons name="lock-outline" size={18} color={colors.accent} />}
                 iconRight={
-                  <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
-                    <MaterialIcons name={showPassword ? "visibility" : "visibility-off"} size={18} color={colors.textSecondary} />
+                  <TouchableOpacity
+                    onPress={() => setShowPassword(!showPassword)}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    accessibilityRole="button"
+                    accessibilityLabel={showPassword ? "Hide password" : "Show password"}
+                  >
+                    <MaterialIcons
+                      name={showPassword ? "visibility" : "visibility-off"}
+                      size={18}
+                      color={colors.textSecondary}
+                    />
                   </TouchableOpacity>
                 }
               />
 
-              {/* Utility Row: Remember Me (Left) + Biometrics Button (Right) */}
-              <View style={styles.utilityRow}>
-                <TouchableOpacity
-                  style={styles.rememberMeContainer}
-                  activeOpacity={0.8}
-                  onPress={() => setRememberMe(!rememberMe)}
-                >
-                  <MaterialIcons
-                    name={rememberMe ? "check-box" : "check-box-outline-blank"}
-                    size={18}
-                    color={rememberMe ? colors.accent : colors.textSecondary}
-                  />
-                  <Text style={styles.rememberMeText}>Remember Me</Text>
-                </TouchableOpacity>
+              {/* Remember Me Checkbox (Own Row) */}
+              <TouchableOpacity
+                style={styles.rememberMeContainer}
+                activeOpacity={0.8}
+                onPress={() => setRememberMe(!rememberMe)}
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: rememberMe }}
+                accessibilityLabel="Remember Me"
+              >
+                <MaterialIcons
+                  name={rememberMe ? "check-box" : "check-box-outline-blank"}
+                  size={18}
+                  color={rememberMe ? colors.accent : colors.textSecondary}
+                />
+                <Text style={styles.rememberMeText}>Remember Me</Text>
+              </TouchableOpacity>
 
-                <TouchableOpacity 
-                  style={styles.biometricsButton} 
-                  activeOpacity={0.7} 
-                  onPress={handleBiometricLogin}
-                >
-                  <MaterialIcons name="fingerprint" size={16} color={colors.accent} />
-                  <Text style={styles.biometricsText}>Use Biometrics</Text>
-                </TouchableOpacity>
-              </View>
+              {/* Use Biometrics Button (Centered Pill) */}
+              <TouchableOpacity 
+                style={styles.biometricsButton} 
+                activeOpacity={0.7} 
+                onPress={handleBiometricLogin}
+                accessibilityRole="button"
+                accessibilityLabel="Use Biometrics to login"
+              >
+                <MaterialIcons name="fingerprint" size={18} color={colors.accent} />
+                <Text style={styles.biometricsText}>Use Biometrics</Text>
+              </TouchableOpacity>
 
-              {/* Primary CTA */}
+              {/* Login Button */}
               {loading ? (
-                <ActivityIndicator color={colors.accent} size="large" style={{ marginVertical: 14 }} />
+                <View style={styles.loadingContainer}>
+                  <ActivityIndicator color={colors.accent} size="large" />
+                </View>
               ) : (
                 <PrimaryButton
                   title="Login to Dashboard"
                   onPress={handleLogin}
+                  disabled={loading}
                   style={styles.loginBtn}
+                  accessibilityLabel="Login to Dashboard"
                 />
               )}
 
-              {/* Divider */}
+              {/* OR Divider */}
               <View style={styles.dividerContainer}>
                 <View style={styles.dividerLine} />
                 <Text style={styles.dividerText}>OR</Text>
@@ -270,12 +310,15 @@ export const LoginScreen = () => {
 
               {/* Google Button */}
               <TouchableOpacity
-                style={styles.googleButton}
+                style={[styles.googleButton, loading && styles.buttonDisabled]}
                 activeOpacity={0.8}
+                disabled={loading}
                 onPress={() => {
                   setGoogleIdToken('');
                   setGoogleModalVisible(true);
                 }}
+                accessibilityRole="button"
+                accessibilityLabel="Continue with Google"
               >
                 <FontAwesome5 name="google" size={16} color="#FFFFFF" />
                 <Text style={styles.googleText}>Continue with Google</Text>
@@ -289,6 +332,8 @@ export const LoginScreen = () => {
                 <Text
                   style={styles.registerLink}
                   onPress={() => navigation.navigate('Register')}
+                  accessibilityRole="button"
+                  accessibilityLabel="Register Now"
                 >
                   Register Now
                 </Text>
@@ -345,7 +390,12 @@ export const LoginScreen = () => {
               </View>
             </View>
 
-            <TouchableOpacity style={styles.closeModalButton} onPress={() => setGoogleModalVisible(false)}>
+            <TouchableOpacity
+              style={styles.closeModalButton}
+              onPress={() => setGoogleModalVisible(false)}
+              accessibilityRole="button"
+              accessibilityLabel="Close Modal"
+            >
               <Text style={styles.closeModalText}>CANCEL</Text>
             </TouchableOpacity>
           </View>
@@ -371,51 +421,51 @@ const styles = StyleSheet.create({
   innerWrapper: {
     width: '100%',
     alignSelf: 'center',
-    maxWidth: 440,
+    maxWidth: 420,
   },
   header: {
     alignItems: 'center',
-    marginBottom: isSmallDevice ? 16 : 24,
+    marginBottom: 16,
   },
   logoContainer: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     backgroundColor: colors.bgInput,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 8,
+    marginBottom: 10,
     borderWidth: 1,
     borderColor: colors.border,
   },
   appName: {
-    ...typography.bodySmall,
-    color: colors.accent,
+    ...typography.body,
+    color: colors.textPrimary,
     fontWeight: '700',
-    letterSpacing: 1.2,
-    textTransform: 'uppercase',
-    marginBottom: 4,
-    fontSize: 12,
+    fontSize: 18,
+    marginBottom: 6,
   },
   headline: {
     ...typography.h1,
-    fontSize: isSmallDevice ? 26 : 30,
+    fontSize: 30,
     fontWeight: '800',
     color: colors.textPrimary,
     marginBottom: 4,
   },
   subtitle: {
     ...typography.bodySmall,
-    color: colors.textSecondary,
-    fontSize: 13,
+    color: colors.accent,
+    fontSize: 14,
+    fontWeight: '500',
   },
   formSection: {
     width: '100%',
+    marginTop: 8,
   },
   label: {
     ...typography.bodySmall,
     color: colors.textPrimary,
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '600',
     marginBottom: 6,
   },
@@ -429,57 +479,61 @@ const styles = StyleSheet.create({
   forgotPassword: {
     ...typography.bodySmall,
     color: colors.accent,
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '600',
-  },
-  utilityRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: 2,
-    marginBottom: 18,
   },
   rememberMeContainer: {
     flexDirection: 'row',
     alignItems: 'center',
+    marginTop: 6,
+    marginBottom: 12,
   },
   rememberMeText: {
     ...typography.bodySmall,
     color: colors.textPrimary,
-    marginLeft: 6,
-    fontSize: 12,
+    marginLeft: 8,
+    fontSize: 13,
     fontWeight: '500',
   },
   biometricsButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 6,
-    paddingHorizontal: 12,
+    justifyContent: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 24,
     borderRadius: layout.borderRadiusPill,
     borderWidth: 1,
     borderColor: colors.accentMuted,
     backgroundColor: colors.bgInput,
+    alignSelf: 'center',
+    marginBottom: 16,
   },
   biometricsText: {
     ...typography.bodySmall,
     color: colors.accent,
-    marginLeft: 5,
-    fontSize: 12,
+    marginLeft: 8,
+    fontSize: 13,
     fontWeight: '600',
+  },
+  loadingContainer: {
+    height: 52,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   loginBtn: {
     shadowColor: colors.accent,
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
+    shadowOpacity: 0.25,
     shadowRadius: 10,
     elevation: 6,
-    height: 50,
+    height: 52,
+    borderRadius: layout.borderRadiusPill,
   },
   dividerContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     width: '100%',
-    marginVertical: 16,
+    marginVertical: 14,
   },
   dividerLine: {
     flex: 1,
@@ -498,26 +552,29 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     width: '100%',
-    height: 48,
+    height: 50,
     borderRadius: layout.borderRadiusPill,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.bgCard,
   },
+  buttonDisabled: {
+    opacity: 0.6,
+  },
   googleText: {
-    ...typography.bodySmall,
+    ...typography.body,
     color: '#FFFFFF',
     marginLeft: 10,
     fontWeight: '600',
-    fontSize: 13,
+    fontSize: 14,
   },
   footer: {
     alignItems: 'center',
-    marginTop: 22,
+    marginTop: 18,
   },
   footerText: {
-    ...typography.bodySmall,
-    fontSize: 13,
+    ...typography.body,
+    fontSize: 14,
     color: colors.textSecondary,
   },
   registerLink: {
