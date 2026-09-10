@@ -20,6 +20,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useNavigation, useIsFocused } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
+import * as Clipboard from 'expo-clipboard';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { colors, typography, layout } from '../../theme';
 import { Card } from '../../components';
@@ -70,6 +71,21 @@ export const UserProfileScreen = () => {
   // Privacy Masking Toggles
   const [showEmail, setShowEmail] = useState(false);
   const [showPhone, setShowPhone] = useState(false);
+  const [copiedUid, setCopiedUid] = useState(false);
+
+  const userUid = user?.accountUid || (user as any)?.ACCOUNT_UID || '';
+
+  const handleCopyUid = async (uidToCopy?: string | null) => {
+    const cleanUid = uidToCopy || userUid;
+    if (!cleanUid) return;
+    try {
+      await Clipboard.setStringAsync(cleanUid);
+      setCopiedUid(true);
+      setTimeout(() => setCopiedUid(false), 2000);
+    } catch (err) {
+      Alert.alert('Account UID', `Your SmartLanka Trade UID is ${cleanUid}`);
+    }
+  };
 
   const getInitials = (name?: string) => {
     if (!name) return 'KP';
@@ -452,6 +468,29 @@ export const UserProfileScreen = () => {
                 {renderHeaderKycBadge()}
               </View>
               <Text style={styles.memberSinceText}>Member since Mar 2026</Text>
+
+              {/* One-Click Copyable UID Badge */}
+              <TouchableOpacity
+                style={[styles.headerUidPill, copiedUid && styles.headerUidPillCopied]}
+                onPress={() => handleCopyUid(userUid)}
+                activeOpacity={0.7}
+              >
+                <MaterialIcons
+                  name="fingerprint"
+                  size={12}
+                  color={copiedUid ? colors.accent : "#8B949E"}
+                  style={{ marginRight: 3 }}
+                />
+                <Text style={styles.headerUidLabel}>UID: </Text>
+                <Text style={styles.headerUidValue}>{userUid || 'SLT-••••••••'}</Text>
+                <MaterialIcons
+                  name={copiedUid ? "check" : "content-copy"}
+                  size={11}
+                  color={copiedUid ? colors.accent : "#8B949E"}
+                  style={{ marginLeft: 4 }}
+                />
+                {copiedUid && <Text style={styles.copiedBadgeText}>Copied!</Text>}
+              </TouchableOpacity>
             </View>
 
             {/* Edit Button */}
@@ -510,26 +549,26 @@ export const UserProfileScreen = () => {
             </View>
           </View>
 
-          {/* Account UID Row */}
-          {user?.accountUid && (
-            <View style={[styles.infoRow, { marginTop: 14 }]}>
-              <Text style={styles.infoLabel}>Account UID</Text>
-              <View style={styles.infoValueGroup}>
-                <Text style={[styles.infoValueText, { color: colors.accent, fontWeight: '700' }]}>
-                  {user.accountUid}
-                </Text>
-                <TouchableOpacity
-                  style={styles.eyeBtn}
-                  onPress={() => {
-                    Alert.alert('Account UID', `Your SmartLanka Trade UID is ${user.accountUid}. Share this with other users to receive instant P2P transfers.`);
-                  }}
-                  activeOpacity={0.7}
-                >
-                  <MaterialIcons name="content-copy" size={16} color={colors.accent} />
-                </TouchableOpacity>
-              </View>
+          {/* Account UID Row with One-Click Copy */}
+          <View style={[styles.infoRow, { marginTop: 14 }]}>
+            <Text style={styles.infoLabel}>Account UID</Text>
+            <View style={styles.infoValueGroup}>
+              <Text style={[styles.infoValueText, { color: colors.accent, fontWeight: '700', letterSpacing: 0.5 }]}>
+                {userUid || 'SLT-••••••••'}
+              </Text>
+              <TouchableOpacity
+                style={[styles.eyeBtn, copiedUid && { backgroundColor: colors.accentMuted, borderColor: colors.accent + '66' }]}
+                onPress={() => handleCopyUid(userUid)}
+                activeOpacity={0.7}
+              >
+                <MaterialIcons
+                  name={copiedUid ? "check" : "content-copy"}
+                  size={16}
+                  color={copiedUid ? colors.accent : "#8B949E"}
+                />
+              </TouchableOpacity>
             </View>
-          )}
+          </View>
         </Card>
 
         {/* Preferences Toggle Row */}
@@ -1025,6 +1064,39 @@ const styles = StyleSheet.create({
     fontSize: 12.5,
     color: colors.textSecondary,
     marginTop: 2,
+  },
+  headerUidPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    backgroundColor: colors.bgInput,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 8,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    marginTop: 5,
+  },
+  headerUidPillCopied: {
+    backgroundColor: colors.accentMuted,
+    borderColor: colors.accent + '55',
+  },
+  headerUidLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: colors.textSecondary,
+  },
+  headerUidValue: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.accent,
+    letterSpacing: 0.3,
+  },
+  copiedBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: colors.accent,
+    marginLeft: 4,
   },
   userCardDivider: {
     height: 1,

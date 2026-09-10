@@ -14,7 +14,17 @@ exports.findByEmail = async (email) => {
       [email],
       { outFormat: oracledb.OUT_FORMAT_OBJECT }
     );
-    return result.rows[0];
+    const user = result.rows[0];
+    if (user && !user.ACCOUNT_UID) {
+      const newUid = generateAccountUID();
+      await connection.execute(
+        `UPDATE SL_USERS SET ACCOUNT_UID = :newUid WHERE ID = :id`,
+        { newUid, id: user.ID }
+      );
+      await connection.commit();
+      user.ACCOUNT_UID = newUid;
+    }
+    return user;
   } finally {
     if (connection) await connection.close();
   }
@@ -29,7 +39,17 @@ exports.findById = async (id) => {
       [id],
       { outFormat: oracledb.OUT_FORMAT_OBJECT }
     );
-    return result.rows[0] || null;
+    const user = result.rows[0] || null;
+    if (user && !user.ACCOUNT_UID) {
+      const newUid = generateAccountUID();
+      await connection.execute(
+        `UPDATE SL_USERS SET ACCOUNT_UID = :newUid WHERE ID = :id`,
+        { newUid, id: user.ID }
+      );
+      await connection.commit();
+      user.ACCOUNT_UID = newUid;
+    }
+    return user;
   } finally {
     if (connection) await connection.close();
   }

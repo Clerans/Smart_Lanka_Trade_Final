@@ -12,6 +12,7 @@ import {
 import { MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
 import { colors, typography, layout } from '../theme';
 import { alertService } from '../services/apiService';
+import { formatNumber } from '../utils/formatters';
 import { useNavigation } from '@react-navigation/native';
 
 interface NotificationModalProps {
@@ -102,7 +103,7 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
         type: 'alert',
         rawId: a.id || a.ID,
         title: `${(a.symbol || a.SYMBOL || 'BTCUSDT').replace('USDT', '')}/LKR Price Alert`,
-        message: `Trigger when price moves ${a.alertType || a.ALERT_TYPE || 'ABOVE'} Rs ${(a.targetPrice || a.TARGET_PRICE || 0).toLocaleString()}`,
+        message: `Trigger when price moves ${a.alertType || a.ALERT_TYPE || 'ABOVE'} Rs ${formatNumber(a.targetPrice || a.TARGET_PRICE || 0, 2)}`,
         time: 'Active',
         icon: 'notifications-active',
         color: colors.yellow,
@@ -120,7 +121,7 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
       type: 'alert',
       rawId: a.id || a.ID,
       title: `${(a.symbol || a.SYMBOL || 'BTCUSDT').replace('USDT', '')}/LKR Price Alert`,
-      message: `Trigger when price moves ${a.alertType || a.ALERT_TYPE || 'ABOVE'} Rs ${(a.targetPrice || a.TARGET_PRICE || 0).toLocaleString()}`,
+      message: `Trigger when price moves ${a.alertType || a.ALERT_TYPE || 'ABOVE'} Rs ${formatNumber(a.targetPrice || a.TARGET_PRICE || 0, 2)}`,
       time: 'Active Alert',
       icon: 'notifications-active',
       color: colors.yellow,

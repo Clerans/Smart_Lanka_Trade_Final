@@ -1,7 +1,20 @@
 import * as React from 'react';
 const { useState } = React;
-import { View, Text, StyleSheet, TouchableOpacity, KeyboardAvoidingView, Platform, Dimensions, ActivityIndicator, Modal, TextInput, Alert } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  KeyboardAvoidingView,
+  Platform,
+  Dimensions,
+  ActivityIndicator,
+  Modal,
+  TextInput,
+  Alert,
+  ScrollView
+} from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -11,11 +24,12 @@ import { InputField, PrimaryButton, Toast, NetworkErrorScreen } from '../../comp
 import { authService } from '../../services/apiService';
 import { storageService } from '../../services/storageService';
 
-const { height } = Dimensions.get('window');
-const isSmallDevice = height < 700;
+const { height: screenHeight } = Dimensions.get('window');
+const isSmallDevice = screenHeight < 720;
 
 export const LoginScreen = () => {
   const navigation = useNavigation<any>();
+  const insets = useSafeAreaInsets();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
@@ -25,7 +39,6 @@ export const LoginScreen = () => {
   // Google sign-in state
   const [googleModalVisible, setGoogleModalVisible] = useState(false);
   const [googleIdToken, setGoogleIdToken] = useState('');
-
 
   // Toast states
   const [toastVisible, setToastVisible] = useState(false);
@@ -46,7 +59,7 @@ export const LoginScreen = () => {
     try {
       const response = await authService.googleLogin(idToken);
       if (response.token) {
-        await AsyncStorage.setItem('rememberMe', 'true'); // Auto-login on startup for Google OAuth
+        await AsyncStorage.setItem('rememberMe', 'true');
         showToast('Successfully signed in with Google!', 'success');
         setTimeout(() => {
           navigation.replace('MainApp');
@@ -138,7 +151,7 @@ export const LoginScreen = () => {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
       {isNetworkError && (
         <NetworkErrorScreen
           onRetry={() => {
@@ -157,187 +170,187 @@ export const LoginScreen = () => {
         style={styles.keyboardAvoiding}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        <View style={styles.container}>
-
-          <View style={styles.spacer} />
-
-          {/* Header Section */}
-          <View style={styles.header}>
-            <View style={styles.logoContainer}>
-              <MaterialIcons name="trending-up" size={isSmallDevice ? 20 : 24} color={colors.accent} />
+        <ScrollView
+          contentContainerStyle={[
+            styles.scrollContainer,
+            {
+              paddingTop: Math.max(insets.top, 16),
+              paddingBottom: Math.max(insets.bottom + 16, 24)
+            }
+          ]}
+          bounces={false}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
+          <View style={styles.innerWrapper}>
+            {/* Header Section */}
+            <View style={styles.header}>
+              <View style={styles.logoContainer}>
+                <MaterialIcons name="trending-up" size={24} color={colors.accent} />
+              </View>
+              <Text style={styles.appName}>SmartLanka Trade</Text>
+              <Text style={styles.headline}>Welcome Back</Text>
+              <Text style={styles.subtitle}>Trade Smarter. Securely.</Text>
             </View>
-            <Text style={styles.appName}>SmartLanka Trade</Text>
 
-            <Text style={styles.headline}>Welcome Back</Text>
-            <Text style={styles.subtitle}>Trade Smarter. Securely.</Text>
-          </View>
+            {/* Form Section */}
+            <View style={styles.formSection}>
+              <Text style={styles.label}>Email Address</Text>
+              <InputField
+                placeholder="yourname@example.com"
+                keyboardType="email-address"
+                autoCapitalize="none"
+                value={email}
+                onChangeText={setEmail}
+                iconLeft={<MaterialIcons name="mail-outline" size={18} color={colors.accent} />}
+              />
 
-          <View style={styles.spacer} />
+              <View style={styles.passwordHeader}>
+                <Text style={styles.label}>Password</Text>
+                <TouchableOpacity onPress={() => navigation.navigate('ForgotPassword')} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                  <Text style={styles.forgotPassword}>Forgot Password?</Text>
+                </TouchableOpacity>
+              </View>
 
-          {/* Form Section */}
-          <View style={styles.formSection}>
-            <Text style={styles.label}>Email Address</Text>
-            <InputField
-              placeholder="yourname@example.com"
-              keyboardType="email-address"
-              autoCapitalize="none"
-              value={email}
-              onChangeText={setEmail}
-              iconLeft={<MaterialIcons name="mail-outline" size={20} color={colors.accent} />}
-            />
+              <InputField
+                placeholder="••••••••••••"
+                secureTextEntry={!showPassword}
+                value={password}
+                onChangeText={setPassword}
+                iconLeft={<MaterialIcons name="lock-outline" size={18} color={colors.accent} />}
+                iconRight={
+                  <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
+                    <MaterialIcons name={showPassword ? "visibility" : "visibility-off"} size={18} color={colors.textSecondary} />
+                  </TouchableOpacity>
+                }
+              />
 
-            <View style={styles.passwordHeader}>
-              <Text style={styles.label}>Password</Text>
-              <TouchableOpacity onPress={() => navigation.navigate('ForgotPassword')}>
-                <Text style={styles.forgotPassword}>Forgot Password?</Text>
+              {/* Utility Row: Remember Me (Left) + Biometrics Button (Right) */}
+              <View style={styles.utilityRow}>
+                <TouchableOpacity
+                  style={styles.rememberMeContainer}
+                  activeOpacity={0.8}
+                  onPress={() => setRememberMe(!rememberMe)}
+                >
+                  <MaterialIcons
+                    name={rememberMe ? "check-box" : "check-box-outline-blank"}
+                    size={18}
+                    color={rememberMe ? colors.accent : colors.textSecondary}
+                  />
+                  <Text style={styles.rememberMeText}>Remember Me</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity 
+                  style={styles.biometricsButton} 
+                  activeOpacity={0.7} 
+                  onPress={handleBiometricLogin}
+                >
+                  <MaterialIcons name="fingerprint" size={16} color={colors.accent} />
+                  <Text style={styles.biometricsText}>Use Biometrics</Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Primary CTA */}
+              {loading ? (
+                <ActivityIndicator color={colors.accent} size="large" style={{ marginVertical: 14 }} />
+              ) : (
+                <PrimaryButton
+                  title="Login to Dashboard"
+                  onPress={handleLogin}
+                  style={styles.loginBtn}
+                />
+              )}
+
+              {/* Divider */}
+              <View style={styles.dividerContainer}>
+                <View style={styles.dividerLine} />
+                <Text style={styles.dividerText}>OR</Text>
+                <View style={styles.dividerLine} />
+              </View>
+
+              {/* Google Button */}
+              <TouchableOpacity
+                style={styles.googleButton}
+                activeOpacity={0.8}
+                onPress={() => {
+                  setGoogleIdToken('');
+                  setGoogleModalVisible(true);
+                }}
+              >
+                <FontAwesome5 name="google" size={16} color="#FFFFFF" />
+                <Text style={styles.googleText}>Continue with Google</Text>
               </TouchableOpacity>
             </View>
 
-            <InputField
-              placeholder="••••••••••••"
-              secureTextEntry={!showPassword}
-              value={password}
-              onChangeText={setPassword}
-              iconLeft={<MaterialIcons name="lock-outline" size={20} color={colors.accent} />}
-              iconRight={
-                <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
-                  <MaterialIcons name={showPassword ? "visibility" : "visibility-off"} size={20} color={colors.textSecondary} />
+            {/* Footer */}
+            <View style={styles.footer}>
+              <Text style={styles.footerText}>
+                Don't have an account?{' '}
+                <Text
+                  style={styles.registerLink}
+                  onPress={() => navigation.navigate('Register')}
+                >
+                  Register Now
+                </Text>
+              </Text>
+            </View>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+
+      {/* Google Chooser Modal */}
+      <Modal
+        visible={googleModalVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setGoogleModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <FontAwesome5 name="google" size={20} color="#4285F4" style={{ marginRight: 10 }} />
+              <Text style={styles.modalTitle}>Sign in with Google</Text>
+            </View>
+            <Text style={styles.modalSubtitle}>Provide your verified Google ID Token to authenticate</Text>
+
+            <View style={styles.customInputSection}>
+              <TextInput
+                placeholder="Paste Google ID Token"
+                placeholderTextColor={colors.textSecondary}
+                value={googleIdToken}
+                onChangeText={setGoogleIdToken}
+                autoCapitalize="none"
+                autoCorrect={false}
+                style={styles.customGoogleInput}
+              />
+              <View style={styles.customInputButtons}>
+                <TouchableOpacity
+                  style={styles.cancelBtn}
+                  onPress={() => setGoogleModalVisible(false)}
+                >
+                  <Text style={styles.cancelBtnText}>Cancel</Text>
                 </TouchableOpacity>
-              }
-            />
-
-            {/* Remember Me Checkbox */}
-            <TouchableOpacity
-              style={styles.rememberMeContainer}
-              activeOpacity={0.8}
-              onPress={() => setRememberMe(!rememberMe)}
-            >
-              <MaterialIcons
-                name={rememberMe ? "check-box" : "check-box-outline-blank"}
-                size={20}
-                color={rememberMe ? colors.accent : colors.textSecondary}
-              />
-              <Text style={styles.rememberMeText}>Remember Me</Text>
-            </TouchableOpacity>
-
-            {/* Biometrics Button */}
-            <TouchableOpacity 
-              style={styles.biometricsButton} 
-              activeOpacity={0.7} 
-              onPress={handleBiometricLogin}
-            >
-              <MaterialIcons name="fingerprint" size={20} color={colors.accent} />
-              <Text style={styles.biometricsText}>Use Biometrics</Text>
-            </TouchableOpacity>
-
-            {/* Primary CTA */}
-            {loading ? (
-              <ActivityIndicator color={colors.accent} size="large" style={{ marginVertical: 20 }} />
-            ) : (
-              <PrimaryButton
-                title="Login to Dashboard"
-                onPress={handleLogin}
-                style={styles.loginBtn}
-              />
-            )}
-          </View>
-
-          <View style={styles.smallSpacer} />
-
-          {/* Divider */}
-          <View style={styles.dividerContainer}>
-            <View style={styles.dividerLine} />
-            <Text style={styles.dividerText}>OR</Text>
-            <View style={styles.dividerLine} />
-          </View>
-
-          <View style={styles.smallSpacer} />
-
-          {/* Google Button */}
-          <TouchableOpacity
-            style={styles.googleButton}
-            onPress={() => {
-              setGoogleIdToken('');
-              setGoogleModalVisible(true);
-            }}
-          >
-            <FontAwesome5 name="google" size={18} color="#FFFFFF" />
-            <Text style={styles.googleText}>Continue with Google</Text>
-          </TouchableOpacity>
-
-          {/* Google Chooser Modal */}
-          <Modal
-            visible={googleModalVisible}
-            transparent={true}
-            animationType="fade"
-            onRequestClose={() => setGoogleModalVisible(false)}
-          >
-            <View style={styles.modalOverlay}>
-              <View style={styles.modalContent}>
-                <View style={styles.modalHeader}>
-                  <FontAwesome5 name="google" size={20} color="#4285F4" style={{ marginRight: 10 }} />
-                  <Text style={styles.modalTitle}>Sign in with Google</Text>
-                </View>
-                <Text style={styles.modalSubtitle}>Provide your verified Google ID Token to authenticate</Text>
-
-                <View style={styles.customInputSection}>
-                  <TextInput
-                    placeholder="Paste Google ID Token"
-                    placeholderTextColor={colors.textSecondary}
-                    value={googleIdToken}
-                    onChangeText={setGoogleIdToken}
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    style={styles.customGoogleInput}
-                  />
-                  <View style={styles.customInputButtons}>
-                    <TouchableOpacity
-                      style={styles.cancelBtn}
-                      onPress={() => setGoogleModalVisible(false)}
-                    >
-                      <Text style={styles.cancelBtnText}>Cancel</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={styles.submitBtn}
-                      onPress={() => {
-                        if (!googleIdToken.trim()) {
-                          showToast('Please provide a valid Google ID token', 'warning');
-                          return;
-                        }
-                        handleGoogleLogin(googleIdToken.trim());
-                      }}
-                    >
-                      <Text style={styles.submitBtnText}>Verify & Login</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-
-                <TouchableOpacity style={styles.closeModalButton} onPress={() => setGoogleModalVisible(false)}>
-                  <Text style={styles.closeModalText}>CANCEL</Text>
+                <TouchableOpacity
+                  style={styles.submitBtn}
+                  onPress={() => {
+                    if (!googleIdToken.trim()) {
+                      showToast('Please provide a valid Google ID token', 'warning');
+                      return;
+                    }
+                    handleGoogleLogin(googleIdToken.trim());
+                  }}
+                >
+                  <Text style={styles.submitBtnText}>Verify & Login</Text>
                 </TouchableOpacity>
               </View>
             </View>
-          </Modal>
 
-          <View style={styles.spacer} />
-
-          {/* Footer */}
-          <View style={styles.footer}>
-            <Text style={styles.footerText}>
-              Don't have an account?{' '}
-              <Text
-                style={styles.registerLink}
-                onPress={() => navigation.navigate('Register')}
-              >
-                Register Now
-              </Text>
-            </Text>
+            <TouchableOpacity style={styles.closeModalButton} onPress={() => setGoogleModalVisible(false)}>
+              <Text style={styles.closeModalText}>CANCEL</Text>
+            </TouchableOpacity>
           </View>
-
-          <View style={styles.spacer} />
-
         </View>
-      </KeyboardAvoidingView>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -350,43 +363,51 @@ const styles = StyleSheet.create({
   keyboardAvoiding: {
     flex: 1,
   },
-  container: {
-    flex: 1,
-    paddingHorizontal: 24,
+  scrollContainer: {
+    flexGrow: 1,
     justifyContent: 'center',
+    paddingHorizontal: 24,
   },
-  spacer: {
-    flex: 1,
-  },
-  smallSpacer: {
-    flex: 0.5,
-    minHeight: isSmallDevice ? 16 : 24,
+  innerWrapper: {
+    width: '100%',
+    alignSelf: 'center',
+    maxWidth: 440,
   },
   header: {
     alignItems: 'center',
+    marginBottom: isSmallDevice ? 16 : 24,
   },
   logoContainer: {
-    width: isSmallDevice ? 36 : 48,
-    height: isSmallDevice ? 36 : 48,
-    borderRadius: isSmallDevice ? 18 : 24,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: colors.bgInput,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: isSmallDevice ? 8 : 16,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   appName: {
-    ...typography.h3,
-    marginBottom: isSmallDevice ? 16 : 32,
+    ...typography.bodySmall,
+    color: colors.accent,
+    fontWeight: '700',
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+    marginBottom: 4,
+    fontSize: 12,
   },
   headline: {
     ...typography.h1,
-    fontSize: isSmallDevice ? 28 : 32,
-    marginBottom: 8,
+    fontSize: isSmallDevice ? 26 : 30,
+    fontWeight: '800',
+    color: colors.textPrimary,
+    marginBottom: 4,
   },
   subtitle: {
-    ...typography.body,
-    fontSize: isSmallDevice ? 14 : 16,
-    color: colors.accent,
+    ...typography.bodySmall,
+    color: colors.textSecondary,
+    fontSize: 13,
   },
   formSection: {
     width: '100%',
@@ -394,61 +415,71 @@ const styles = StyleSheet.create({
   label: {
     ...typography.bodySmall,
     color: colors.textPrimary,
-    marginBottom: 8,
+    fontSize: 12,
+    fontWeight: '600',
+    marginBottom: 6,
   },
   passwordHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
-    marginTop: isSmallDevice ? 8 : 12,
+    marginBottom: 6,
+    marginTop: 6,
   },
   forgotPassword: {
     ...typography.bodySmall,
     color: colors.accent,
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  utilityRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 2,
+    marginBottom: 18,
   },
   rememberMeContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 8,
-    marginBottom: 16,
   },
   rememberMeText: {
     ...typography.bodySmall,
     color: colors.textPrimary,
-    marginLeft: 8,
+    marginLeft: 6,
+    fontSize: 12,
     fontWeight: '500',
   },
   biometricsButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 24,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
     borderRadius: layout.borderRadiusPill,
     borderWidth: 1,
     borderColor: colors.accentMuted,
-    alignSelf: 'center',
-    marginBottom: isSmallDevice ? 16 : 24,
-    marginTop: isSmallDevice ? 8 : 12,
+    backgroundColor: colors.bgInput,
   },
   biometricsText: {
     ...typography.bodySmall,
     color: colors.accent,
-    marginLeft: 8,
+    marginLeft: 5,
+    fontSize: 12,
     fontWeight: '600',
   },
   loginBtn: {
     shadowColor: colors.accent,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.2,
-    shadowRadius: 12,
-    elevation: 8,
+    shadowRadius: 10,
+    elevation: 6,
+    height: 50,
   },
   dividerContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     width: '100%',
+    marginVertical: 16,
   },
   dividerLine: {
     flex: 1,
@@ -458,30 +489,35 @@ const styles = StyleSheet.create({
   dividerText: {
     ...typography.bodySmall,
     color: colors.textMuted,
-    paddingHorizontal: 16,
+    paddingHorizontal: 14,
+    fontSize: 11,
+    fontWeight: '600',
   },
   googleButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     width: '100%',
-    height: isSmallDevice ? 48 : 56,
+    height: 48,
     borderRadius: layout.borderRadiusPill,
     borderWidth: 1,
     borderColor: colors.border,
+    backgroundColor: colors.bgCard,
   },
   googleText: {
-    ...typography.body,
+    ...typography.bodySmall,
     color: '#FFFFFF',
-    marginLeft: 12,
+    marginLeft: 10,
     fontWeight: '600',
+    fontSize: 13,
   },
   footer: {
     alignItems: 'center',
+    marginTop: 22,
   },
   footerText: {
-    ...typography.body,
-    fontSize: isSmallDevice ? 14 : 16,
+    ...typography.bodySmall,
+    fontSize: 13,
     color: colors.textSecondary,
   },
   registerLink: {
@@ -516,47 +552,6 @@ const styles = StyleSheet.create({
     ...typography.bodySmall,
     color: colors.textSecondary,
     marginBottom: 24,
-  },
-  googleAccountItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  avatarCircle: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: colors.bgInput,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  avatarText: {
-    color: colors.accent,
-    fontWeight: '700',
-    fontSize: 14,
-  },
-  accountName: {
-    ...typography.body,
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  accountEmail: {
-    ...typography.bodySmall,
-    fontSize: 12,
-  },
-  addAccountButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 16,
-    marginBottom: 8,
-  },
-  addAccountText: {
-    color: colors.accent,
-    fontWeight: '600',
-    fontSize: 14,
   },
   customInputSection: {
     marginTop: 12,

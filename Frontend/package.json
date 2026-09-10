@@ -17,6 +17,7 @@
     "@types/react": "~19.2.10",
     "axios": "^1.15.2",
     "expo": "~55.0.31",
+    "expo-clipboard": "~55.0.17",
     "expo-constants": "~55.0.17",
     "expo-device": "~55.0.21",
     "expo-font": "~55.0.8",
