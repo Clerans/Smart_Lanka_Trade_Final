@@ -257,16 +257,16 @@ exports.getUsers = async (req, res) => {
 
 exports.googleLogin = async (req, res) => {
   try {
-    const { email, name } = req.body;
-    if (!email || !name) {
-      return res.status(422).json({
+    const { idToken } = req.body;
+    if (!idToken) {
+      return res.status(400).json({
         success: false,
-        code: 'MISSING_FIELDS',
-        message: 'Email and Name are required.'
+        code: 'MISSING_ID_TOKEN',
+        message: 'Google ID token is required.'
       });
     }
 
-    const data = await authService.googleLoginUser(email, name);
+    const data = await authService.googleLoginUser(idToken);
     res.json({
       success: true,
       token: data.token,

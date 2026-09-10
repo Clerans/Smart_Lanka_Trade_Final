@@ -134,9 +134,9 @@ export const authService = {
       throw error;
     }
   },
-  googleLogin: async (email: string, name: string) => {
+  googleLogin: async (idToken: string) => {
     try {
-      const response = await api.post('/auth/google-login', { email, name });
+      const response = await api.post('/auth/google-login', { idToken });
       if (response.data.token) {
         await AsyncStorage.setItem('userToken', response.data.token);
         await AsyncStorage.setItem('userData', JSON.stringify(response.data.user));

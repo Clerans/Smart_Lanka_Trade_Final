@@ -39,12 +39,12 @@ export const LoginScreen = () => {
     setToastVisible(true);
   };
 
-  const handleGoogleLogin = async (selectedEmail: string, selectedName: string) => {
+  const handleGoogleLogin = async (idToken: string) => {
     setGoogleModalVisible(false);
     setLoading(true);
     setIsNetworkError(false);
     try {
-      const response = await authService.googleLogin(selectedEmail, selectedName);
+      const response = await authService.googleLogin(idToken);
       if (response.token) {
         await AsyncStorage.setItem('rememberMe', 'true'); // Auto-login on startup for Google OAuth
         showToast('Successfully signed in with Google!', 'success');
