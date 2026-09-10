@@ -33,8 +33,7 @@ exports.register = async (req, res) => {
     res.status(201).json({
       success: true,
       message: 'Registration successful! Please check your email for the verification code.',
-      userId: result.userId,
-      otp: result.otp // Returned for development simulation/testing
+      userId: result.userId
     });
   } catch (err) {
     res.status(err.status || 500).json({
@@ -120,8 +119,7 @@ exports.sendVerification = async (req, res) => {
     const result = await authService.sendVerificationOTP(email);
     res.json({
       success: true,
-      message: 'Verification OTP sent successfully.',
-      otp: result.otp
+      message: 'Verification OTP sent successfully.'
     });
   } catch (err) {
     res.status(err.status || 500).json({
@@ -146,8 +144,7 @@ exports.resendVerification = async (req, res) => {
     const result = await authService.resendVerificationOTP(email);
     res.json({
       success: true,
-      message: 'Verification OTP resent successfully.',
-      otp: result.otp
+      message: 'Verification OTP resent successfully.'
     });
   } catch (err) {
     res.status(err.status || 500).json({
@@ -172,8 +169,7 @@ exports.forgotPassword = async (req, res) => {
     const result = await authService.forgotPassword(email);
     res.json({
       success: true,
-      message: 'Password reset OTP sent successfully.',
-      otp: result.otp
+      message: 'Password reset OTP sent successfully.'
     });
   } catch (err) {
     res.status(err.status || 500).json({

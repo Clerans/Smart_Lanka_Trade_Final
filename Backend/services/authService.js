@@ -37,14 +37,16 @@ exports.registerUser = async (name, email, password) => {
   const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes expiry
   await verificationModel.createEmailVerificationOTP(userId, otp, expiresAt);
 
-  console.log(`\n=================================================`);
-  console.log(`📧 Email Verification OTP for ${email}: ${otp}`);
-  console.log(`=================================================\n`);
+  if (process.env.NODE_ENV !== 'production') {
+    console.log(`\n=================================================`);
+    console.log(`📧 Email Verification OTP for ${email}: ${otp}`);
+    console.log(`=================================================\n`);
+  }
 
   // Send verification OTP email (async)
   sendVerificationOTPEmail(email, otp);
 
-  return { userId, otp };
+  return { userId };
 };
 
 exports.loginUser = async (email, password) => {
@@ -127,13 +129,15 @@ exports.sendVerificationOTP = async (email) => {
   const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
   await verificationModel.createEmailVerificationOTP(user.ID, otp, expiresAt);
 
-  console.log(`\n=================================================`);
-  console.log(`📧 Sent Email Verification OTP to ${email}: ${otp}`);
-  console.log(`=================================================\n`);
+  if (process.env.NODE_ENV !== 'production') {
+    console.log(`\n=================================================`);
+    console.log(`📧 Sent Email Verification OTP to ${email}: ${otp}`);
+    console.log(`=================================================\n`);
+  }
 
   sendVerificationOTPEmail(email, otp);
 
-  return { otp };
+  return { success: true };
 };
 
 exports.verifyEmailOTP = async (email, otp) => {
@@ -172,13 +176,15 @@ exports.resendVerificationOTP = async (email) => {
   const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
   await verificationModel.createEmailVerificationOTP(user.ID, otp, expiresAt);
 
-  console.log(`\n=================================================`);
-  console.log(`📧 Resent Email Verification OTP to ${email}: ${otp}`);
-  console.log(`=================================================\n`);
+  if (process.env.NODE_ENV !== 'production') {
+    console.log(`\n=================================================`);
+    console.log(`📧 Resent Email Verification OTP to ${email}: ${otp}`);
+    console.log(`=================================================\n`);
+  }
 
   sendVerificationOTPEmail(email, otp);
 
-  return { otp };
+  return { success: true };
 };
 
 exports.forgotPassword = async (email) => {
@@ -191,13 +197,15 @@ exports.forgotPassword = async (email) => {
   const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
   await verificationModel.createPasswordResetOTP(user.ID, otp, expiresAt);
 
-  console.log(`\n=================================================`);
-  console.log(`🔑 Password Reset OTP for ${email}: ${otp}`);
-  console.log(`=================================================\n`);
+  if (process.env.NODE_ENV !== 'production') {
+    console.log(`\n=================================================`);
+    console.log(`🔑 Password Reset OTP for ${email}: ${otp}`);
+    console.log(`=================================================\n`);
+  }
 
   sendPasswordResetOTPEmail(email, otp);
 
-  return { otp };
+  return { success: true };
 };
 
 exports.verifyResetOTP = async (email, otp) => {

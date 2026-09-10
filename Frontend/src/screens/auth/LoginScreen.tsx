@@ -21,11 +21,10 @@ export const LoginScreen = () => {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
-  // Google sign-in simulation states
+  // Google sign-in state
   const [googleModalVisible, setGoogleModalVisible] = useState(false);
-  const [customGoogleEmail, setCustomGoogleEmail] = useState('');
-  const [customGoogleName, setCustomGoogleName] = useState('');
-  const [showCustomGoogleInput, setShowCustomGoogleInput] = useState(false);
+  const [googleIdToken, setGoogleIdToken] = useState('');
+
 
   // Toast states
   const [toastVisible, setToastVisible] = useState(false);
@@ -257,9 +256,7 @@ export const LoginScreen = () => {
           <TouchableOpacity
             style={styles.googleButton}
             onPress={() => {
-              setShowCustomGoogleInput(false);
-              setCustomGoogleEmail('');
-              setCustomGoogleName('');
+              setGoogleIdToken('');
               setGoogleModalVisible(true);
             }}
           >
@@ -278,90 +275,41 @@ export const LoginScreen = () => {
               <View style={styles.modalContent}>
                 <View style={styles.modalHeader}>
                   <FontAwesome5 name="google" size={20} color="#4285F4" style={{ marginRight: 10 }} />
-                  <Text style={styles.modalTitle}>Sign in with Google (Demo)</Text>
+                  <Text style={styles.modalTitle}>Sign in with Google</Text>
                 </View>
-                <Text style={styles.modalSubtitle}>Choose a demo account or enter your email to continue</Text>
+                <Text style={styles.modalSubtitle}>Provide your verified Google ID Token to authenticate</Text>
 
-                {/* Demo Account List */}
-                <TouchableOpacity
-                  style={styles.googleAccountItem}
-                  onPress={() => handleGoogleLogin('demo.trader@smartlanka.com', 'Demo Trader')}
-                >
-                  <View style={styles.avatarCircle}>
-                    <Text style={styles.avatarText}>DT</Text>
+                <View style={styles.customInputSection}>
+                  <TextInput
+                    placeholder="Paste Google ID Token"
+                    placeholderTextColor={colors.textSecondary}
+                    value={googleIdToken}
+                    onChangeText={setGoogleIdToken}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    style={styles.customGoogleInput}
+                  />
+                  <View style={styles.customInputButtons}>
+                    <TouchableOpacity
+                      style={styles.cancelBtn}
+                      onPress={() => setGoogleModalVisible(false)}
+                    >
+                      <Text style={styles.cancelBtnText}>Cancel</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.submitBtn}
+                      onPress={() => {
+                        if (!googleIdToken.trim()) {
+                          showToast('Please provide a valid Google ID token', 'warning');
+                          return;
+                        }
+                        handleGoogleLogin(googleIdToken.trim());
+                      }}
+                    >
+                      <Text style={styles.submitBtnText}>Verify & Login</Text>
+                    </TouchableOpacity>
                   </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.accountName}>Demo Trader</Text>
-                    <Text style={styles.accountEmail}>demo.trader@smartlanka.com</Text>
-                  </View>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={styles.googleAccountItem}
-                  onPress={() => handleGoogleLogin('investor.demo@smartlanka.com', 'Institutional Demo')}
-                >
-                  <View style={styles.avatarCircle}>
-                    <Text style={styles.avatarText}>ID</Text>
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.accountName}>Institutional Demo</Text>
-                    <Text style={styles.accountEmail}>investor.demo@smartlanka.com</Text>
-                  </View>
-                </TouchableOpacity>
-
-                {!showCustomGoogleInput ? (
-                  <TouchableOpacity
-                    style={styles.addAccountButton}
-                    onPress={() => setShowCustomGoogleInput(true)}
-                  >
-                    <MaterialIcons name="person-add-alt-1" size={20} color={colors.accent} style={{ marginRight: 12 }} />
-                    <Text style={styles.addAccountText}>Use another account</Text>
-                  </TouchableOpacity>
-                ) : (
-                  <View style={styles.customInputSection}>
-                    <TextInput
-                      placeholder="Enter Name"
-                      placeholderTextColor={colors.textSecondary}
-                      value={customGoogleName}
-                      onChangeText={setCustomGoogleName}
-                      style={styles.customGoogleInput}
-                    />
-                    <TextInput
-                      placeholder="Enter Google Email"
-                      placeholderTextColor={colors.textSecondary}
-                      value={customGoogleEmail}
-                      onChangeText={setCustomGoogleEmail}
-                      keyboardType="email-address"
-                      autoCapitalize="none"
-                      style={styles.customGoogleInput}
-                    />
-                    <View style={styles.customInputButtons}>
-                      <TouchableOpacity
-                        style={styles.cancelBtn}
-                        onPress={() => setShowCustomGoogleInput(false)}
-                      >
-                        <Text style={styles.cancelBtnText}>Cancel</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={styles.submitBtn}
-                        onPress={() => {
-                          if (!customGoogleEmail || !customGoogleName) {
-                            showToast('Please enter both name and email', 'warning');
-                            return;
-                          }
-                          const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-                          if (!emailRegex.test(customGoogleEmail)) {
-                            showToast('Please enter a valid email address', 'warning');
-                            return;
-                          }
-                          handleGoogleLogin(customGoogleEmail, customGoogleName);
-                        }}
-                      >
-                        <Text style={styles.submitBtnText}>Continue</Text>
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                )}
+                </View>
 
                 <TouchableOpacity style={styles.closeModalButton} onPress={() => setGoogleModalVisible(false)}>
                   <Text style={styles.closeModalText}>CANCEL</Text>
