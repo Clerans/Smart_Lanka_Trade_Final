@@ -14,15 +14,8 @@ const {
 const klineCache = new Map();
 const CACHE_TTL_MS = 60 * 1000; // 1 minute TTL for fresh live charts
 
-const SUPPORTED_SYMBOLS = [
-  'BTCUSDT',
-  'ETHUSDT',
-  'BNBUSDT',
-  'SOLUSDT',
-  'XRPUSDT',
-  'ADAUSDT',
-  'DOGEUSDT'
-];
+const { ALLOWED_SYMBOLS } = require('./marketService');
+const SUPPORTED_SYMBOLS = ALLOWED_SYMBOLS;
 
 const VALID_INTERVALS = ['1m', '5m', '15m', '30m', '1h', '4h', '1d'];
 

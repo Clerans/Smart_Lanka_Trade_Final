@@ -1,8 +1,34 @@
-const { getPriceInLKR, getMultiplePricesInLKR, getAllPricesInLKR } = require("../services/marketService");
+const {
+  ALLOWED_SYMBOLS,
+  normalizeSymbol,
+  getPriceInLKR,
+  getMultiplePricesInLKR,
+  getAllPricesInLKR,
+  getLivePrices
+} = require("../services/marketService");
+
+const ALLOWED_INTERVALS = ['1m', '5m', '15m', '30m', '1h', '4h', '1d'];
 
 exports.getPrice = async (req, res) => {
   try {
-    const symbol = req.query.symbol || "BTCUSDT";
+    const rawSymbol = req.query.symbol || "BTCUSDT";
+    if (!rawSymbol || typeof rawSymbol !== 'string') {
+      return res.status(400).json({
+        success: false,
+        code: 'INVALID_SYMBOL',
+        message: `Invalid symbol '${rawSymbol}'. Allowed symbols: ${ALLOWED_SYMBOLS.join(', ')}`
+      });
+    }
+
+    const symbol = normalizeSymbol(rawSymbol);
+
+    if (!symbol || !ALLOWED_SYMBOLS.includes(symbol)) {
+      return res.status(400).json({
+        success: false,
+        code: 'INVALID_SYMBOL',
+        message: `Invalid symbol '${rawSymbol}'. Allowed symbols: ${ALLOWED_SYMBOLS.join(', ')}`
+      });
+    }
 
     const data = await getPriceInLKR(symbol);
 
@@ -12,9 +38,9 @@ exports.getPrice = async (req, res) => {
     });
   } catch (error) {
     console.error(error);
-
     res.status(500).json({
       success: false,
+      code: 'SERVER_ERROR',
       message: "Failed to fetch market data",
     });
   }
@@ -22,10 +48,32 @@ exports.getPrice = async (req, res) => {
 
 exports.getMultiplePrices = async (req, res) => {
   try {
-    const symbols = req.query.symbols ? req.query.symbols.split(',') : ["BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT", "ADAUSDT"];
+    const rawSymbols = req.query.symbols ? req.query.symbols.split(',') : ["BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT", "ADAUSDT"];
     const includeSparkline = req.query.sparkline === 'true';
 
-    const data = await getMultiplePricesInLKR(symbols, includeSparkline);
+    const normalizedSymbols = [];
+    for (const raw of rawSymbols) {
+      if (!raw || typeof raw !== 'string') continue;
+      const sym = normalizeSymbol(raw);
+      if (!sym || !ALLOWED_SYMBOLS.includes(sym)) {
+        return res.status(400).json({
+          success: false,
+          code: 'INVALID_SYMBOL',
+          message: `Invalid symbol '${raw}'. Allowed symbols: ${ALLOWED_SYMBOLS.join(', ')}`
+        });
+      }
+      normalizedSymbols.push(sym);
+    }
+
+    if (normalizedSymbols.length === 0) {
+      return res.status(400).json({
+        success: false,
+        code: 'INVALID_SYMBOLS',
+        message: 'No valid symbols provided.'
+      });
+    }
+
+    const data = await getMultiplePricesInLKR(normalizedSymbols, includeSparkline);
 
     res.json({
       success: true,
@@ -35,6 +83,7 @@ exports.getMultiplePrices = async (req, res) => {
     console.error(error);
     res.status(500).json({
       success: false,
+      code: 'SERVER_ERROR',
       message: "Failed to fetch multiple market data",
     });
   }
@@ -51,6 +100,7 @@ exports.getAllPrices = async (req, res) => {
     console.error(error);
     res.status(500).json({
       success: false,
+      code: 'SERVER_ERROR',
       message: "Failed to fetch all market data",
     });
   }
@@ -58,7 +108,6 @@ exports.getAllPrices = async (req, res) => {
 
 exports.getLive = async (req, res) => {
   try {
-    const { getLivePrices } = require("../services/marketService");
     const data = await getLivePrices();
     res.json({
       success: true,
@@ -74,21 +123,20 @@ exports.getLive = async (req, res) => {
   }
 };
 
-const ALLOWED_SYMBOLS = ['BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'SOLUSDT', 'ADAUSDT', 'XRPUSDT', 'DOGEUSDT'];
-const ALLOWED_INTERVALS = ['1m', '5m', '15m', '30m', '1h', '4h', '1d'];
-
 exports.getKlines = async (req, res) => {
   try {
     const { getKlinesWithIndicators } = require("../services/marketDataService");
-    let symbol = (req.params.symbol || req.query.symbol || "BTCUSDT").toUpperCase().trim();
+    const rawSymbol = req.params.symbol || req.query.symbol || "BTCUSDT";
     let interval = (req.query.interval || "1h").toLowerCase().trim();
     let limit = parseInt(req.query.limit || "100", 10);
 
-    if (!ALLOWED_SYMBOLS.includes(symbol)) {
+    const symbol = normalizeSymbol(rawSymbol);
+
+    if (!symbol || !ALLOWED_SYMBOLS.includes(symbol)) {
       return res.status(400).json({
         success: false,
         code: 'INVALID_SYMBOL',
-        message: `Invalid symbol '${symbol}'. Allowed symbols: ${ALLOWED_SYMBOLS.join(', ')}`
+        message: `Invalid symbol '${rawSymbol}'. Allowed symbols: ${ALLOWED_SYMBOLS.join(', ')}`
       });
     }
 
