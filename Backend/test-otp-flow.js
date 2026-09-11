@@ -1,10 +1,10 @@
 const http = require('http');
 const app = require('./server');
-const { verifyTransporter, sendVerificationOTPEmail } = require('./services/emailService');
+const { verifyEmailService, sendVerificationOTPEmail, sendPasswordResetOTPEmail } = require('./services/emailService');
 
 async function runTests() {
   console.log('====================================================');
-  console.log('🧪 RUNNING SMARTLANKA TRADE OTP & PROXY TEST SUITE');
+  console.log('🧪 SMARTLANKA TRADE RESEND MIGRATION & PROXY TEST SUITE');
   console.log('====================================================\n');
 
   let passed = 0;
@@ -21,31 +21,32 @@ async function runTests() {
     }
   }
 
-  // TEST 1: Trust Proxy Setting
-  console.log('--- TEST 1: Express Trust Proxy Configuration ---');
+  // TEST 1: Provider Configuration Diagnostics
+  console.log('--- TEST 1: Email Provider Configuration Diagnostics ---');
+  try {
+    process.env.EMAIL_PROVIDER = 'resend';
+    const diagResult = await verifyEmailService();
+    assert(typeof diagResult === 'boolean', 'verifyEmailService() executed safely without throwing');
+  } catch (e) {
+    assert(false, `verifyEmailService threw unexpected exception: ${e.message}`);
+  }
+
+  // TEST 2: Express Trust Proxy Configuration
+  console.log('\n--- TEST 2: Express Trust Proxy Configuration ---');
   const trustProxySetting = app.get('trust proxy');
   assert(
     typeof trustProxySetting === 'function' || trustProxySetting === 1 || trustProxySetting === true,
-    'Express trust proxy is configured for Render reverse proxy'
+    'Express trust proxy is configured for Render single-hop reverse proxy'
   );
 
-  // TEST 2: Safe Transporter Diagnostics
-  console.log('\n--- TEST 2: Safe SMTP Transporter Diagnostics ---');
-  try {
-    const diagResult = await verifyTransporter();
-    assert(typeof diagResult === 'boolean', 'verifyTransporter() executed safely without unhandled error');
-  } catch (e) {
-    assert(false, `verifyTransporter threw unexpected exception: ${e.message}`);
-  }
-
-  // TEST 3: Rate Limiting & X-Forwarded-For (Render Simulation)
+  // TEST 3: Rate Limiting with X-Forwarded-For Header (Render Simulation)
   console.log('\n--- TEST 3: Rate Limiting with X-Forwarded-For Header ---');
   const server = http.createServer(app);
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   const port = server.address().port;
 
   try {
-    const makeRequest = (headers = {}) => {
+    const makeRequest = (headers = {}, body = {}) => {
       return new Promise((resolve, reject) => {
         const req = http.request(
           {
@@ -71,15 +72,15 @@ async function runTests() {
           }
         );
         req.on('error', reject);
-        req.write(JSON.stringify({ name: '', email: '', password: '' }));
+        req.write(JSON.stringify(body));
         req.end();
       });
     };
 
-    // Make request simulating Render's X-Forwarded-For header
-    const responseWithProxyHeader = await makeRequest({
-      'X-Forwarded-For': '203.0.113.195, 10.0.0.1'
-    });
+    const responseWithProxyHeader = await makeRequest(
+      { 'X-Forwarded-For': '203.0.113.195, 10.0.0.1' },
+      { name: '', email: '', password: '' }
+    );
 
     assert(
       responseWithProxyHeader.status === 422,
@@ -94,11 +95,10 @@ async function runTests() {
     server.close();
   }
 
-  // TEST 4: OTP Security & Error Propagation Check
-  console.log('\n--- TEST 4: OTP Security - Verify OTP is Never Leaked ---');
+  // TEST 4: OTP Security - Ensure OTP is Never Leaked in API Responses
+  console.log('\n--- TEST 4: OTP Security Check ---');
   const authController = require('./controllers/authController');
-  
-  // Create mock res
+
   const mockRes = () => {
     const res = {};
     res.statusCode = 200;
@@ -107,12 +107,36 @@ async function runTests() {
     return res;
   };
 
-  // Test missing fields response
   const req = { body: { name: 'Test' } };
   const res = mockRes();
   await authController.register(req, res);
   assert(res.statusCode === 422, 'Missing fields correctly returns 422');
   assert(!res.body.otp, 'Response body does NOT contain OTP');
+
+  // TEST 5: Provider Error Handling Simulation
+  console.log('\n--- TEST 5: Provider Error Handling Simulation ---');
+  try {
+    // If RESEND_API_KEY is not set or invalid, it throws a controlled error
+    const oldKey = process.env.RESEND_API_KEY;
+    delete process.env.RESEND_API_KEY;
+    
+    let caughtError = null;
+    try {
+      await sendVerificationOTPEmail('test@example.com', '123456');
+    } catch (err) {
+      caughtError = err;
+    }
+    
+    assert(
+      caughtError !== null && caughtError.message.includes('RESEND_API_KEY'),
+      'Missing RESEND_API_KEY throws a safe, controlled error'
+    );
+    
+    // Restore
+    if (oldKey) process.env.RESEND_API_KEY = oldKey;
+  } catch (e) {
+    assert(false, `Error during provider simulation: ${e.message}`);
+  }
 
   console.log('\n====================================================');
   console.log(`📊 RESULTS: ${passed}/${total} Tests Passed`);
