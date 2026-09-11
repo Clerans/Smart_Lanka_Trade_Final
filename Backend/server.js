@@ -107,8 +107,8 @@ const PORT = process.env.PORT || 5000;
 // Start background services and server listener when not in test mode
 if (process.env.NODE_ENV !== 'test') {
   connectDB();
-  const { verifyTransporter } = require('./services/emailService');
-  verifyTransporter();
+  const { verifyEmailService } = require('./services/emailService');
+  verifyEmailService();
   const { startPriceMonitor } = require('./services/priceMonitor');
   startPriceMonitor();
   const server = app.listen(PORT, '0.0.0.0', () => {

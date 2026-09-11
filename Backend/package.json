@@ -26,6 +26,7 @@
     "node-cron": "^4.2.1",
     "nodemailer": "^10.0.3",
     "oracledb": "^6.10.0",
+    "resend": "^6.27.0",
     "tesseract.js": "^7.0.0"
   },
   "devDependencies": {
