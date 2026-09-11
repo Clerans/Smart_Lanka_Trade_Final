@@ -82,11 +82,7 @@ export const OTPVerificationScreen = () => {
     setLastAction('resend');
     try {
       const response = await authService.resendVerification(email);
-      showToast('A new OTP has been sent to your email.', 'success');
-      if (response.otp) {
-        console.log(`[DEVELOPMENT] Resent Verification OTP: ${response.otp}`);
-        showToast(`Verification code sent! (Simulated code: ${response.otp})`, 'success');
-      }
+      showToast(response.message || 'A new OTP has been sent to your email.', 'success');
       setTimer(59);
     } catch (error: any) {
       if (error.code === 'NETWORK_ERROR') {

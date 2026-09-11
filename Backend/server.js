@@ -6,6 +6,10 @@ const connectDB = require('./config/db');
 
 const app = express();
 
+// Configure trust proxy for reverse-proxy deployments (Render single hop)
+// This MUST be set before express-rate-limit to prevent ERR_ERL_UNEXPECTED_X_FORWARDED_FOR
+app.set('trust proxy', 1);
+
 // Rate Limiters
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
@@ -103,6 +107,8 @@ const PORT = process.env.PORT || 5000;
 // Start background services and server listener when not in test mode
 if (process.env.NODE_ENV !== 'test') {
   connectDB();
+  const { verifyTransporter } = require('./services/emailService');
+  verifyTransporter();
   const { startPriceMonitor } = require('./services/priceMonitor');
   startPriceMonitor();
   const server = app.listen(PORT, '0.0.0.0', () => {

@@ -43,8 +43,18 @@ exports.registerUser = async (name, email, password) => {
     console.log(`=================================================\n`);
   }
 
-  // Send verification OTP email (async)
-  sendVerificationOTPEmail(email, otp);
+  // Send verification OTP email (awaited)
+  try {
+    await sendVerificationOTPEmail(email, otp);
+  } catch (emailErr) {
+    const err = createError(
+      'EMAIL_SEND_FAILED',
+      'Your account was created, but we could not send the verification email. Please try resending the OTP.',
+      503
+    );
+    err.userId = userId;
+    throw err;
+  }
 
   return { userId };
 };
@@ -136,7 +146,8 @@ exports.sendVerificationOTP = async (email) => {
     console.log(`=================================================\n`);
   }
 
-  sendVerificationOTPEmail(email, otp);
+  // Send verification OTP email (awaited)
+  await sendVerificationOTPEmail(email, otp);
 
   return { success: true };
 };
@@ -183,7 +194,8 @@ exports.resendVerificationOTP = async (email) => {
     console.log(`=================================================\n`);
   }
 
-  sendVerificationOTPEmail(email, otp);
+  // Send verification OTP email (awaited)
+  await sendVerificationOTPEmail(email, otp);
 
   return { success: true };
 };
@@ -204,7 +216,8 @@ exports.forgotPassword = async (email) => {
     console.log(`=================================================\n`);
   }
 
-  sendPasswordResetOTPEmail(email, otp);
+  // Send password reset OTP email (awaited)
+  await sendPasswordResetOTPEmail(email, otp);
 
   return { success: true };
 };

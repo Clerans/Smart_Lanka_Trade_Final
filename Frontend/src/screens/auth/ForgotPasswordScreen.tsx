@@ -43,13 +43,7 @@ export const ForgotPasswordScreen = () => {
     setIsNetworkError(false);
     try {
       const response = await authService.forgotPassword(email);
-      showToast('Password reset code sent successfully.', 'success');
-      
-      // Developer mode logging/simulation toast
-      if (response.otp) {
-        console.log(`[DEVELOPMENT] Forgot Password OTP: ${response.otp}`);
-        showToast(`Verification code sent! (Simulated code: ${response.otp})`, 'success');
-      }
+      showToast(response.message || 'Password reset code sent successfully.', 'success');
 
       setTimeout(() => {
         navigation.navigate('ResetPassword', { email });
