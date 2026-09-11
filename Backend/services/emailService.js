@@ -2,18 +2,51 @@ const nodemailer = require('nodemailer');
 require('dotenv').config();
 
 // SMTP Transporter Configuration
+const smtpHost = process.env.SMTP_HOST || 'smtp.gmail.com';
+const smtpPort = parseInt(process.env.SMTP_PORT || '587', 10);
+const smtpUser = process.env.SMTP_USER || process.env.EMAIL_USER;
+const smtpPass = process.env.SMTP_PASS || process.env.EMAIL_PASS;
+
 const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST || 'smtp.gmail.com',
-  port: parseInt(process.env.SMTP_PORT || '587', 10),
-  secure: process.env.SMTP_PORT === '465',
+  host: smtpHost,
+  port: smtpPort,
+  secure: smtpPort === 465,
   auth: {
-    user: process.env.SMTP_USER || process.env.EMAIL_USER,
-    pass: process.env.SMTP_PASS || process.env.EMAIL_PASS
+    user: smtpUser,
+    pass: smtpPass
   }
 });
 
 const getFromAddress = () => {
-  return process.env.EMAIL_FROM || `"SMARTLANKA TRADE" <${process.env.SMTP_USER || process.env.EMAIL_USER}>`;
+  return process.env.EMAIL_FROM || `"SMARTLANKA TRADE" <${smtpUser || 'noreply@smartlankatrade.com'}>`;
+};
+
+// Safe SMTP Diagnostics (verifies configuration without logging credentials)
+const verifyTransporter = async () => {
+  console.log('🔍 [SMTP Diagnostics]');
+  console.log(`- SMTP host configured: ${process.env.SMTP_HOST ? 'yes' : 'default (smtp.gmail.com)'}`);
+  console.log(`- SMTP port configured: ${process.env.SMTP_PORT ? 'yes' : 'default (587)'}`);
+  console.log(`- SMTP user configured: ${smtpUser ? 'yes' : 'no'}`);
+  console.log(`- SMTP password configured: ${smtpPass ? 'yes' : 'no'}`);
+
+  if (!smtpUser || !smtpPass) {
+    console.warn('⚠️ SMTP user or password is missing in environment variables. Email delivery may fail.');
+    return false;
+  }
+
+  try {
+    await transporter.verify();
+    console.log('✅ SMTP configuration verified successfully');
+    return true;
+  } catch (error) {
+    console.error('❌ SMTP verification failed:', {
+      code: error.code,
+      responseCode: error.responseCode,
+      command: error.command,
+      message: error.message
+    });
+    return false;
+  }
 };
 
 // Send OTP for Email Verification
@@ -44,10 +77,16 @@ const sendVerificationOTPEmail = async (email, otp) => {
 
   try {
     const info = await transporter.sendMail(mailOptions);
-    console.log(`✅ Verification OTP sent to ${email} (Message ID: ${info.messageId})`);
+    console.log(`✅ Verification email sent successfully to ${email} (Message ID: ${info.messageId})`);
     return info;
   } catch (error) {
-    console.error(`❌ Failed to send verification OTP to ${email}:`, error.message);
+    console.error(`❌ SMTP email delivery failed for ${email}:`, {
+      code: error.code,
+      command: error.command,
+      responseCode: error.responseCode,
+      message: error.message
+    });
+    throw error;
   }
 };
 
@@ -79,10 +118,16 @@ const sendPasswordResetOTPEmail = async (email, otp) => {
 
   try {
     const info = await transporter.sendMail(mailOptions);
-    console.log(`✅ Password Reset OTP sent to ${email} (Message ID: ${info.messageId})`);
+    console.log(`✅ Password Reset OTP sent successfully to ${email} (Message ID: ${info.messageId})`);
     return info;
   } catch (error) {
-    console.error(`❌ Failed to send reset OTP to ${email}:`, error.message);
+    console.error(`❌ SMTP reset OTP delivery failed for ${email}:`, {
+      code: error.code,
+      command: error.command,
+      responseCode: error.responseCode,
+      message: error.message
+    });
+    throw error;
   }
 };
 
@@ -110,10 +155,17 @@ const sendVerificationEmail = async (email, token) => {
   };
 
   try {
-    await transporter.sendMail(mailOptions);
-    console.log(`✅ Verification email sent to ${email}`);
+    const info = await transporter.sendMail(mailOptions);
+    console.log(`✅ Verification email link sent successfully to ${email}`);
+    return info;
   } catch (error) {
-    console.error('❌ Email Send Error:', error.message);
+    console.error(`❌ Email link send failed for ${email}:`, {
+      code: error.code,
+      command: error.command,
+      responseCode: error.responseCode,
+      message: error.message
+    });
+    throw error;
   }
 };
 
@@ -141,14 +193,23 @@ const sendPriceAlertEmail = async (email, symbol, targetPrice, currentPrice, ale
   };
 
   try {
-    await transporter.sendMail(mailOptions);
+    const info = await transporter.sendMail(mailOptions);
     console.log(`✅ Price alert email sent to ${email}`);
+    return info;
   } catch (error) {
-    console.error('❌ Price Alert Email Error:', error.message);
+    console.error(`❌ Price Alert Email Error for ${email}:`, {
+      code: error.code,
+      command: error.command,
+      responseCode: error.responseCode,
+      message: error.message
+    });
+    throw error;
   }
 };
 
 module.exports = { 
+  transporter,
+  verifyTransporter,
   sendVerificationOTPEmail, 
   sendPasswordResetOTPEmail, 
   sendVerificationEmail, 
