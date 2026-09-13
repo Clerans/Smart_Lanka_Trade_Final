@@ -20,6 +20,7 @@
     "expo-server-sdk": "^6.1.0",
     "express": "^5.2.1",
     "express-rate-limit": "^8.7.0",
+    "firebase-admin": "^13.2.0",
     "google-auth-library": "^11.0.2",
     "jsonwebtoken": "^9.0.3",
     "multer": "^2.3.0",

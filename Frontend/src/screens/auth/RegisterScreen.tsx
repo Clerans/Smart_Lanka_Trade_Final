@@ -85,20 +85,14 @@ export const RegisterScreen = () => {
     setLoading(true);
     setIsNetworkError(false);
     try {
-      const response = await authService.register(name, email, password);
-      showToast('Registration successful! Redirecting to verification...', 'success');
+      await authService.register(name.trim(), email.trim(), password);
+      showToast('Account created! Verification email sent.', 'success');
       setTimeout(() => {
-        // Redirect to OTP Verification passing the registered email
-        navigation.navigate('OTPVerification', { email });
-      }, 2000);
+        navigation.navigate('OTPVerification', { email: email.trim(), name: name.trim() });
+      }, 1500);
     } catch (error: any) {
       if (error.code === 'NETWORK_ERROR') {
         setIsNetworkError(true);
-      } else if (error.code === 'EMAIL_SEND_FAILED') {
-        showToast(error.message || "Account created, but we couldn't send the verification email. Please try resending the OTP.", 'warning');
-        setTimeout(() => {
-          navigation.navigate('OTPVerification', { email });
-        }, 2500);
       } else {
         showToast(error.message || 'Registration failed.', 'error');
       }

@@ -14,17 +14,23 @@ export const SplashScreen = () => {
   useEffect(() => {
     Animated.timing(progress, {
       toValue: 100,
-      duration: 2500,
+      duration: 2200,
       useNativeDriver: false,
     }).start(async ({ finished }) => {
       if (finished) {
         try {
           const rememberMe = await AsyncStorage.getItem('rememberMe');
-          const token = await storageService.getToken();
+          const { firebaseAuthService } = require('../../services/firebaseAuthService');
+          const currentUser = firebaseAuthService.getCurrentUser();
+          const token = await firebaseAuthService.getIdToken();
 
-          if (rememberMe === 'true' && token) {
+          if (rememberMe === 'true' && (currentUser || token)) {
             try {
-              await authService.validateToken();
+              if (currentUser && !currentUser.emailVerified) {
+                navigation.replace('OTPVerification', { email: currentUser.email });
+                return;
+              }
+              await authService.sync();
               navigation.replace('MainApp');
               return;
             } catch (validateErr) {
