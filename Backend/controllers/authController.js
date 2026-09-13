@@ -77,11 +77,12 @@ exports.verifyEmail = async (req, res) => {
       return res.status(422).json({
         success: false,
         code: 'MISSING_FIELDS',
-        message: 'Email and OTP code are required.'
+        message: 'Email and 6-digit OTP code are required.'
       });
     }
 
-    const result = await authService.verifyEmailOTP(email, otp);
+    const firebaseUid = req.user?.firebaseUid || req.firebaseUser?.uid || null;
+    const result = await authService.verifyEmailOTP(email, otp, firebaseUid);
     res.json({
       success: true,
       message: result.message

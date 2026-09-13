@@ -131,51 +131,70 @@ exports.loginUser = async (email, password) => {
 };
 
 exports.sendVerificationOTP = async (email) => {
-  const user = await userModel.findByEmail(email);
+  const cleanEmail = (email || '').trim().toLowerCase();
+  const user = await userModel.findByEmail(cleanEmail);
   if (!user) {
     throw createError('USER_NOT_FOUND', 'User with this email does not exist.', 404);
   }
 
-  const otp = Math.floor(100000 + Math.random() * 900000).toString();
-  const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
+  // Cryptographically secure 6-digit numeric OTP
+  const otp = crypto.randomInt(100000, 1000000).toString();
+  const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes validity
   await verificationModel.createEmailVerificationOTP(user.ID, otp, expiresAt);
 
-  if (process.env.NODE_ENV !== 'production') {
-    console.log(`\n=================================================`);
-    console.log(`📧 Sent Email Verification OTP to ${email}: ${otp}`);
-    console.log(`=================================================\n`);
-  }
+  // Send branded verification OTP email via Resend
+  await sendVerificationOTPEmail(cleanEmail, otp);
 
-  // Send verification OTP email (awaited)
-  await sendVerificationOTPEmail(email, otp);
-
-  return { success: true };
+  return { success: true, message: 'Verification code sent successfully.' };
 };
 
-exports.verifyEmailOTP = async (email, otp) => {
-  const user = await userModel.findByEmail(email);
+exports.verifyEmailOTP = async (email, otp, firebaseUid = null) => {
+  const cleanEmail = (email || '').trim().toLowerCase();
+  const cleanOtp = (otp || '').toString().trim();
+
+  const user = await userModel.findByEmail(cleanEmail);
   if (!user) {
     throw createError('USER_NOT_FOUND', 'User with this email does not exist.', 404);
   }
 
-  const record = await verificationModel.findEmailVerificationOTP(email, otp);
+  const record = await verificationModel.findEmailVerificationOTP(cleanEmail, cleanOtp);
   if (!record) {
-    throw createError('OTP_INVALID', 'Invalid OTP verification code.', 422);
+    throw createError('OTP_INVALID', 'Invalid verification code. Please check the 6-digit code and try again.', 422);
   }
 
   if (new Date(record.EXPIRES_AT) < new Date()) {
-    throw createError('OTP_EXPIRED', 'OTP verification code has expired (valid for 5 minutes).', 422);
+    throw createError('OTP_EXPIRED', 'Your verification code has expired. Please request a new code.', 422);
   }
 
-  // Update user verified flag and verification record
-  await userModel.verifyUser(user.ID);
+  // 1. Mark OTP as verified (single-use enforcement)
   await verificationModel.markEmailVerificationOTPVerified(record.ID);
 
-  return { message: 'Email verified successfully! You can now log in.' };
+  // 2. Update Oracle user verification state (IS_VERIFIED = 1)
+  await userModel.verifyUser(user.ID);
+
+  // 3. Synchronize with Firebase Authentication (emailVerified = true) via Firebase Admin SDK
+  const targetFirebaseUid = firebaseUid || user.FIREBASE_UID;
+  if (targetFirebaseUid) {
+    try {
+      const { admin } = require('../config/firebaseAdmin');
+      if (admin.apps.length > 0) {
+        await admin.auth().updateUser(targetFirebaseUid, { emailVerified: true });
+        console.log(`✅ [Firebase Admin] Set emailVerified=true for Firebase UID: ${targetFirebaseUid}`);
+      }
+    } catch (fbAdminErr) {
+      console.warn(`⚠️ [Firebase Admin] Could not update emailVerified for ${targetFirebaseUid}:`, fbAdminErr.message);
+    }
+  }
+
+  return { 
+    success: true, 
+    message: 'Email verified successfully!' 
+  };
 };
 
 exports.resendVerificationOTP = async (email) => {
-  const user = await userModel.findByEmail(email);
+  const cleanEmail = (email || '').trim().toLowerCase();
+  const user = await userModel.findByEmail(cleanEmail);
   if (!user) {
     throw createError('USER_NOT_FOUND', 'User with this email does not exist.', 404);
   }
@@ -184,20 +203,15 @@ exports.resendVerificationOTP = async (email) => {
     throw createError('EMAIL_ALREADY_VERIFIED', 'This email is already verified.', 409);
   }
 
-  const otp = Math.floor(100000 + Math.random() * 900000).toString();
-  const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
+  // Cryptographically secure 6-digit numeric OTP
+  const otp = crypto.randomInt(100000, 1000000).toString();
+  const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes validity
   await verificationModel.createEmailVerificationOTP(user.ID, otp, expiresAt);
 
-  if (process.env.NODE_ENV !== 'production') {
-    console.log(`\n=================================================`);
-    console.log(`📧 Resent Email Verification OTP to ${email}: ${otp}`);
-    console.log(`=================================================\n`);
-  }
+  // Send branded verification OTP email via Resend
+  await sendVerificationOTPEmail(cleanEmail, otp);
 
-  // Send verification OTP email (awaited)
-  await sendVerificationOTPEmail(email, otp);
-
-  return { success: true };
+  return { success: true, message: 'Verification code resent successfully.' };
 };
 
 exports.forgotPassword = async (email) => {
