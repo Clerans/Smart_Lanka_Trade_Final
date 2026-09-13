@@ -47,7 +47,7 @@ export const LoginScreen = () => {
   // Google OAuth Configuration
   const googleClientId =
     process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID ||
-    '160639232948-kn3de7o83ot8vck102jjadi7m9astvfg.apps.googleusercontent.com';
+    '614054153944-uojsd4uh9uvg6n0fmqedm8fnk9rmb7db.apps.googleusercontent.com';
 
   const [request, response, promptAsync] = Google.useIdTokenAuthRequest({
     clientId: googleClientId,
