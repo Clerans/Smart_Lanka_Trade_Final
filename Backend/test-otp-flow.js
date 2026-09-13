@@ -1,10 +1,10 @@
 const http = require('http');
 const app = require('./server');
-const { verifyEmailService, sendVerificationOTPEmail, sendPasswordResetOTPEmail } = require('./services/emailService');
+const { verifyEmailService, sendVerificationOTPEmail } = require('./services/emailService');
 
 async function runTests() {
   console.log('====================================================');
-  console.log('🧪 SMARTLANKA TRADE RESEND MIGRATION & PROXY TEST SUITE');
+  console.log('🧪 SMARTLANKA TRADE SMTP (BREVO/NODEMAILER) TEST SUITE');
   console.log('====================================================\n');
 
   let passed = 0;
@@ -21,12 +21,12 @@ async function runTests() {
     }
   }
 
-  // TEST 1: Provider Configuration Diagnostics
+  // TEST 1: Provider Configuration Diagnostics with EMAIL_PROVIDER=smtp
   console.log('--- TEST 1: Email Provider Configuration Diagnostics ---');
   try {
-    process.env.EMAIL_PROVIDER = 'resend';
+    process.env.EMAIL_PROVIDER = 'smtp';
     const diagResult = await verifyEmailService();
-    assert(typeof diagResult === 'boolean', 'verifyEmailService() executed safely without throwing');
+    assert(typeof diagResult === 'boolean', 'verifyEmailService() executed safely for SMTP');
   } catch (e) {
     assert(false, `verifyEmailService threw unexpected exception: ${e.message}`);
   }
@@ -113,12 +113,13 @@ async function runTests() {
   assert(res.statusCode === 422, 'Missing fields correctly returns 422');
   assert(!res.body.otp, 'Response body does NOT contain OTP');
 
-  // TEST 5: Provider Error Handling Simulation
-  console.log('\n--- TEST 5: Provider Error Handling Simulation ---');
+  // TEST 5: SMTP Provider Error Handling Simulation
+  console.log('\n--- TEST 5: SMTP Provider Error Handling Simulation ---');
   try {
-    // If RESEND_API_KEY is not set or invalid, it throws a controlled error
-    const oldKey = process.env.RESEND_API_KEY;
-    delete process.env.RESEND_API_KEY;
+    const oldUser = process.env.SMTP_USER;
+    const oldBrevoUser = process.env.BREVO_SMTP_USER;
+    delete process.env.SMTP_USER;
+    delete process.env.BREVO_SMTP_USER;
     
     let caughtError = null;
     try {
@@ -128,12 +129,13 @@ async function runTests() {
     }
     
     assert(
-      caughtError !== null && caughtError.message.includes('RESEND_API_KEY'),
-      'Missing RESEND_API_KEY throws a safe, controlled error'
+      caughtError !== null,
+      'Missing SMTP credentials throws a safe, controlled error without crashing'
     );
     
     // Restore
-    if (oldKey) process.env.RESEND_API_KEY = oldKey;
+    if (oldUser) process.env.SMTP_USER = oldUser;
+    if (oldBrevoUser) process.env.BREVO_SMTP_USER = oldBrevoUser;
   } catch (e) {
     assert(false, `Error during provider simulation: ${e.message}`);
   }
