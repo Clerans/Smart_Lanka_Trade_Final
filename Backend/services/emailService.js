@@ -2,12 +2,16 @@ const nodemailer = require('nodemailer');
 const { Resend } = require('resend');
 require('dotenv').config();
 
-// Provider selection: 'resend' (default for production HTTPS/443) or 'smtp' (development only)
-const getEmailProvider = () => (process.env.EMAIL_PROVIDER || 'resend').toLowerCase();
+// Provider selection: 'brevo' (default), 'resend', or 'smtp'
+const getEmailProvider = () => (process.env.EMAIL_PROVIDER || 'brevo').toLowerCase();
 
 // Get configured sender address
 const getFromAddress = () => {
-  return process.env.EMAIL_FROM || 'SMARTLANKA TRADE <onboarding@resend.dev>';
+  if (process.env.BREVO_FROM_EMAIL) {
+    const name = process.env.BREVO_FROM_NAME || 'SmartLanka Trade';
+    return `"${name}" <${process.env.BREVO_FROM_EMAIL}>`;
+  }
+  return process.env.EMAIL_FROM || 'SmartLanka Trade <cleranspc@gmail.com>';
 };
 
 // Resend client initialization (singleton / on-demand)
@@ -19,14 +23,26 @@ const getResendClient = () => {
   return new Resend(apiKey);
 };
 
-// Optional SMTP Transporter (isolated strictly for local development when EMAIL_PROVIDER=smtp)
+// Brevo / SMTP Transporter
 let smtpTransporter = null;
 const getSmtpTransporter = () => {
   if (!smtpTransporter) {
-    const smtpHost = process.env.SMTP_HOST || 'smtp.gmail.com';
-    const smtpPort = parseInt(process.env.SMTP_PORT || '587', 10);
-    const smtpUser = process.env.SMTP_USER || process.env.EMAIL_USER;
-    const smtpPass = process.env.SMTP_PASS || process.env.EMAIL_PASS;
+    const provider = getEmailProvider();
+    
+    let smtpHost, smtpPort, smtpUser, smtpPass;
+    
+    if (provider === 'brevo') {
+      smtpHost = process.env.BREVO_SMTP_HOST || 'smtp-relay.brevo.com';
+      smtpPort = parseInt(process.env.BREVO_SMTP_PORT || '587', 10);
+      smtpUser = process.env.BREVO_SMTP_USER;
+      smtpPass = process.env.BREVO_SMTP_PASSWORD || process.env.BREVO_SMTP_PASS;
+    } else {
+      // Default to generic SMTP (e.g. Gmail)
+      smtpHost = process.env.SMTP_HOST || 'smtp.gmail.com';
+      smtpPort = parseInt(process.env.SMTP_PORT || '587', 10);
+      smtpUser = process.env.SMTP_USER || process.env.EMAIL_USER;
+      smtpPass = process.env.SMTP_PASS || process.env.EMAIL_PASS;
+    }
 
     smtpTransporter = nodemailer.createTransport({
       host: smtpHost,
@@ -47,7 +63,37 @@ const verifyEmailService = async () => {
   console.log('🔍 [Email Service Diagnostics]');
   console.log(`- Email provider: ${provider}`);
 
-  if (provider === 'resend') {
+  if (provider === 'brevo' || provider === 'smtp') {
+    const isBrevo = provider === 'brevo';
+    const host = isBrevo ? (process.env.BREVO_SMTP_HOST || 'smtp-relay.brevo.com') : (process.env.SMTP_HOST || 'smtp.gmail.com');
+    const port = isBrevo ? (process.env.BREVO_SMTP_PORT || '587') : (process.env.SMTP_PORT || '587');
+    const user = isBrevo ? process.env.BREVO_SMTP_USER : (process.env.SMTP_USER || process.env.EMAIL_USER);
+    const hasPass = isBrevo ? !!(process.env.BREVO_SMTP_PASSWORD || process.env.BREVO_SMTP_PASS) : !!(process.env.SMTP_PASS || process.env.EMAIL_PASS);
+    
+    console.log(`- SMTP host: ${host}:${port}`);
+    console.log(`- SMTP user: ${user || 'not configured'}`);
+    console.log(`- SMTP password configured: ${hasPass ? 'yes' : 'no'}`);
+
+    if (!user || !hasPass) {
+      console.warn('⚠️ Brevo/SMTP credentials missing in environment variables.');
+      return false;
+    }
+
+    try {
+      const transporter = getSmtpTransporter();
+      await transporter.verify();
+      console.log(`✅ ${provider.toUpperCase()} SMTP connection verified successfully`);
+      return true;
+    } catch (error) {
+      console.error(`❌ ${provider.toUpperCase()} SMTP verification failed:`, {
+        code: error.code,
+        command: error.command,
+        responseCode: error.responseCode,
+        message: error.message
+      });
+      return false;
+    }
+  } else if (provider === 'resend') {
     const hasKey = !!process.env.RESEND_API_KEY;
     const hasSender = !!process.env.EMAIL_FROM;
 
@@ -60,35 +106,8 @@ const verifyEmailService = async () => {
     }
     console.log('✅ Resend HTTPS provider configured successfully');
     return true;
-  } else if (provider === 'smtp') {
-    const smtpUser = process.env.SMTP_USER || process.env.EMAIL_USER;
-    const smtpPass = process.env.SMTP_PASS || process.env.EMAIL_PASS;
-    console.log(`- SMTP host configured: ${process.env.SMTP_HOST ? 'yes' : 'default (smtp.gmail.com)'}`);
-    console.log(`- SMTP port configured: ${process.env.SMTP_PORT ? 'yes' : 'default (587)'}`);
-    console.log(`- SMTP user configured: ${smtpUser ? 'yes' : 'no'}`);
-    console.log(`- SMTP password configured: ${smtpPass ? 'yes' : 'no'}`);
-
-    if (!smtpUser || !smtpPass) {
-      console.warn('⚠️ SMTP credentials missing in environment variables.');
-      return false;
-    }
-
-    try {
-      const transporter = getSmtpTransporter();
-      await transporter.verify();
-      console.log('✅ Local SMTP connection verified successfully');
-      return true;
-    } catch (error) {
-      console.error('❌ SMTP verification failed:', {
-        code: error.code,
-        command: error.command,
-        responseCode: error.responseCode,
-        message: error.message
-      });
-      return false;
-    }
   } else {
-    console.warn(`⚠️ Unknown EMAIL_PROVIDER '${provider}'. Expected 'resend' or 'smtp'.`);
+    console.warn(`⚠️ Unknown EMAIL_PROVIDER '${provider}'. Expected 'brevo', 'resend', or 'smtp'.`);
     return false;
   }
 };
@@ -132,7 +151,7 @@ const dispatchEmail = async ({ to, subject, html, logLabel }) => {
       }
       throw error;
     }
-  } else if (provider === 'smtp') {
+  } else if (provider === 'brevo' || provider === 'smtp') {
     try {
       const transporter = getSmtpTransporter();
       const mailOptions = {
@@ -142,10 +161,10 @@ const dispatchEmail = async ({ to, subject, html, logLabel }) => {
         html
       };
       const info = await transporter.sendMail(mailOptions);
-      console.log(`✅ ${logLabel} sent successfully via SMTP to ${to} (Message ID: ${info.messageId})`);
+      console.log(`✅ ${logLabel} sent successfully via ${provider.toUpperCase()} to ${to} (Message ID: ${info.messageId})`);
       return info;
     } catch (error) {
-      console.error(`❌ SMTP ${logLabel} delivery failed for ${to}:`, {
+      console.error(`❌ ${provider.toUpperCase()} ${logLabel} delivery failed for ${to}:`, {
         code: error.code,
         command: error.command,
         responseCode: error.responseCode,
@@ -154,7 +173,7 @@ const dispatchEmail = async ({ to, subject, html, logLabel }) => {
       throw error;
     }
   } else {
-    throw new Error(`Unsupported EMAIL_PROVIDER '${provider}'. Please configure EMAIL_PROVIDER=resend.`);
+    throw new Error(`Unsupported EMAIL_PROVIDER '${provider}'. Please configure EMAIL_PROVIDER=brevo, resend, or smtp.`);
   }
 };
 
