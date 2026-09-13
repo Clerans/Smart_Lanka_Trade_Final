@@ -44,6 +44,9 @@ export const mapFirebaseAuthError = (error: any): string => {
       return 'Network connection error. Please check your internet connection.';
     case 'auth/requires-recent-login':
       return 'Please log in again to perform this sensitive action.';
+    case 'auth/api-key-not-valid':
+    case 'auth/invalid-api-key':
+      return 'Firebase Web API key is not configured. Please set EXPO_PUBLIC_FIREBASE_API_KEY in Frontend/.env.';
     case 'auth/popup-closed-by-user':
       return 'Sign-in window was closed before completion.';
     default:
