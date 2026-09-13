@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, KeyboardAvoidingView, Platform, Dimensions, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, KeyboardAvoidingView, Platform, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -7,13 +7,11 @@ import { colors, typography, layout } from '../../theme';
 import { InputField, PrimaryButton, Toast, NetworkErrorScreen } from '../../components';
 import { authService } from '../../services/apiService';
 
-const { height } = Dimensions.get('window');
-const isSmallDevice = height < 700;
-
 export const ForgotPasswordScreen = () => {
   const navigation = useNavigation<any>();
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
+  const [sent, setSent] = useState(false);
 
   // Toast & Network error states
   const [toastVisible, setToastVisible] = useState(false);
@@ -27,14 +25,14 @@ export const ForgotPasswordScreen = () => {
     setToastVisible(true);
   };
 
-  const handleSendOTP = async () => {
-    if (!email) {
+  const handleSendResetEmail = async () => {
+    if (!email.trim()) {
       showToast('Please enter your email address', 'warning');
       return;
     }
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
+    if (!emailRegex.test(email.trim())) {
       showToast('Please enter a valid email address', 'warning');
       return;
     }
@@ -42,17 +40,14 @@ export const ForgotPasswordScreen = () => {
     setLoading(true);
     setIsNetworkError(false);
     try {
-      const response = await authService.forgotPassword(email);
-      showToast(response.message || 'Password reset code sent successfully.', 'success');
-
-      setTimeout(() => {
-        navigation.navigate('ResetPassword', { email });
-      }, 2000);
+      await authService.forgotPassword(email.trim());
+      setSent(true);
+      showToast('Password reset link sent to your email!', 'success');
     } catch (error: any) {
       if (error.code === 'NETWORK_ERROR') {
         setIsNetworkError(true);
       } else {
-        showToast(error.message || 'Failed to send reset code.', 'error');
+        showToast(error.message || 'Failed to send reset link.', 'error');
       }
     } finally {
       setLoading(false);
@@ -65,7 +60,7 @@ export const ForgotPasswordScreen = () => {
         <NetworkErrorScreen
           onRetry={() => {
             setIsNetworkError(false);
-            handleSendOTP();
+            handleSendResetEmail();
           }}
         />
       )}
@@ -85,7 +80,7 @@ export const ForgotPasswordScreen = () => {
             <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
               <MaterialIcons name="arrow-back" size={24} color="#FFF" />
             </TouchableOpacity>
-            <Text style={styles.headerTitle}>Forgot Password</Text>
+            <Text style={styles.headerTitle}>Reset Password</Text>
             <View style={{ width: 24 }} />
           </View>
 
@@ -94,40 +89,56 @@ export const ForgotPasswordScreen = () => {
           {/* Icon section */}
           <View style={styles.iconSection}>
             <View style={styles.iconContainer}>
-              <MaterialIcons name="lock-reset" size={48} color={colors.accent} />
+              <MaterialIcons name={sent ? "mark-email-read" : "lock-reset"} size={48} color={colors.accent} />
             </View>
-            <Text style={styles.title}>Reset Password</Text>
+            <Text style={styles.title}>{sent ? "Check Your Inbox" : "Reset Password"}</Text>
             <Text style={styles.subtitle}>
-              Enter your registered email address below. We'll send you a 6-digit OTP code to verify your identity.
+              {sent
+                ? `We've sent a password reset link to ${email.trim()}. Follow the instructions in the email to set a new password.`
+                : "Enter your registered email address below. We'll send you a password reset link to securely restore access to your account."
+              }
             </Text>
           </View>
 
           <View style={styles.spacer} />
 
           {/* Form */}
-          <View style={styles.formSection}>
-            <Text style={styles.label}>EMAIL ADDRESS</Text>
-            <InputField
-              placeholder="yourname@example.com"
-              keyboardType="email-address"
-              autoCapitalize="none"
-              value={email}
-              onChangeText={setEmail}
-              iconLeft={<MaterialIcons name="mail-outline" size={20} color={colors.textSecondary} />}
-            />
+          {!sent ? (
+            <View style={styles.formSection}>
+              <Text style={styles.label}>EMAIL ADDRESS</Text>
+              <InputField
+                placeholder="yourname@example.com"
+                keyboardType="email-address"
+                autoCapitalize="none"
+                value={email}
+                onChangeText={setEmail}
+                iconLeft={<MaterialIcons name="mail-outline" size={20} color={colors.textSecondary} />}
+              />
 
-            <View style={styles.smallSpacer} />
+              <View style={styles.smallSpacer} />
 
-            {loading ? (
-              <ActivityIndicator color={colors.accent} size="large" style={{ marginVertical: 20 }} />
-            ) : (
+              {loading ? (
+                <ActivityIndicator color={colors.accent} size="large" style={{ marginVertical: 20 }} />
+              ) : (
+                <PrimaryButton
+                  title="Send Password Reset Link →"
+                  onPress={handleSendResetEmail}
+                  style={styles.actionBtn}
+                />
+              )}
+            </View>
+          ) : (
+            <View style={styles.formSection}>
               <PrimaryButton
-                title="Send Reset Code →"
-                onPress={handleSendOTP}
+                title="Back to Log In"
+                onPress={() => navigation.navigate('Login')}
                 style={styles.actionBtn}
               />
-            )}
-          </View>
+              <TouchableOpacity onPress={() => setSent(false)} style={styles.resendBtn}>
+                <Text style={styles.resendBtnText}>Try another email address</Text>
+              </TouchableOpacity>
+            </View>
+          )}
 
           <View style={styles.spacer} />
           <View style={styles.spacer} />
@@ -181,6 +192,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 20,
+    borderWidth: 1,
+    borderColor: colors.accentMuted,
   },
   title: {
     ...typography.h2,
@@ -206,5 +219,15 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.2,
     shadowRadius: 12,
     elevation: 8,
+  },
+  resendBtn: {
+    alignItems: 'center',
+    paddingVertical: 14,
+    marginTop: 8,
+  },
+  resendBtnText: {
+    ...typography.bodySmall,
+    color: colors.textMuted,
+    fontWeight: '600',
   }
 });

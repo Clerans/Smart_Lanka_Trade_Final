@@ -2,26 +2,26 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
-import { MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
+import { MaterialIcons } from '@expo/vector-icons';
 import { colors, typography, layout } from '../../theme';
 import { PrimaryButton, Toast, NetworkErrorScreen } from '../../components';
 import { authService } from '../../services/apiService';
+import { firebaseAuthService } from '../../services/firebaseAuthService';
 
 export const OTPVerificationScreen = () => {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
-  const email = route.params?.email || '';
+  const email = route.params?.email || firebaseAuthService.getCurrentUser()?.email || '';
 
-  const [otp, setOtp] = useState<string>('');
-  const [timer, setTimer] = useState(59);
+  const [timer, setTimer] = useState(60);
   const [loading, setLoading] = useState(false);
+  const [resending, setResending] = useState(false);
 
   // Toast & Network error states
   const [toastVisible, setToastVisible] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
   const [toastType, setToastType] = useState<'success' | 'error' | 'warning'>('success');
   const [isNetworkError, setIsNetworkError] = useState(false);
-  const [lastAction, setLastAction] = useState<'verify' | 'resend'>('verify');
 
   useEffect(() => {
     if (timer > 0) {
@@ -36,40 +36,30 @@ export const OTPVerificationScreen = () => {
     setToastVisible(true);
   };
 
-  const handleKeyPress = (num: string) => {
-    if (otp.length < 6) {
-      setOtp(prev => prev + num);
-    }
-  };
-
-  const handleDelete = () => {
-    setOtp(prev => prev.slice(0, -1));
-  };
-
-  const handleBiometric = () => {
-    // Implement biometric auth logic
-  };
-
-  const handleVerify = async () => {
-    if (otp.length < 6) {
-      showToast('Please enter the 6-digit OTP code', 'warning');
-      return;
-    }
-
+  const handleCheckVerification = async () => {
     setLoading(true);
     setIsNetworkError(false);
-    setLastAction('verify');
     try {
-      const response = await authService.verifyEmail(email, otp);
-      showToast(response.message || 'Email verified successfully!', 'success');
-      setTimeout(() => {
-        navigation.navigate('Login');
-      }, 2000);
+      const user = await firebaseAuthService.reloadUser();
+
+      if (user?.emailVerified) {
+        showToast('Email verified successfully! Syncing your account...', 'success');
+        try {
+          await authService.sync();
+        } catch (syncErr) {
+          console.warn('Sync warning:', syncErr);
+        }
+        setTimeout(() => {
+          navigation.replace('MainApp');
+        }, 1000);
+      } else {
+        showToast('Email not yet verified. Please tap the verification link in your email and try again.', 'warning');
+      }
     } catch (error: any) {
       if (error.code === 'NETWORK_ERROR') {
         setIsNetworkError(true);
       } else {
-        showToast(error.message || 'OTP verification failed.', 'error');
+        showToast(error.message || 'Could not verify status. Please try again.', 'error');
       }
     } finally {
       setLoading(false);
@@ -77,22 +67,27 @@ export const OTPVerificationScreen = () => {
   };
 
   const handleResend = async () => {
-    setLoading(true);
+    if (timer > 0 || resending) return;
+    setResending(true);
     setIsNetworkError(false);
-    setLastAction('resend');
     try {
-      const response = await authService.resendVerification(email);
-      showToast(response.message || 'A new OTP has been sent to your email.', 'success');
-      setTimer(59);
+      await firebaseAuthService.sendEmailVerification();
+      showToast('A new verification email has been sent!', 'success');
+      setTimer(60);
     } catch (error: any) {
       if (error.code === 'NETWORK_ERROR') {
         setIsNetworkError(true);
       } else {
-        showToast(error.message || 'Failed to resend verification OTP.', 'error');
+        showToast(error.message || 'Failed to resend verification email.', 'error');
       }
     } finally {
-      setLoading(false);
+      setResending(false);
     }
+  };
+
+  const handleBackToLogin = async () => {
+    await authService.logout();
+    navigation.replace('Login');
   };
 
   return (
@@ -101,11 +96,7 @@ export const OTPVerificationScreen = () => {
         <NetworkErrorScreen
           onRetry={() => {
             setIsNetworkError(false);
-            if (lastAction === 'verify') {
-              handleVerify();
-            } else {
-              handleResend();
-            }
+            handleCheckVerification();
           }}
         />
       )}
@@ -119,95 +110,75 @@ export const OTPVerificationScreen = () => {
 
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+          <TouchableOpacity onPress={handleBackToLogin} style={styles.backButton}>
             <MaterialIcons name="arrow-back" size={24} color="#FFF" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Verify Identity</Text>
+          <Text style={styles.headerTitle}>Email Verification</Text>
           <View style={{ width: 24 }} />
         </View>
 
         {/* Content */}
         <View style={styles.content}>
           <View style={styles.iconContainer}>
-            <MaterialIcons name="security" size={48} color={colors.accent} />
+            <MaterialIcons name="mark-email-read" size={48} color={colors.accent} />
           </View>
 
-          <Text style={styles.mainTitle}>OTP Verification</Text>
+          <Text style={styles.mainTitle}>Check Your Inbox</Text>
           <Text style={styles.description}>
-            A verification code has been sent to your email address <Text style={styles.highlightText}>{email || 'your registered email'}</Text> for secure access.
+            We have sent a verification email to{' '}
+            <Text style={styles.highlightText}>{email || 'your registered email'}</Text>.
+            Please click the verification link in the email to activate your account.
           </Text>
 
-          {/* OTP Input UI */}
-          <View style={styles.otpContainer}>
-            {[...Array(6)].map((_, index) => (
-              <View
-                key={index}
-                style={[
-                  styles.otpBox,
-                  otp.length === index && styles.otpBoxActive,
-                  otp.length > index && styles.otpBoxFilled
-                ]}
-              >
-                <Text style={styles.otpText}>
-                  {otp[index] || ''}
-                </Text>
-              </View>
-            ))}
+          {/* Info Card */}
+          <View style={styles.infoCard}>
+            <MaterialIcons name="info-outline" size={20} color={colors.accent} style={{ marginRight: 10, marginTop: 2 }} />
+            <Text style={styles.infoCardText}>
+              Once you tap the link in your email, return to this screen and tap the button below.
+            </Text>
           </View>
 
-          {/* Resend Timer */}
-          <Text style={styles.didNotReceive}>Didn't receive the code?</Text>
-          <View style={styles.timerRow}>
-            <View style={styles.timerPill}>
-              <MaterialIcons name="access-time" size={16} color={colors.accent} />
-              <Text style={styles.timerText}>
-                00:{timer < 10 ? `0${timer}` : timer}
-              </Text>
-            </View>
-            <TouchableOpacity disabled={timer > 0} onPress={handleResend}>
-              <Text style={[styles.resendText, timer > 0 && styles.resendTextDisabled]}>
-                Resend OTP
-              </Text>
-            </TouchableOpacity>
-          </View>
-
+          {/* Primary Action Button */}
           {loading ? (
-            <ActivityIndicator color={colors.accent} size="large" style={{ marginBottom: 32 }} />
+            <ActivityIndicator color={colors.accent} size="large" style={{ marginVertical: 20 }} />
           ) : (
             <PrimaryButton
-              title="Verify →"
-              onPress={handleVerify}
+              title="I've Verified My Email →"
+              onPress={handleCheckVerification}
               style={styles.verifyBtn}
             />
           )}
 
+          {/* Resend Action */}
+          <View style={styles.resendSection}>
+            <Text style={styles.didNotReceive}>Didn't receive the email?</Text>
+            <View style={styles.timerRow}>
+              {timer > 0 ? (
+                <View style={styles.timerPill}>
+                  <MaterialIcons name="access-time" size={16} color={colors.accent} />
+                  <Text style={styles.timerText}>
+                    Resend in 00:{timer < 10 ? `0${timer}` : timer}
+                  </Text>
+                </View>
+              ) : (
+                <TouchableOpacity onPress={handleResend} disabled={resending}>
+                  {resending ? (
+                    <ActivityIndicator size="small" color={colors.accent} />
+                  ) : (
+                    <Text style={styles.resendText}>Resend Verification Email</Text>
+                  )}
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+
+          <TouchableOpacity onPress={handleBackToLogin} style={styles.backToLoginBtn}>
+            <Text style={styles.backToLoginText}>Log In with Another Account</Text>
+          </TouchableOpacity>
+
           <Text style={styles.securityBadge}>
             SMARTLANKA TRADE SECURITY
           </Text>
-        </View>
-
-        {/* Custom Keypad */}
-        <View style={styles.keypadContainer}>
-          {[['1', '2', '3'], ['4', '5', '6'], ['7', '8', '9']].map((row, i) => (
-            <View key={i} style={styles.keypadRow}>
-              {row.map(num => (
-                <TouchableOpacity key={num} style={styles.keypadButton} onPress={() => handleKeyPress(num)}>
-                  <Text style={styles.keypadText}>{num}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          ))}
-          <View style={styles.keypadRow}>
-            <TouchableOpacity style={styles.keypadButton} onPress={handleBiometric}>
-              <MaterialIcons name="fingerprint" size={28} color={colors.textSecondary} />
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.keypadButton} onPress={() => handleKeyPress('0')}>
-              <Text style={styles.keypadText}>0</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.keypadButton} onPress={handleDelete}>
-              <FontAwesome5 name="backspace" size={20} color={colors.textSecondary} />
-            </TouchableOpacity>
-          </View>
         </View>
 
       </ScrollView>
@@ -223,6 +194,7 @@ const styles = StyleSheet.create({
   container: {
     flexGrow: 1,
     justifyContent: 'space-between',
+    paddingBottom: 30,
   },
   header: {
     flexDirection: 'row',
@@ -243,67 +215,69 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 24,
     flex: 1,
+    justifyContent: 'center',
   },
   iconContainer: {
-    width: 80,
-    height: 80,
-    borderRadius: 24,
+    width: 88,
+    height: 88,
+    borderRadius: 28,
     backgroundColor: colors.bgInput,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 24,
-    marginTop: 20,
+    borderWidth: 1,
+    borderColor: colors.accentMuted,
   },
   mainTitle: {
     ...typography.h2,
     marginBottom: 12,
+    textAlign: 'center',
   },
   description: {
     ...typography.body,
     color: colors.textSecondary,
     textAlign: 'center',
-    marginBottom: 32,
+    marginBottom: 24,
     lineHeight: 24,
   },
   highlightText: {
     color: colors.textPrimary,
-    fontWeight: '600',
+    fontWeight: '700',
   },
-  otpContainer: {
+  infoCard: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    width: '100%',
-    marginBottom: 32,
-  },
-  otpBox: {
-    width: 48,
-    height: 56,
-    borderRadius: 12,
+    backgroundColor: colors.bgCard,
     borderWidth: 1,
     borderColor: colors.border,
-    backgroundColor: colors.bgInput,
-    justifyContent: 'center',
+    borderRadius: layout.borderRadiusCard,
+    padding: 16,
+    marginBottom: 28,
+    width: '100%',
+    alignItems: 'flex-start',
+  },
+  infoCardText: {
+    ...typography.bodySmall,
+    color: colors.textSecondary,
+    flex: 1,
+    lineHeight: 20,
+  },
+  verifyBtn: {
+    width: '100%',
+    marginBottom: 24,
+  },
+  resendSection: {
     alignItems: 'center',
-  },
-  otpBoxActive: {
-    borderColor: colors.accent,
-    borderWidth: 2,
-  },
-  otpBoxFilled: {
-    borderColor: colors.textSecondary,
-  },
-  otpText: {
-    ...typography.h3,
+    marginBottom: 20,
   },
   didNotReceive: {
     ...typography.bodySmall,
-    marginBottom: 16,
+    color: colors.textSecondary,
+    marginBottom: 8,
   },
   timerRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 32,
   },
   timerPill: {
     flexDirection: 'row',
@@ -312,7 +286,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
-    marginRight: 16,
   },
   timerText: {
     ...typography.bodySmall,
@@ -323,39 +296,21 @@ const styles = StyleSheet.create({
   resendText: {
     ...typography.body,
     color: colors.accent,
-    fontWeight: '600',
+    fontWeight: '700',
   },
-  resendTextDisabled: {
+  backToLoginBtn: {
+    paddingVertical: 12,
+    marginBottom: 24,
+  },
+  backToLoginText: {
+    ...typography.bodySmall,
     color: colors.textMuted,
-  },
-  verifyBtn: {
-    marginBottom: 32,
+    fontWeight: '600',
   },
   securityBadge: {
     ...typography.label,
     color: colors.textMuted,
     letterSpacing: 2,
-    marginBottom: 20,
-  },
-  keypadContainer: {
-    backgroundColor: '#0a0a0a',
-    paddingBottom: 40,
-    paddingTop: 20,
-    paddingHorizontal: 24,
-  },
-  keypadRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    marginBottom: 20,
-  },
-  keypadButton: {
-    width: 80,
-    height: 60,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  keypadText: {
-    ...typography.h2,
-    fontWeight: '400',
+    marginTop: 8,
   },
 });

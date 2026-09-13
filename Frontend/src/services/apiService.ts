@@ -22,9 +22,16 @@ const api = axios.create({
   },
 });
 
-// Add interceptor to include JWT token from SecureStore
+// Add interceptor to include Firebase ID token from FirebaseAuthService / SecureStore
 api.interceptors.request.use(async (config) => {
-  const token = await storageService.getToken();
+  let token: string | null = null;
+  try {
+    const { firebaseAuthService } = require('./firebaseAuthService');
+    token = await firebaseAuthService.getIdToken();
+  } catch (e) {
+    token = await storageService.getToken();
+  }
+
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
@@ -54,11 +61,10 @@ api.interceptors.response.use(
 );
 
 export const authService = {
-  login: async (email: string, password: string) => {
+  sync: async () => {
     try {
-      const response = await api.post('/auth/login', { email, password });
-      if (response.data.token) {
-        await storageService.setToken(response.data.token);
+      const response = await api.post('/auth/sync');
+      if (response.data && response.data.user) {
         await storageService.setUserData(response.data.user);
       }
       return response.data;
@@ -66,22 +72,55 @@ export const authService = {
       throw error;
     }
   },
+  login: async (email: string, password: string) => {
+    try {
+      const { firebaseAuthService } = require('./firebaseAuthService');
+      const { user, token } = await firebaseAuthService.login(email, password);
+      // Synchronize with Oracle backend
+      let backendUser = null;
+      try {
+        const syncRes = await api.post('/auth/sync');
+        backendUser = syncRes.data.user;
+        if (backendUser) {
+          await storageService.setUserData(backendUser);
+        }
+      } catch (syncErr) {
+        console.warn('Backend user synchronization error on login:', syncErr);
+      }
+      return { token, user: backendUser || user };
+    } catch (error: any) {
+      throw error;
+    }
+  },
   register: async (name: string, email: string, password: string) => {
     try {
-      const response = await api.post('/auth/register', { name, email, password });
-      return response.data;
+      const { firebaseAuthService } = require('./firebaseAuthService');
+      const { user } = await firebaseAuthService.register(name, email, password);
+      // Synchronize initial record with Oracle backend
+      try {
+        await api.post('/auth/sync');
+      } catch (syncErr) {
+        console.warn('Backend user synchronization error on register:', syncErr);
+      }
+      return { success: true, user };
     } catch (error: any) {
       throw error;
     }
   },
   logout: async () => {
-    await storageService.clearAuthSession();
-    await AsyncStorage.removeItem('rememberMe');
+    try {
+      const { firebaseAuthService } = require('./firebaseAuthService');
+      await firebaseAuthService.logout();
+    } catch (e) {
+      await storageService.clearAuthSession();
+      await AsyncStorage.removeItem('rememberMe');
+    }
   },
   forgotPassword: async (email: string) => {
     try {
-      const response = await api.post('/auth/forgot-password', { email });
-      return response.data;
+      const { firebaseAuthService } = require('./firebaseAuthService');
+      await firebaseAuthService.sendPasswordReset(email);
+      return { success: true, message: 'Password reset link sent to your email.' };
     } catch (error: any) {
       throw error;
     }
@@ -102,26 +141,33 @@ export const authService = {
       throw error;
     }
   },
-  sendVerification: async (email: string) => {
+  sendVerification: async (email?: string) => {
     try {
-      const response = await api.post('/auth/send-verification', { email });
-      return response.data;
+      const { firebaseAuthService } = require('./firebaseAuthService');
+      await firebaseAuthService.sendEmailVerification();
+      return { success: true, message: 'Verification email sent successfully.' };
     } catch (error: any) {
       throw error;
     }
   },
-  verifyEmail: async (email: string, otp: string) => {
+  verifyEmail: async (email: string, otp?: string) => {
     try {
-      const response = await api.post('/auth/verify-email', { email, otp });
-      return response.data;
+      const { firebaseAuthService } = require('./firebaseAuthService');
+      const user = await firebaseAuthService.reloadUser();
+      return {
+        success: true,
+        verified: user?.emailVerified || false,
+        message: user?.emailVerified ? 'Email verified successfully!' : 'Email not yet verified.'
+      };
     } catch (error: any) {
       throw error;
     }
   },
-  resendVerification: async (email: string) => {
+  resendVerification: async (email?: string) => {
     try {
-      const response = await api.post('/auth/resend-verification', { email });
-      return response.data;
+      const { firebaseAuthService } = require('./firebaseAuthService');
+      await firebaseAuthService.sendEmailVerification();
+      return { success: true, message: 'Verification email resent successfully.' };
     } catch (error: any) {
       throw error;
     }
@@ -134,14 +180,21 @@ export const authService = {
       throw error;
     }
   },
-  googleLogin: async (idToken: string) => {
+  googleLogin: async (idToken: string, accessToken?: string) => {
     try {
-      const response = await api.post('/auth/google-login', { idToken });
-      if (response.data.token) {
-        await storageService.setToken(response.data.token);
-        await storageService.setUserData(response.data.user);
+      const { firebaseAuthService } = require('./firebaseAuthService');
+      const { user, token } = await firebaseAuthService.signInWithGoogleIdToken(idToken, accessToken);
+      let backendUser = null;
+      try {
+        const syncRes = await api.post('/auth/sync');
+        backendUser = syncRes.data.user;
+        if (backendUser) {
+          await storageService.setUserData(backendUser);
+        }
+      } catch (syncErr) {
+        console.warn('Backend user synchronization error on Google sign-in:', syncErr);
       }
-      return response.data;
+      return { token, user: backendUser || user };
     } catch (error: any) {
       throw error;
     }
@@ -177,6 +230,7 @@ export const authService = {
     }
   }
 };
+
 
 export const marketService = {
   getPriceLKR: async (symbol: string = 'BTCUSDT') => {

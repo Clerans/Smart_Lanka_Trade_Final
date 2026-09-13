@@ -237,6 +237,23 @@ exports.validateToken = async (req, res) => {
   });
 };
 
+exports.syncUser = async (req, res) => {
+  try {
+    const profile = await authService.getUserProfile(req.user.id);
+    res.json({
+      success: true,
+      user: profile
+    });
+  } catch (err) {
+    res.status(err.status || 500).json({
+      success: false,
+      code: err.code || 'SERVER_ERROR',
+      message: err.message
+    });
+  }
+};
+
+
 exports.getUsers = async (req, res) => {
   try {
     const userModel = require('../models/userModel');

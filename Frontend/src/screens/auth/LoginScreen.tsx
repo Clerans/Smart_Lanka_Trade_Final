@@ -157,6 +157,17 @@ export const LoginScreen = () => {
     try {
       const authResult = await authService.login(email.trim(), password);
       if (authResult && authResult.token) {
+        const { firebaseAuthService } = require('../../services/firebaseAuthService');
+        const currentUser = firebaseAuthService.getCurrentUser();
+        
+        if (currentUser && !currentUser.emailVerified) {
+          showToast('Please verify your email address before proceeding.', 'warning');
+          setTimeout(() => {
+            navigation.navigate('OTPVerification', { email: email.trim() });
+          }, 1200);
+          return;
+        }
+
         if (rememberMe) {
           await AsyncStorage.setItem('rememberMe', 'true');
           await AsyncStorage.setItem('savedEmail', email.trim());
@@ -169,11 +180,6 @@ export const LoginScreen = () => {
     } catch (error: any) {
       if (error.code === 'NETWORK_ERROR') {
         setIsNetworkError(true);
-      } else if (error.code === 'EMAIL_NOT_VERIFIED') {
-        showToast('Please verify your email before logging in. Redirecting...', 'warning');
-        setTimeout(() => {
-          navigation.navigate('OTPVerification', { email: email.trim() });
-        }, 2000);
       } else {
         showToast(error.message || 'Login failed. Please check your credentials.', 'error');
       }
