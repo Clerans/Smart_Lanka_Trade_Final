@@ -1,5 +1,15 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  ScrollView,
+  TextInput,
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -13,6 +23,10 @@ export const OTPVerificationScreen = () => {
   const route = useRoute<any>();
   const email = route.params?.email || firebaseAuthService.getCurrentUser()?.email || '';
 
+  // 6-digit OTP State
+  const [otp, setOtp] = useState<string[]>(['', '', '', '', '', '']);
+  const inputRefs = useRef<Array<TextInput | null>>([]);
+
   const [timer, setTimer] = useState(60);
   const [loading, setLoading] = useState(false);
   const [resending, setResending] = useState(false);
@@ -23,6 +37,14 @@ export const OTPVerificationScreen = () => {
   const [toastType, setToastType] = useState<'success' | 'error' | 'warning'>('success');
   const [isNetworkError, setIsNetworkError] = useState(false);
 
+  // Focus first input on mount
+  useEffect(() => {
+    setTimeout(() => {
+      inputRefs.current[0]?.focus();
+    }, 500);
+  }, []);
+
+  // Resend Countdown
   useEffect(() => {
     if (timer > 0) {
       const interval = setInterval(() => setTimer(t => t - 1), 1000);
@@ -36,30 +58,78 @@ export const OTPVerificationScreen = () => {
     setToastVisible(true);
   };
 
-  const handleCheckVerification = async () => {
+  // Mask email for display (e.g. cl****pc@gmail.com)
+  const maskEmail = (str: string) => {
+    if (!str || !str.includes('@')) return str || 'your registered email';
+    const [user, domain] = str.split('@');
+    if (user.length <= 2) {
+      return `${user[0]}*@${domain}`;
+    }
+    const visibleStart = user.substring(0, 2);
+    const visibleEnd = user.substring(user.length - 2);
+    return `${visibleStart}****${visibleEnd}@${domain}`;
+  };
+
+  // Handle individual digit change with auto-advance and paste support
+  const handleDigitChange = (value: string, index: number) => {
+    // Handle paste of full 6-digit string
+    const cleanDigits = value.replace(/[^0-9]/g, '');
+    if (cleanDigits.length > 1) {
+      const newOtp = [...otp];
+      for (let i = 0; i < 6; i++) {
+        newOtp[i] = cleanDigits[i] || '';
+      }
+      setOtp(newOtp);
+      const nextFocus = Math.min(cleanDigits.length, 5);
+      inputRefs.current[nextFocus]?.focus();
+      return;
+    }
+
+    const singleDigit = cleanDigits.slice(-1);
+    const newOtp = [...otp];
+    newOtp[index] = singleDigit;
+    setOtp(newOtp);
+
+    // Auto-advance to next box if digit entered
+    if (singleDigit && index < 5) {
+      inputRefs.current[index + 1]?.focus();
+    }
+  };
+
+  // Handle backspace key press
+  const handleKeyPress = (e: any, index: number) => {
+    if (e.nativeEvent.key === 'Backspace') {
+      if (!otp[index] && index > 0) {
+        const newOtp = [...otp];
+        newOtp[index - 1] = '';
+        setOtp(newOtp);
+        inputRefs.current[index - 1]?.focus();
+      }
+    }
+  };
+
+  const isOtpComplete = otp.every(digit => digit.length === 1);
+  const otpString = otp.join('');
+
+  const handleVerify = async () => {
+    if (!isOtpComplete) {
+      showToast('Please enter the full 6-digit verification code.', 'warning');
+      return;
+    }
+
     setLoading(true);
     setIsNetworkError(false);
     try {
-      const user = await firebaseAuthService.reloadUser();
-
-      if (user?.emailVerified) {
-        showToast('Email verified successfully! Syncing your account...', 'success');
-        try {
-          await authService.sync();
-        } catch (syncErr) {
-          console.warn('Sync warning:', syncErr);
-        }
-        setTimeout(() => {
-          navigation.replace('MainApp');
-        }, 1000);
-      } else {
-        showToast('Email not yet verified. Please tap the verification link in your email and try again.', 'warning');
-      }
+      const result = await authService.verifyEmail(email, otpString);
+      showToast(result.message || 'Email verified successfully!', 'success');
+      setTimeout(() => {
+        navigation.replace('MainApp');
+      }, 1000);
     } catch (error: any) {
       if (error.code === 'NETWORK_ERROR') {
         setIsNetworkError(true);
       } else {
-        showToast(error.message || 'Could not verify status. Please try again.', 'error');
+        showToast(error.message || 'Verification failed. Please check the code and try again.', 'error');
       }
     } finally {
       setLoading(false);
@@ -71,14 +141,16 @@ export const OTPVerificationScreen = () => {
     setResending(true);
     setIsNetworkError(false);
     try {
-      await firebaseAuthService.sendEmailVerification();
-      showToast('A new verification email has been sent!', 'success');
+      await authService.resendVerification(email);
+      showToast('A new 6-digit verification code has been sent!', 'success');
       setTimer(60);
+      setOtp(['', '', '', '', '', '']);
+      inputRefs.current[0]?.focus();
     } catch (error: any) {
       if (error.code === 'NETWORK_ERROR') {
         setIsNetworkError(true);
       } else {
-        showToast(error.message || 'Failed to resend verification email.', 'error');
+        showToast(error.message || 'Failed to resend verification code.', 'error');
       }
     } finally {
       setResending(false);
@@ -96,7 +168,7 @@ export const OTPVerificationScreen = () => {
         <NetworkErrorScreen
           onRetry={() => {
             setIsNetworkError(false);
-            handleCheckVerification();
+            handleVerify();
           }}
         />
       )}
@@ -106,82 +178,101 @@ export const OTPVerificationScreen = () => {
         type={toastType}
         onDismiss={() => setToastVisible(false)}
       />
-      <ScrollView contentContainerStyle={styles.container}>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        <ScrollView contentContainerStyle={styles.container}>
 
-        {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity onPress={handleBackToLogin} style={styles.backButton}>
-            <MaterialIcons name="arrow-back" size={24} color="#FFF" />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Email Verification</Text>
-          <View style={{ width: 24 }} />
-        </View>
-
-        {/* Content */}
-        <View style={styles.content}>
-          <View style={styles.iconContainer}>
-            <MaterialIcons name="mark-email-read" size={48} color={colors.accent} />
+          {/* Header */}
+          <View style={styles.header}>
+            <TouchableOpacity onPress={handleBackToLogin} style={styles.backButton}>
+              <MaterialIcons name="arrow-back" size={24} color="#FFF" />
+            </TouchableOpacity>
+            <Text style={styles.headerTitle}>Email Verification</Text>
+            <View style={{ width: 24 }} />
           </View>
 
-          <Text style={styles.mainTitle}>Check Your Inbox</Text>
-          <Text style={styles.description}>
-            We have sent a verification email to{' '}
-            <Text style={styles.highlightText}>{email || 'your registered email'}</Text>.
-            Please click the verification link in the email to activate your account.
-          </Text>
+          {/* Content */}
+          <View style={styles.content}>
+            <View style={styles.iconContainer}>
+              <MaterialIcons name="mark-email-read" size={44} color={colors.accent} />
+            </View>
 
-          {/* Info Card */}
-          <View style={styles.infoCard}>
-            <MaterialIcons name="info-outline" size={20} color={colors.accent} style={{ marginRight: 10, marginTop: 2 }} />
-            <Text style={styles.infoCardText}>
-              Once you tap the link in your email, return to this screen and tap the button below.
+            <Text style={styles.mainTitle}>Verify Your Email</Text>
+            <Text style={styles.description}>
+              We've sent a 6-digit verification code to
+            </Text>
+            <Text style={styles.highlightText}>{maskEmail(email)}</Text>
+
+            {/* 6-Digit OTP Input Boxes */}
+            <View style={styles.otpRow}>
+              {otp.map((digit, index) => (
+                <TextInput
+                  key={index}
+                  ref={el => (inputRefs.current[index] = el)}
+                  style={[
+                    styles.otpBox,
+                    digit ? styles.otpBoxFilled : null,
+                  ]}
+                  value={digit}
+                  onChangeText={val => handleDigitChange(val, index)}
+                  onKeyPress={e => handleKeyPress(e, index)}
+                  keyboardType="number-pad"
+                  maxLength={6} // Allows paste
+                  selectTextOnFocus
+                  textAlign="center"
+                  accessibilityLabel={`OTP Digit ${index + 1}`}
+                />
+              ))}
+            </View>
+
+            {/* Verify Button */}
+            {loading ? (
+              <ActivityIndicator color={colors.accent} size="large" style={{ marginVertical: 20 }} />
+            ) : (
+              <PrimaryButton
+                title="Verify Email →"
+                onPress={handleVerify}
+                disabled={!isOtpComplete}
+                style={[styles.verifyBtn, !isOtpComplete && { opacity: 0.5 }]}
+              />
+            )}
+
+            {/* Resend Action */}
+            <View style={styles.resendSection}>
+              <Text style={styles.didNotReceive}>Didn't receive the code?</Text>
+              <View style={styles.timerRow}>
+                {timer > 0 ? (
+                  <View style={styles.timerPill}>
+                    <MaterialIcons name="access-time" size={16} color={colors.accent} />
+                    <Text style={styles.timerText}>
+                      Resend code in 00:{timer < 10 ? `0${timer}` : timer}
+                    </Text>
+                  </View>
+                ) : (
+                  <TouchableOpacity onPress={handleResend} disabled={resending}>
+                    {resending ? (
+                      <ActivityIndicator size="small" color={colors.accent} />
+                    ) : (
+                      <Text style={styles.resendText}>Resend 6-Digit Code</Text>
+                    )}
+                  </TouchableOpacity>
+                )}
+              </View>
+            </View>
+
+            <TouchableOpacity onPress={handleBackToLogin} style={styles.backToLoginBtn}>
+              <Text style={styles.backToLoginText}>Log In with Another Account</Text>
+            </TouchableOpacity>
+
+            <Text style={styles.securityBadge}>
+              SMARTLANKA TRADE SECURITY
             </Text>
           </View>
 
-          {/* Primary Action Button */}
-          {loading ? (
-            <ActivityIndicator color={colors.accent} size="large" style={{ marginVertical: 20 }} />
-          ) : (
-            <PrimaryButton
-              title="I've Verified My Email →"
-              onPress={handleCheckVerification}
-              style={styles.verifyBtn}
-            />
-          )}
-
-          {/* Resend Action */}
-          <View style={styles.resendSection}>
-            <Text style={styles.didNotReceive}>Didn't receive the email?</Text>
-            <View style={styles.timerRow}>
-              {timer > 0 ? (
-                <View style={styles.timerPill}>
-                  <MaterialIcons name="access-time" size={16} color={colors.accent} />
-                  <Text style={styles.timerText}>
-                    Resend in 00:{timer < 10 ? `0${timer}` : timer}
-                  </Text>
-                </View>
-              ) : (
-                <TouchableOpacity onPress={handleResend} disabled={resending}>
-                  {resending ? (
-                    <ActivityIndicator size="small" color={colors.accent} />
-                  ) : (
-                    <Text style={styles.resendText}>Resend Verification Email</Text>
-                  )}
-                </TouchableOpacity>
-              )}
-            </View>
-          </View>
-
-          <TouchableOpacity onPress={handleBackToLogin} style={styles.backToLoginBtn}>
-            <Text style={styles.backToLoginText}>Log In with Another Account</Text>
-          </TouchableOpacity>
-
-          <Text style={styles.securityBadge}>
-            SMARTLANKA TRADE SECURITY
-          </Text>
-        </View>
-
-      </ScrollView>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 };
@@ -218,48 +309,57 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   iconContainer: {
-    width: 88,
-    height: 88,
-    borderRadius: 28,
+    width: 80,
+    height: 80,
+    borderRadius: 24,
     backgroundColor: colors.bgInput,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 24,
+    marginBottom: 20,
     borderWidth: 1,
     borderColor: colors.accentMuted,
   },
   mainTitle: {
     ...typography.h2,
-    marginBottom: 12,
+    marginBottom: 8,
     textAlign: 'center',
+    fontSize: 22,
   },
   description: {
     ...typography.body,
     color: colors.textSecondary,
     textAlign: 'center',
-    marginBottom: 24,
-    lineHeight: 24,
+    marginBottom: 4,
+    lineHeight: 22,
   },
   highlightText: {
-    color: colors.textPrimary,
+    color: colors.accent,
     fontWeight: '700',
-  },
-  infoCard: {
-    flexDirection: 'row',
-    backgroundColor: colors.bgCard,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: layout.borderRadius,
-    padding: 16,
+    fontSize: 15,
     marginBottom: 28,
-    width: '100%',
-    alignItems: 'flex-start',
   },
-  infoCardText: {
-    ...typography.bodySmall,
-    color: colors.textSecondary,
-    flex: 1,
-    lineHeight: 20,
+  otpRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    width: '100%',
+    marginBottom: 32,
+    paddingHorizontal: 4,
+  },
+  otpBox: {
+    width: 48,
+    height: 56,
+    borderRadius: 12,
+    backgroundColor: colors.bgInput,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    color: '#FFF',
+    fontSize: 22,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  otpBoxFilled: {
+    borderColor: colors.accent,
+    backgroundColor: 'rgba(0, 229, 255, 0.05)',
   },
   verifyBtn: {
     width: '100%',
@@ -300,7 +400,7 @@ const styles = StyleSheet.create({
   },
   backToLoginBtn: {
     paddingVertical: 12,
-    marginBottom: 24,
+    marginBottom: 20,
   },
   backToLoginText: {
     ...typography.bodySmall,

@@ -161,7 +161,10 @@ export const LoginScreen = () => {
         const currentUser = firebaseAuthService.getCurrentUser();
         
         if (currentUser && !currentUser.emailVerified) {
-          showToast('Please verify your email address before proceeding.', 'warning');
+          showToast('Verification required. Sending new 6-digit code...', 'warning');
+          try {
+            await authService.sendVerification(email.trim());
+          } catch (e) {}
           setTimeout(() => {
             navigation.navigate('OTPVerification', { email: email.trim() });
           }, 1200);

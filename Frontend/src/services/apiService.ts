@@ -95,14 +95,26 @@ export const authService = {
   register: async (name: string, email: string, password: string) => {
     try {
       const { firebaseAuthService } = require('./firebaseAuthService');
-      const { user, emailSent } = await firebaseAuthService.register(name, email, password);
+      const cleanEmail = email.trim().toLowerCase();
+      const cleanName = name.trim();
+
+      const { user } = await firebaseAuthService.register(cleanName, cleanEmail, password);
+
       // Synchronize initial record with Oracle backend
       try {
         await api.post('/auth/sync');
       } catch (syncErr) {
-        console.warn('Backend user synchronization error on register:', syncErr);
+        console.warn('Backend user synchronization on register:', syncErr);
       }
-      return { success: true, user, emailSent };
+
+      // Generate & send 6-digit verification code via Resend
+      try {
+        await api.post('/auth/send-verification', { email: cleanEmail });
+      } catch (otpErr) {
+        console.warn('Initial OTP email dispatch:', otpErr);
+      }
+
+      return { success: true, user };
     } catch (error: any) {
       throw error;
     }
@@ -143,21 +155,38 @@ export const authService = {
   },
   sendVerification: async (email?: string) => {
     try {
-      const { firebaseAuthService } = require('./firebaseAuthService');
-      await firebaseAuthService.sendEmailVerification();
-      return { success: true, message: 'Verification email sent successfully.' };
+      const targetEmail = email || (await storageService.getUserData())?.email;
+      const response = await api.post('/auth/send-verification', { email: targetEmail });
+      return response.data;
     } catch (error: any) {
       throw error;
     }
   },
-  verifyEmail: async (email: string, otp?: string) => {
+  verifyEmail: async (email: string, otp: string) => {
     try {
       const { firebaseAuthService } = require('./firebaseAuthService');
-      const user = await firebaseAuthService.reloadUser();
+      
+      // 1. Verify 6-digit OTP on backend (updates Oracle IS_VERIFIED and Firebase Admin emailVerified)
+      const response = await api.post('/auth/verify-email', { email: email.trim().toLowerCase(), otp: otp.trim() });
+      
+      // 2. Reload Firebase user to refresh local emailVerified state
+      const reloadedUser = await firebaseAuthService.reloadUser();
+      
+      // 3. Obtain refreshed ID token
+      await firebaseAuthService.getIdToken(true);
+
+      // 4. Synchronize state with Oracle
+      try {
+        const syncRes = await api.post('/auth/sync');
+        if (syncRes.data?.user) {
+          await storageService.setUserData(syncRes.data.user);
+        }
+      } catch (syncErr) {}
+
       return {
         success: true,
-        verified: user?.emailVerified || false,
-        message: user?.emailVerified ? 'Email verified successfully!' : 'Email not yet verified.'
+        verified: reloadedUser?.emailVerified || true,
+        message: response.data?.message || 'Email verified successfully!'
       };
     } catch (error: any) {
       throw error;
@@ -165,9 +194,9 @@ export const authService = {
   },
   resendVerification: async (email?: string) => {
     try {
-      const { firebaseAuthService } = require('./firebaseAuthService');
-      await firebaseAuthService.sendEmailVerification();
-      return { success: true, message: 'Verification email resent successfully.' };
+      const targetEmail = email || (await storageService.getUserData())?.email;
+      const response = await api.post('/auth/resend-verification', { email: targetEmail });
+      return response.data;
     } catch (error: any) {
       throw error;
     }

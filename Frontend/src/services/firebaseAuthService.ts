@@ -58,7 +58,7 @@ export const firebaseAuthService = {
   /**
    * Register a new user with Firebase Authentication
    */
-  register: async (name: string, email: string, password: string): Promise<{ user: User; emailSent: boolean }> => {
+  register: async (name: string, email: string, password: string): Promise<{ user: User }> => {
     try {
       const cleanEmail = email.trim().toLowerCase();
       const cleanName = name.trim();
@@ -73,19 +73,10 @@ export const firebaseAuthService = {
         // profile error non-fatal
       }
 
-      // Automatically send Firebase email verification
-      let emailSent = false;
-      try {
-        await firebaseSendEmailVerification(user);
-        emailSent = true;
-      } catch (verifyErr) {
-        emailSent = false;
-      }
-
       const token = await user.getIdToken();
       await storageService.setToken(token);
 
-      return { user, emailSent };
+      return { user };
     } catch (error: any) {
       const userMessage = mapFirebaseAuthError(error);
       const customErr: any = new Error(userMessage);
