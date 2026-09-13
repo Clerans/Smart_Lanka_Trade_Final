@@ -95,14 +95,14 @@ export const authService = {
   register: async (name: string, email: string, password: string) => {
     try {
       const { firebaseAuthService } = require('./firebaseAuthService');
-      const { user } = await firebaseAuthService.register(name, email, password);
+      const { user, emailSent } = await firebaseAuthService.register(name, email, password);
       // Synchronize initial record with Oracle backend
       try {
         await api.post('/auth/sync');
       } catch (syncErr) {
         console.warn('Backend user synchronization error on register:', syncErr);
       }
-      return { success: true, user };
+      return { success: true, user, emailSent };
     } catch (error: any) {
       throw error;
     }
@@ -201,8 +201,8 @@ export const authService = {
   },
   changePassword: async (currentPassword: string, newPassword: string) => {
     try {
-      const response = await api.post('/auth/change-password', { currentPassword, newPassword });
-      return response.data;
+      const { firebaseAuthService } = require('./firebaseAuthService');
+      return await firebaseAuthService.changePassword(currentPassword, newPassword);
     } catch (error: any) {
       throw error;
     }

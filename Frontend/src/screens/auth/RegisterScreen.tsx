@@ -85,8 +85,12 @@ export const RegisterScreen = () => {
     setLoading(true);
     setIsNetworkError(false);
     try {
-      await authService.register(name.trim(), email.trim(), password);
-      showToast('Account created! Verification email sent.', 'success');
+      const result = await authService.register(name.trim(), email.trim(), password);
+      if (result.emailSent) {
+        showToast('Account created! Verification email sent.', 'success');
+      } else {
+        showToast('Account created! Could not send email automatically. Please tap resend on the next screen.', 'warning');
+      }
       setTimeout(() => {
         navigation.navigate('OTPVerification', { email: email.trim(), name: name.trim() });
       }, 1500);

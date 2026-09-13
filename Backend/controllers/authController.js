@@ -253,6 +253,45 @@ exports.syncUser = async (req, res) => {
   }
 };
 
+exports.linkLegacyAccount = async (req, res) => {
+  try {
+    const { legacyPassword } = req.body;
+    if (!legacyPassword) {
+      return res.status(422).json({
+        success: false,
+        code: 'MISSING_FIELDS',
+        message: 'Legacy account password is required.'
+      });
+    }
+
+    if (!req.firebaseUser || !req.firebaseUser.uid || !req.firebaseUser.email) {
+      return res.status(401).json({
+        success: false,
+        code: 'UNAUTHORIZED',
+        message: 'A verified Firebase authenticated session is required to link an existing account.'
+      });
+    }
+
+    const userProfile = await authService.linkLegacyAccount(
+      req.firebaseUser.uid,
+      req.firebaseUser.email,
+      legacyPassword
+    );
+
+    res.json({
+      success: true,
+      message: 'Legacy account successfully verified and linked!',
+      user: userProfile
+    });
+  } catch (err) {
+    res.status(err.status || 500).json({
+      success: false,
+      code: err.code || 'SERVER_ERROR',
+      message: err.message
+    });
+  }
+};
+
 
 exports.getUsers = async (req, res) => {
   try {

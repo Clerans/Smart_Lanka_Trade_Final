@@ -16,7 +16,8 @@ const {
   changePassword,
   getProfile,
   updateProfile,
-  syncUser
+  syncUser,
+  linkLegacyAccount
 } = require('../controllers/authController');
 const { protect } = require('../middleware/authMiddleware');
 const { requireAdmin } = require('../middleware/adminMiddleware');
@@ -24,6 +25,7 @@ const { requireAdmin } = require('../middleware/adminMiddleware');
 // Firebase user synchronization endpoint
 router.post('/sync', protect, syncUser);
 router.get('/me', protect, syncUser);
+router.post('/link-legacy-account', protect, linkLegacyAccount);
 
 router.post('/register', register);
 router.post('/login', login);

@@ -427,6 +427,57 @@ exports.updateUserProfile = async (userId, { name, email, phoneNumber, profileIm
   };
 };
 
+/**
+ * Safely link an existing legacy Oracle user account to a verified Firebase UID
+ * Requires explicit validation of the legacy password (bcrypt) to prevent Account Takeover.
+ */
+exports.linkLegacyAccount = async (firebaseUid, email, legacyPassword) => {
+  if (!firebaseUid || !email || !legacyPassword) {
+    throw createError('MISSING_FIELDS', 'Firebase UID, email, and legacy password are required.', 422);
+  }
+
+  const cleanEmail = email.trim().toLowerCase();
+  const user = await userModel.findByEmail(cleanEmail);
+  if (!user) {
+    throw createError('USER_NOT_FOUND', 'No existing Oracle account found for this email address.', 404);
+  }
+
+  // Prevent linking to accounts already bound to a Firebase UID
+  if (user.FIREBASE_UID) {
+    if (user.FIREBASE_UID === firebaseUid) {
+      return exports.getUserProfile(user.ID);
+    }
+    throw createError('ALREADY_LINKED', 'This account is already linked to a different Firebase identity.', 409);
+  }
+
+  // Protect administrative accounts
+  if ((user.ROLE || '').toUpperCase() === 'ADMIN') {
+    throw createError('ADMIN_LINK_RESTRICTED', 'Administrative accounts cannot be linked through automated migration. Contact security admin.', 403);
+  }
+
+  // Check account lock status
+  if (user.ACCOUNT_LOCKED_UNTIL && new Date(user.ACCOUNT_LOCKED_UNTIL) > new Date()) {
+    throw createError('ACCOUNT_LOCKED', 'Account is temporarily locked. Try again later.', 403);
+  }
+
+  // Verify legacy password with bcrypt
+  const isMatch = await bcrypt.compare(legacyPassword, user.PASSWORD);
+  if (!isMatch) {
+    throw createError('INVALID_PASSWORD', 'Invalid legacy account password.', 401);
+  }
+
+  // Link FIREBASE_UID and ensure IS_VERIFIED
+  await userModel.linkFirebaseUid(user.ID, firebaseUid);
+  await userModel.verifyUser(user.ID);
+
+  console.log(`🔒 [Legacy Migration] Successfully verified password and linked user ${user.ID} to Firebase UID ${firebaseUid}`);
+  return await exports.getUserProfile(user.ID);
+};
+
+/**
+ * @deprecated For Firebase-authenticated users, password changes must occur client-side via Firebase Auth.
+ * Retained temporarily for backward compatibility with legacy sessions.
+ */
 exports.changePasswordUser = async (userId, currentPassword, newPassword) => {
   const user = await userModel.findById(userId);
   if (!user) {
