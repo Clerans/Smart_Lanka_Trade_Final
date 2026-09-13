@@ -210,7 +210,9 @@ export const OTPVerificationScreen = () => {
               {otp.map((digit, index) => (
                 <TextInput
                   key={index}
-                  ref={el => (inputRefs.current[index] = el)}
+                  ref={el => {
+                    inputRefs.current[index] = el;
+                  }}
                   style={[
                     styles.otpBox,
                     digit ? styles.otpBoxFilled : null,
