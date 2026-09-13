@@ -52,19 +52,27 @@ function initFirebaseAdmin() {
       return admin;
     }
 
-    // 4. Default Project Initialization (when running in mock or project ID only)
+    // 4. In Production, fail fast if credentials are not configured
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('FATAL: Firebase Admin SDK credentials missing or incomplete in production environment.');
+    }
+
+    // 5. Non-production / Local fallback (Project ID only)
     if (process.env.FIREBASE_PROJECT_ID) {
       admin.initializeApp({
         projectId: process.env.FIREBASE_PROJECT_ID
       });
       isInitialized = true;
-      console.log(`ℹ️ Firebase Admin SDK initialized with project ID: ${process.env.FIREBASE_PROJECT_ID}`);
+      console.log(`ℹ️ Firebase Admin SDK initialized with project ID (non-production): ${process.env.FIREBASE_PROJECT_ID}`);
       return admin;
     }
 
     console.warn('⚠️ [Firebase Admin] Credentials not found in environment. Set FIREBASE_SERVICE_ACCOUNT or FIREBASE_PROJECT_ID.');
   } catch (error) {
     console.error('❌ Failed to initialize Firebase Admin SDK:', error.message);
+    if (process.env.NODE_ENV === 'production') {
+      throw error;
+    }
   }
 
   return admin;

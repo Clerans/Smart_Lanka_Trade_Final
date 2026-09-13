@@ -8,7 +8,10 @@ import {
   User,
   GoogleAuthProvider,
   signInWithCredential,
-  onAuthStateChanged
+  onAuthStateChanged,
+  EmailAuthProvider,
+  reauthenticateWithCredential,
+  updatePassword
 } from 'firebase/auth';
 import { auth } from '../config/firebase';
 import { storageService } from './storageService';
@@ -41,6 +44,9 @@ export const mapFirebaseAuthError = (error: any): string => {
       return 'Network connection error. Please check your internet connection.';
     case 'auth/requires-recent-login':
       return 'Please log in again to perform this sensitive action.';
+    case 'auth/api-key-not-valid':
+    case 'auth/invalid-api-key':
+      return 'Firebase Web API key is not configured. Please set EXPO_PUBLIC_FIREBASE_API_KEY in Frontend/.env.';
     case 'auth/popup-closed-by-user':
       return 'Sign-in window was closed before completion.';
     default:
@@ -64,17 +70,9 @@ export const firebaseAuthService = {
       try {
         await updateProfile(user, { displayName: cleanName });
       } catch (profileErr) {
-        console.warn('Could not update Firebase profile displayName:', profileErr);
+        // profile error non-fatal
       }
 
-      // Automatically send Firebase email verification
-      try {
-        await firebaseSendEmailVerification(user);
-      } catch (verifyErr) {
-        console.warn('Could not send initial verification email:', verifyErr);
-      }
-
-      // Cache token in SecureStore
       const token = await user.getIdToken();
       await storageService.setToken(token);
 
@@ -84,6 +82,36 @@ export const firebaseAuthService = {
       const customErr: any = new Error(userMessage);
       customErr.code = error.code || 'REGISTER_FAILED';
       customErr.original = error;
+      throw customErr;
+    }
+  },
+
+  /**
+   * Change Password via Firebase Authentication Client SDK
+   * Performs credential re-authentication followed by secure password update.
+   */
+  changePassword: async (currentPassword: string, newPassword: string): Promise<{ success: boolean; message: string }> => {
+    const user = auth.currentUser;
+    if (!user || !user.email) {
+      throw new Error('No authenticated Firebase session found.');
+    }
+
+    try {
+      // 1. Re-authenticate user with current password
+      const credential = EmailAuthProvider.credential(user.email, currentPassword);
+      await reauthenticateWithCredential(user, credential);
+
+      // 2. Update password directly on Firebase Authentication
+      await updatePassword(user, newPassword);
+
+      return {
+        success: true,
+        message: 'Password updated successfully.'
+      };
+    } catch (error: any) {
+      const userMessage = mapFirebaseAuthError(error);
+      const customErr: any = new Error(userMessage);
+      customErr.code = error.code || 'CHANGE_PASSWORD_FAILED';
       throw customErr;
     }
   },

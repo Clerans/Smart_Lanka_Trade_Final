@@ -131,51 +131,70 @@ exports.loginUser = async (email, password) => {
 };
 
 exports.sendVerificationOTP = async (email) => {
-  const user = await userModel.findByEmail(email);
+  const cleanEmail = (email || '').trim().toLowerCase();
+  const user = await userModel.findByEmail(cleanEmail);
   if (!user) {
     throw createError('USER_NOT_FOUND', 'User with this email does not exist.', 404);
   }
 
-  const otp = Math.floor(100000 + Math.random() * 900000).toString();
-  const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
+  // Cryptographically secure 6-digit numeric OTP
+  const otp = crypto.randomInt(100000, 1000000).toString();
+  const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes validity
   await verificationModel.createEmailVerificationOTP(user.ID, otp, expiresAt);
 
-  if (process.env.NODE_ENV !== 'production') {
-    console.log(`\n=================================================`);
-    console.log(`📧 Sent Email Verification OTP to ${email}: ${otp}`);
-    console.log(`=================================================\n`);
-  }
+  // Send branded verification OTP email via Resend
+  await sendVerificationOTPEmail(cleanEmail, otp);
 
-  // Send verification OTP email (awaited)
-  await sendVerificationOTPEmail(email, otp);
-
-  return { success: true };
+  return { success: true, message: 'Verification code sent successfully.' };
 };
 
-exports.verifyEmailOTP = async (email, otp) => {
-  const user = await userModel.findByEmail(email);
+exports.verifyEmailOTP = async (email, otp, firebaseUid = null) => {
+  const cleanEmail = (email || '').trim().toLowerCase();
+  const cleanOtp = (otp || '').toString().trim();
+
+  const user = await userModel.findByEmail(cleanEmail);
   if (!user) {
     throw createError('USER_NOT_FOUND', 'User with this email does not exist.', 404);
   }
 
-  const record = await verificationModel.findEmailVerificationOTP(email, otp);
+  const record = await verificationModel.findEmailVerificationOTP(cleanEmail, cleanOtp);
   if (!record) {
-    throw createError('OTP_INVALID', 'Invalid OTP verification code.', 422);
+    throw createError('OTP_INVALID', 'Invalid verification code. Please check the 6-digit code and try again.', 422);
   }
 
   if (new Date(record.EXPIRES_AT) < new Date()) {
-    throw createError('OTP_EXPIRED', 'OTP verification code has expired (valid for 5 minutes).', 422);
+    throw createError('OTP_EXPIRED', 'Your verification code has expired. Please request a new code.', 422);
   }
 
-  // Update user verified flag and verification record
-  await userModel.verifyUser(user.ID);
+  // 1. Mark OTP as verified (single-use enforcement)
   await verificationModel.markEmailVerificationOTPVerified(record.ID);
 
-  return { message: 'Email verified successfully! You can now log in.' };
+  // 2. Update Oracle user verification state (IS_VERIFIED = 1)
+  await userModel.verifyUser(user.ID);
+
+  // 3. Synchronize with Firebase Authentication (emailVerified = true) via Firebase Admin SDK
+  const targetFirebaseUid = firebaseUid || user.FIREBASE_UID;
+  if (targetFirebaseUid) {
+    try {
+      const { admin } = require('../config/firebaseAdmin');
+      if (admin.apps.length > 0) {
+        await admin.auth().updateUser(targetFirebaseUid, { emailVerified: true });
+        console.log(`✅ [Firebase Admin] Set emailVerified=true for Firebase UID: ${targetFirebaseUid}`);
+      }
+    } catch (fbAdminErr) {
+      console.warn(`⚠️ [Firebase Admin] Could not update emailVerified for ${targetFirebaseUid}:`, fbAdminErr.message);
+    }
+  }
+
+  return { 
+    success: true, 
+    message: 'Email verified successfully!' 
+  };
 };
 
 exports.resendVerificationOTP = async (email) => {
-  const user = await userModel.findByEmail(email);
+  const cleanEmail = (email || '').trim().toLowerCase();
+  const user = await userModel.findByEmail(cleanEmail);
   if (!user) {
     throw createError('USER_NOT_FOUND', 'User with this email does not exist.', 404);
   }
@@ -184,20 +203,15 @@ exports.resendVerificationOTP = async (email) => {
     throw createError('EMAIL_ALREADY_VERIFIED', 'This email is already verified.', 409);
   }
 
-  const otp = Math.floor(100000 + Math.random() * 900000).toString();
-  const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
+  // Cryptographically secure 6-digit numeric OTP
+  const otp = crypto.randomInt(100000, 1000000).toString();
+  const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes validity
   await verificationModel.createEmailVerificationOTP(user.ID, otp, expiresAt);
 
-  if (process.env.NODE_ENV !== 'production') {
-    console.log(`\n=================================================`);
-    console.log(`📧 Resent Email Verification OTP to ${email}: ${otp}`);
-    console.log(`=================================================\n`);
-  }
+  // Send branded verification OTP email via Resend
+  await sendVerificationOTPEmail(cleanEmail, otp);
 
-  // Send verification OTP email (awaited)
-  await sendVerificationOTPEmail(email, otp);
-
-  return { success: true };
+  return { success: true, message: 'Verification code resent successfully.' };
 };
 
 exports.forgotPassword = async (email) => {
@@ -427,6 +441,57 @@ exports.updateUserProfile = async (userId, { name, email, phoneNumber, profileIm
   };
 };
 
+/**
+ * Safely link an existing legacy Oracle user account to a verified Firebase UID
+ * Requires explicit validation of the legacy password (bcrypt) to prevent Account Takeover.
+ */
+exports.linkLegacyAccount = async (firebaseUid, email, legacyPassword) => {
+  if (!firebaseUid || !email || !legacyPassword) {
+    throw createError('MISSING_FIELDS', 'Firebase UID, email, and legacy password are required.', 422);
+  }
+
+  const cleanEmail = email.trim().toLowerCase();
+  const user = await userModel.findByEmail(cleanEmail);
+  if (!user) {
+    throw createError('USER_NOT_FOUND', 'No existing Oracle account found for this email address.', 404);
+  }
+
+  // Prevent linking to accounts already bound to a Firebase UID
+  if (user.FIREBASE_UID) {
+    if (user.FIREBASE_UID === firebaseUid) {
+      return exports.getUserProfile(user.ID);
+    }
+    throw createError('ALREADY_LINKED', 'This account is already linked to a different Firebase identity.', 409);
+  }
+
+  // Protect administrative accounts
+  if ((user.ROLE || '').toUpperCase() === 'ADMIN') {
+    throw createError('ADMIN_LINK_RESTRICTED', 'Administrative accounts cannot be linked through automated migration. Contact security admin.', 403);
+  }
+
+  // Check account lock status
+  if (user.ACCOUNT_LOCKED_UNTIL && new Date(user.ACCOUNT_LOCKED_UNTIL) > new Date()) {
+    throw createError('ACCOUNT_LOCKED', 'Account is temporarily locked. Try again later.', 403);
+  }
+
+  // Verify legacy password with bcrypt
+  const isMatch = await bcrypt.compare(legacyPassword, user.PASSWORD);
+  if (!isMatch) {
+    throw createError('INVALID_PASSWORD', 'Invalid legacy account password.', 401);
+  }
+
+  // Link FIREBASE_UID and ensure IS_VERIFIED
+  await userModel.linkFirebaseUid(user.ID, firebaseUid);
+  await userModel.verifyUser(user.ID);
+
+  console.log(`🔒 [Legacy Migration] Successfully verified password and linked user ${user.ID} to Firebase UID ${firebaseUid}`);
+  return await exports.getUserProfile(user.ID);
+};
+
+/**
+ * @deprecated For Firebase-authenticated users, password changes must occur client-side via Firebase Auth.
+ * Retained temporarily for backward compatibility with legacy sessions.
+ */
 exports.changePasswordUser = async (userId, currentPassword, newPassword) => {
   const user = await userModel.findById(userId);
   if (!user) {

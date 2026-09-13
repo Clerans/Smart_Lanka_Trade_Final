@@ -35,36 +35,51 @@ const firebaseAuth = async (req, res, next) => {
     const name = decoded.name || decoded.display_name || email.split('@')[0];
     const emailVerified = !!decoded.email_verified;
 
-    // Resolve or synchronize user in Oracle Database
-    const user = await userModel.createOrSyncFirebaseUser({
-      firebaseUid,
-      email,
-      name,
-      emailVerified
-    });
-
-    if (!user) {
-      return res.status(401).json({
-        success: false,
-        code: 'USER_NOT_FOUND',
-        message: 'Unable to resolve application user record for authenticated credentials.'
-      });
-    }
-
-    // Attach verified user payload
-    req.user = {
-      id: user.ID,
-      accountUid: user.ACCOUNT_UID,
-      email: user.EMAIL,
-      name: user.NAME,
-      role: (user.ROLE || 'USER').toUpperCase(),
-      firebaseUid: firebaseUid,
-      isVerified: user.IS_VERIFIED === 1,
-      emailVerified: emailVerified
-    };
     req.firebaseUser = decoded;
 
-    return next();
+    // Resolve or synchronize user in Oracle Autonomous AI Database 26ai
+    try {
+      const user = await userModel.createOrSyncFirebaseUser({
+        firebaseUid,
+        email,
+        name,
+        emailVerified
+      });
+
+      if (!user) {
+        return res.status(401).json({
+          success: false,
+          code: 'USER_NOT_FOUND',
+          message: 'Unable to resolve application user record for authenticated credentials.'
+        });
+      }
+
+      // Attach verified user payload
+      req.user = {
+        id: user.ID,
+        accountUid: user.ACCOUNT_UID,
+        email: user.EMAIL,
+        name: user.NAME,
+        role: (user.ROLE || 'USER').toUpperCase(),
+        firebaseUid: firebaseUid,
+        isVerified: user.IS_VERIFIED === 1,
+        emailVerified: emailVerified
+      };
+
+      return next();
+    } catch (syncErr) {
+      // If the incoming request is explicitly to link an existing legacy account, allow it through with verified Firebase identity
+      const isLinkEndpoint = req.path === '/link-legacy-account' || (req.baseUrl + req.path).endsWith('/link-legacy-account');
+      if (isLinkEndpoint) {
+        return next();
+      }
+
+      return res.status(syncErr.status || 409).json({
+        success: false,
+        code: syncErr.code || 'SYNC_ERROR',
+        message: syncErr.message
+      });
+    }
   } catch (firebaseErr) {
     // 2. Secondary fallback: Legacy SmartLanka JWT (for backward compatibility during transition)
     if (process.env.JWT_SECRET) {

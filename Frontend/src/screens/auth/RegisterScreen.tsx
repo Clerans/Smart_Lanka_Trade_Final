@@ -86,10 +86,10 @@ export const RegisterScreen = () => {
     setIsNetworkError(false);
     try {
       await authService.register(name.trim(), email.trim(), password);
-      showToast('Account created! Verification email sent.', 'success');
+      showToast('Account created! Verification code sent to your email.', 'success');
       setTimeout(() => {
-        navigation.navigate('OTPVerification', { email: email.trim(), name: name.trim() });
-      }, 1500);
+        navigation.navigate('OTPVerification', { email: email.trim() });
+      }, 1200);
     } catch (error: any) {
       if (error.code === 'NETWORK_ERROR') {
         setIsNetworkError(true);

@@ -278,9 +278,35 @@ exports.findByFirebaseUid = async (firebaseUid) => {
 };
 
 exports.linkFirebaseUid = async (userId, firebaseUid) => {
+  if (!userId || !firebaseUid) {
+    const err = new Error('User ID and Firebase UID are required for account linking.');
+    err.status = 400;
+    throw err;
+  }
   let connection;
   try {
     connection = await oracledb.getConnection();
+    
+    // Check if target user already has a different Firebase UID or is ADMIN
+    const existingResult = await connection.execute(
+      `SELECT ID, FIREBASE_UID, ROLE, ACCOUNT_UID FROM SL_USERS WHERE ID = :userId`,
+      [userId],
+      { outFormat: oracledb.OUT_FORMAT_OBJECT }
+    );
+    const existing = existingResult.rows[0];
+    if (!existing) {
+      const err = new Error('Target user account not found.');
+      err.status = 404;
+      throw err;
+    }
+    
+    if (existing.FIREBASE_UID && existing.FIREBASE_UID !== firebaseUid) {
+      const err = new Error('Cannot overwrite existing Firebase UID on this account.');
+      err.code = 'FIREBASE_UID_OVERWRITE_FORBIDDEN';
+      err.status = 409;
+      throw err;
+    }
+
     await connection.execute(
       `UPDATE SL_USERS 
        SET FIREBASE_UID = :firebaseUid, UPDATED_AT = CURRENT_TIMESTAMP 
@@ -295,8 +321,8 @@ exports.linkFirebaseUid = async (userId, firebaseUid) => {
 };
 
 /**
- * Synchronize or register a Firebase Authenticated user in Oracle database
- * Derives user identity strictly from verified token parameters.
+ * Synchronize or register a Firebase Authenticated user in Oracle Autonomous AI Database 26ai
+ * Strictly prevents account takeover by prohibiting automatic email-only linking.
  */
 exports.createOrSyncFirebaseUser = async ({ firebaseUid, email, name, emailVerified }) => {
   if (!firebaseUid || !email) {
@@ -306,7 +332,7 @@ exports.createOrSyncFirebaseUser = async ({ firebaseUid, email, name, emailVerif
   const cleanEmail = email.trim().toLowerCase();
   const cleanName = (name || '').trim() || cleanEmail.split('@')[0];
 
-  // 1. Check if user exists by FIREBASE_UID
+  // 1. CASE A: Firebase UID already linked -> Load existing Oracle user
   let user = await exports.findByFirebaseUid(firebaseUid);
   if (user) {
     // If email verification status changed on Firebase, update Oracle IS_VERIFIED
@@ -317,20 +343,34 @@ exports.createOrSyncFirebaseUser = async ({ firebaseUid, email, name, emailVerif
     return user;
   }
 
-  // 2. Check if user already exists by EMAIL (Existing User Migration / Re-authentication)
-  user = await exports.findByEmail(cleanEmail);
-  if (user) {
-    console.log(`🔗 [Firebase Migration] Linking FIREBASE_UID (${firebaseUid}) to existing Oracle user ${user.ID} (${cleanEmail})`);
-    await exports.linkFirebaseUid(user.ID, firebaseUid);
-    if (emailVerified && user.IS_VERIFIED !== 1) {
-      await exports.verifyUser(user.ID);
-      user.IS_VERIFIED = 1;
+  // 2. CASE C: Check if an Oracle account already exists for this email
+  const existingByEmail = await exports.findByEmail(cleanEmail);
+  if (existingByEmail) {
+    // If existing user already has a DIFFERENT Firebase UID, reject
+    if (existingByEmail.FIREBASE_UID && existingByEmail.FIREBASE_UID !== firebaseUid) {
+      const err = new Error('This email address is already associated with another authenticated identity.');
+      err.code = 'FIREBASE_UID_MISMATCH';
+      err.status = 409;
+      throw err;
     }
-    user.FIREBASE_UID = firebaseUid;
-    return user;
+
+    // If existing user is ADMIN, forbid automatic linking
+    if ((existingByEmail.ROLE || '').toUpperCase() === 'ADMIN') {
+      const err = new Error('Administrative accounts cannot be linked automatically. Please contact security support.');
+      err.code = 'ADMIN_LINK_RESTRICTED';
+      err.status = 403;
+      throw err;
+    }
+
+    // DO NOT automatically link! Email equality is NOT proof of ownership.
+    // Require explicit legacy password verification via /api/auth/link-legacy-account
+    const err = new Error('An existing account was found for this email address. Please verify your legacy account password to link your account.');
+    err.code = 'MIGRATION_REQUIRED';
+    err.status = 409;
+    throw err;
   }
 
-  // 3. New User Registration: Create SL_USERS record and initialize Wallets
+  // 3. CASE B: Firebase UID does not exist AND no Oracle account exists for email -> Create new Oracle user
   let connection;
   try {
     connection = await oracledb.getConnection();

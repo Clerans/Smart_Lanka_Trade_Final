@@ -57,6 +57,15 @@ exports.createEmailVerificationOTP = async (userId, otp, expiresAt) => {
   let connection;
   try {
     connection = await oracledb.getConnection();
+    // Invalidate previous active/unverified OTPs for this user
+    await connection.execute(
+      `UPDATE SL_EMAIL_VERIFICATION 
+       SET VERIFIED = -1 
+       WHERE USER_ID = :userId AND VERIFIED = 0`,
+      { userId }
+    );
+
+    // Insert new single-use OTP
     await connection.execute(
       `INSERT INTO SL_EMAIL_VERIFICATION (USER_ID, OTP, EXPIRES_AT, VERIFIED)
        VALUES (:userId, :otp, :expiresAt, 0)`,
