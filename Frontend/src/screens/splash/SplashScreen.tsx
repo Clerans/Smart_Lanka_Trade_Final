@@ -5,14 +5,20 @@ import { MaterialIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { colors, typography } from '../../theme';
 import { authService } from '../../services/apiService';
-import { storageService } from '../../services/storageService';
 
 export const SplashScreen = () => {
   const navigation = useNavigation<any>();
-  const progress = React.useRef(new Animated.Value(0)).current;
+  const progress = React.useRef(new Animated.Value(0));
+  const [widthInterpolated, setWidthInterpolated] = React.useState<Animated.AnimatedInterpolation<string | number> | null>(null);
 
   useEffect(() => {
-    Animated.timing(progress, {
+    const interpolated = progress.current.interpolate({
+      inputRange: [0, 100],
+      outputRange: ['0%', '100%'],
+    });
+    setWidthInterpolated(interpolated);
+
+    Animated.timing(progress.current, {
       toValue: 100,
       duration: 2200,
       useNativeDriver: false,
@@ -33,7 +39,7 @@ export const SplashScreen = () => {
               await authService.sync();
               navigation.replace('MainApp');
               return;
-            } catch (validateErr) {
+            } catch {
               console.log('Stored token is invalid or expired. Clearing storage.');
               await authService.logout();
             }
@@ -47,12 +53,7 @@ export const SplashScreen = () => {
         navigation.replace('Login');
       }
     });
-  }, [navigation, progress]);
-
-  const widthInterpolated = progress.interpolate({
-    inputRange: [0, 100],
-    outputRange: ['0%', '100%'],
-  });
+  }, [navigation]);
 
   return (
     <View style={styles.container}>
@@ -77,7 +78,9 @@ export const SplashScreen = () => {
             <Text style={styles.percentageText}>75%</Text>
           </View>
           <View style={styles.progressBarBg}>
-            <Animated.View style={[styles.progressBarFill, { width: widthInterpolated }]} />
+            {widthInterpolated ? (
+              <Animated.View style={[styles.progressBarFill, { width: widthInterpolated }]} />
+            ) : null}
           </View>
         </View>
 

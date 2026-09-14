@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, KeyboardAvoidingView, Platform, ActivityIndicator, Modal, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
-import { MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
+import { MaterialIcons } from '@expo/vector-icons';
 import Svg, { Path } from 'react-native-svg';
 import { colors, typography, layout } from '../../theme';
 import { PrimaryButton, Card, Toast, NetworkErrorScreen } from '../../components';
@@ -39,13 +39,13 @@ export const DemoTradingScreen = () => {
   const [isNetworkError, setIsNetworkError] = useState(false);
   const [lastAction, setLastAction] = useState<'fetch' | 'trade'>('fetch');
 
-  const showToast = (message: string, type: 'success' | 'error' | 'warning') => {
+  const showToast = useCallback((message: string, type: 'success' | 'error' | 'warning') => {
     setToastMessage(message);
     setToastType(type);
     setToastVisible(true);
-  };
+  }, []);
 
-  const fetchTradingData = async () => {
+  const fetchTradingData = useCallback(async () => {
     try {
       const [walletRes, marketRes, txRes, portfolioRes] = await Promise.all([
         walletService.getWalletDetails(),
@@ -81,7 +81,7 @@ export const DemoTradingScreen = () => {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, [selectedSymbol, showToast]);
 
   const onRefresh = () => {
     setRefreshing(true);
@@ -89,10 +89,20 @@ export const DemoTradingScreen = () => {
   };
 
   useEffect(() => {
-    fetchTradingData();
-    const interval = setInterval(fetchTradingData, 10000); // 10s refresh rate
-    return () => clearInterval(interval);
-  }, [selectedSymbol]);
+    let isActive = true;
+    (async () => {
+      await fetchTradingData();
+    })();
+    const interval = setInterval(() => {
+      if (isActive) {
+        fetchTradingData();
+      }
+    }, 10000); // 10s refresh rate
+    return () => {
+      isActive = false;
+      clearInterval(interval);
+    };
+  }, [fetchTradingData]);
 
   // Handle amount and quantity updates
   const handleAmountLKRChange = (text: string) => {

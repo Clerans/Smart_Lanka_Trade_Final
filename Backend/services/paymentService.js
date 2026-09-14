@@ -240,14 +240,6 @@ class PaymentService {
         );
       }
 
-      // Sync legacy SL_WALLETS
-      try {
-        await connection.execute(
-          `UPDATE SL_WALLETS SET BALANCE = BALANCE + :amount, LAST_UPDATED = CURRENT_TIMESTAMP WHERE USER_ID = :userId`,
-          { amount, userId }
-        );
-      } catch (e) {}
-
       // Update transaction status to COMPLETED
       await connection.execute(
         `UPDATE TRANSACTIONS 
@@ -255,14 +247,6 @@ class PaymentService {
          WHERE TRANSACTION_ID = :actualTxId`,
         { ref: verifyResult.providerReference || ref, actualTxId }
       );
-
-      // Sync legacy SL_TRANSACTIONS
-      try {
-        await connection.execute(
-          `INSERT INTO SL_TRANSACTIONS (USER_ID, AMOUNT, TYPE, STATUS) VALUES (:userId, :amount, 'DEPOSIT', 'COMPLETED')`,
-          { userId, amount }
-        );
-      } catch (e) {}
 
       await connection.commit();
 

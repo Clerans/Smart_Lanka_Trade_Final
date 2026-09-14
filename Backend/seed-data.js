@@ -1,7 +1,7 @@
 const bcrypt = require('bcryptjs');
 const User = require('./models/userModel');
 const connectDB = require('./config/db');
-require('dotenv').config();
+require('dotenv').config({ quiet: true });
 
 async function addDummyUser() {
   console.log('--- Adding Dummy User ---');

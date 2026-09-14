@@ -1,5 +1,4 @@
 import * as React from 'react';
-const { useEffect, useState } = React;
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Image, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useIsFocused } from '@react-navigation/native';
@@ -8,8 +7,9 @@ import Svg, { Path } from 'react-native-svg';
 import { colors, typography, layout } from '../../theme';
 import { Card, NotificationModal, SetAlertModal } from '../../components';
 import { storageService } from '../../services/storageService';
-import { marketService, walletService, portfolioService, authService } from '../../services/apiService';
+import { marketService, portfolioService, authService } from '../../services/apiService';
 import { formatLKR, formatNumber } from '../../utils/formatters';
+const { useEffect, useState, useCallback } = React;
 
 // Helper to generate SVG path for sparklines
 const generateSparklinePath = (data: number[], width: number, height: number) => {
@@ -45,7 +45,7 @@ export const HomeScreen = () => {
   const [isNotificationModalVisible, setIsNotificationModalVisible] = useState(false);
 
   // Reload user info on focus (e.g. after updating profile image or name)
-  const loadUser = async () => {
+  const loadUser = useCallback(async () => {
     try {
       const userData = await storageService.getUserData();
       if (userData) {
@@ -56,18 +56,18 @@ export const HomeScreen = () => {
         setUser(profileRes.user);
         await storageService.setUserData(profileRes.user);
       }
-    } catch (e) {
+    } catch {
       // Ignore offline error
     }
-  };
+  }, []);
 
   useEffect(() => {
     if (isFocused) {
       loadUser();
     }
-  }, [isFocused]);
+  }, [isFocused, loadUser]);
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
       // Fetch prices with sparkline data for all major pairs
       const symbols = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'ADAUSDT', 'XRPUSDT', 'DOGEUSDT'];
@@ -114,13 +114,13 @@ export const HomeScreen = () => {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchData();
     const interval = setInterval(fetchData, 30000);
     return () => clearInterval(interval);
-  }, []);
+  }, [fetchData]);
 
   const onRefresh = async () => {
     setRefreshing(true);

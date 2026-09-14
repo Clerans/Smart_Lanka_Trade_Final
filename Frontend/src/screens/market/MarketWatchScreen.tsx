@@ -1,11 +1,13 @@
 import * as React from 'react';
-const { useState, useEffect } = React;
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
 import { colors, typography, layout } from '../../theme';
 import { marketService } from '../../services/apiService';
 import { formatLKR } from '../../utils/formatters';
+
+import { useNavigation } from '@react-navigation/native';
+const { useState, useEffect } = React;
 
 const filters = ['All Assets', 'Crypto', 'Stocks', 'Indices'];
 
@@ -21,8 +23,6 @@ const assetMeta: any = {
   'TRXUSDT': { name: 'TRON', icon: 'play-circle', color: '#FF0013' },
   'MATICUSDT': { name: 'Polygon', icon: 'vector-square', color: '#8247E5' },
 };
-
-import { useNavigation } from '@react-navigation/native';
 
 export const MarketWatchScreen = () => {
   const navigation = useNavigation<any>();

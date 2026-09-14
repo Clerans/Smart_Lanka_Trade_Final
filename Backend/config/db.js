@@ -1,5 +1,5 @@
 const oracledb = require('oracledb');
-require('dotenv').config();
+require('dotenv').config({ quiet: true });
 
 // Transaction management: explicit commits/rollbacks
 oracledb.autoCommit = false;

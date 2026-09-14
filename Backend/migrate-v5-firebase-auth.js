@@ -1,5 +1,5 @@
 const oracledb = require('oracledb');
-require('dotenv').config();
+require('dotenv').config({ quiet: true });
 
 async function migrate() {
   console.log('--- Oracle Autonomous AI Database 26ai Schema Migration (v5 - Firebase Auth) ---');

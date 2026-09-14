@@ -1,5 +1,4 @@
 import * as React from 'react';
-const { useState, useEffect, useCallback } = React;
 import {
   View,
   Text,
@@ -12,7 +11,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
-import { useNavigation, useIsFocused } from '@react-navigation/native';
+import { useIsFocused } from '@react-navigation/native';
 import {
   Card,
   DepositModal,
@@ -23,6 +22,7 @@ import {
 import { colors } from '../../theme';
 import { walletService, portfolioService } from '../../services/apiService';
 import { formatLKR, formatNumber } from '../../utils/formatters';
+const { useState, useEffect, useCallback } = React;
 
 interface HoldingItem {
   coin: string;
@@ -77,7 +77,6 @@ const DEFAULT_HOLDINGS: HoldingItem[] = [
 ];
 
 export const WalletOverviewScreen = () => {
-  const navigation = useNavigation<any>();
   const isFocused = useIsFocused();
 
   const [walletDetails, setWalletDetails] = useState<any>(null);
@@ -114,7 +113,7 @@ export const WalletOverviewScreen = () => {
     }
   };
 
-  const fetchWalletData = async () => {
+  const fetchWalletData = useCallback(async () => {
     try {
       const [walletRes, txRes, portfolioRes] = await Promise.all([
         walletService.getWalletDetails().catch(() => null),
@@ -155,18 +154,18 @@ export const WalletOverviewScreen = () => {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     if (isFocused) {
       fetchWalletData();
     }
-  }, [isFocused]);
+  }, [isFocused, fetchWalletData]);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
     fetchWalletData();
-  }, []);
+  }, [fetchWalletData]);
 
   const availableCash = walletDetails?.availableBalance !== undefined && walletDetails?.availableBalance !== null
     ? Number(walletDetails.availableBalance) 

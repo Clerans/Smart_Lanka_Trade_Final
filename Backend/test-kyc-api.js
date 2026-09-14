@@ -9,7 +9,7 @@ const http = require('http');
 const connectDB = require('./config/db');
 const userModel = require('./models/userModel');
 const oracledb = require('oracledb');
-require('dotenv').config();
+require('dotenv').config({ quiet: true });
 
 const app = require('./server');
 

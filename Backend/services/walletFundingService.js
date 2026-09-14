@@ -157,14 +157,6 @@ class WalletFundingService {
         { numAmount, senderUserId }
       );
 
-      // Sync legacy SL_WALLETS for sender
-      try {
-        await connection.execute(
-          `UPDATE SL_WALLETS SET BALANCE = BALANCE - :numAmount, LAST_UPDATED = CURRENT_TIMESTAMP WHERE USER_ID = :senderUserId`,
-          { numAmount, senderUserId }
-        );
-      } catch (e) {}
-
       // 6. Credit recipient
       await connection.execute(
         `UPDATE WALLETS 
@@ -172,14 +164,6 @@ class WalletFundingService {
          WHERE USER_ID = :recipientUserId`,
         { numAmount, recipientUserId }
       );
-
-      // Sync legacy SL_WALLETS for recipient
-      try {
-        await connection.execute(
-          `UPDATE SL_WALLETS SET BALANCE = BALANCE + :numAmount, LAST_UPDATED = CURRENT_TIMESTAMP WHERE USER_ID = :recipientUserId`,
-          { numAmount, recipientUserId }
-        );
-      } catch (e) {}
 
       // Generate unique transfer reference
       const transferRef = `SLT-TRF-${Date.now()}-${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
@@ -352,14 +336,6 @@ class WalletFundingService {
         { numAmount, userId }
       );
 
-      // Sync legacy SL_WALLETS
-      try {
-        await connection.execute(
-          `UPDATE SL_WALLETS SET BALANCE = BALANCE - :numAmount, LAST_UPDATED = CURRENT_TIMESTAMP WHERE USER_ID = :userId`,
-          { numAmount, userId }
-        );
-      } catch (e) {}
-
       // Generate withdrawal reference
       const withdrawalRef = `SLT-WTH-${Date.now()}-${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
       const maskedDest = destination.length > 4 ? `****${destination.slice(-4)}` : destination;
@@ -386,14 +362,6 @@ class WalletFundingService {
       );
 
       const txId = insertResult.outBinds.txId[0];
-
-      // Sync legacy SL_TRANSACTIONS
-      try {
-        await connection.execute(
-          `INSERT INTO SL_TRANSACTIONS (USER_ID, AMOUNT, TYPE, STATUS) VALUES (:userId, :numAmount, 'WITHDRAW', 'PROCESSING')`,
-          { userId, numAmount }
-        );
-      } catch (e) {}
 
       await connection.commit();
 

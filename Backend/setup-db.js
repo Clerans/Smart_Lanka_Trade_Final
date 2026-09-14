@@ -1,7 +1,7 @@
 const oracledb = require('oracledb');
 const fs = require('fs');
 const path = require('path');
-require('dotenv').config();
+require('dotenv').config({ quiet: true });
 
 async function setupDatabase() {
   console.log('--- Oracle Database Setup ---');

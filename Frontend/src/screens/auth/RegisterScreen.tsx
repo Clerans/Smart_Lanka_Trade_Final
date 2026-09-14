@@ -1,12 +1,12 @@
 import * as React from 'react';
-const { useState } = React;
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, KeyboardAvoidingView, Platform, Dimensions, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { MaterialIcons } from '@expo/vector-icons';
-import { colors, typography, layout } from '../../theme';
+import { colors, typography } from '../../theme';
 import { InputField, PrimaryButton, Toast, NetworkErrorScreen } from '../../components';
 import { authService } from '../../services/apiService';
+const { useState } = React;
 
 export const RegisterScreen = () => {
   const navigation = useNavigation<any>();
@@ -24,9 +24,6 @@ export const RegisterScreen = () => {
   const [toastMessage, setToastMessage] = useState('');
   const [toastType, setToastType] = useState<'success' | 'error' | 'warning'>('success');
   const [isNetworkError, setIsNetworkError] = useState(false);
-
-  const { height } = Dimensions.get('window');
-  const isSmallDevice = height < 700;
 
   // Password requirements checks
   const hasMinLength = password.length >= 8;

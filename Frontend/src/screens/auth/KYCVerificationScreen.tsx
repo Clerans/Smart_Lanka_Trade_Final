@@ -8,8 +8,7 @@ import {
   Image, 
   ActivityIndicator, 
   Alert,
-  TextInput,
-  Platform 
+  TextInput
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
@@ -25,7 +24,6 @@ export const KYCVerificationScreen = () => {
   const [manualNIC, setManualNIC] = useState('');
   const [loading, setLoading] = useState(false);
   const [verificationResult, setVerificationResult] = useState<any>(null);
-  const [existingStatus, setExistingStatus] = useState<any>(null);
 
   useEffect(() => {
     // Check if user already has a KYC record
@@ -33,7 +31,6 @@ export const KYCVerificationScreen = () => {
       try {
         const res = await kycService.getKYCStatus();
         if (res?.data?.document) {
-          setExistingStatus(res.data.document);
           setVerificationResult({
             verificationStatus: res.data.document.VERIFICATION_STATUS || res.data.status,
             extractedData: {
@@ -47,7 +44,7 @@ export const KYCVerificationScreen = () => {
             rejectionReason: res.data.document.REJECTION_REASON
           });
         }
-      } catch (err) {
+      } catch {
         // User not logged in yet or no prior KYC
       }
     }

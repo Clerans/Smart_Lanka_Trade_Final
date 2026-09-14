@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, Dimensions } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import { colors, typography } from '../theme';
 import { MaterialIcons } from '@expo/vector-icons';
 import { PrimaryButton } from './PrimaryButton';
@@ -8,8 +8,6 @@ interface NetworkErrorScreenProps {
   onRetry: () => void;
   message?: string;
 }
-
-const { height } = Dimensions.get('window');
 
 export const NetworkErrorScreen: React.FC<NetworkErrorScreenProps> = ({
   onRetry,

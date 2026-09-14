@@ -196,7 +196,7 @@ export const TransferModal: React.FC<TransferModalProps> = ({
                   />
                 </View>
                 <Text style={styles.helperText}>
-                  Enter the recipient's 8-character unique SmartLanka UID.
+                  Enter the recipient&apos;s 8-character unique SmartLanka UID.
                 </Text>
               </View>
 

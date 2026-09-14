@@ -1,6 +1,6 @@
 const axios = require('axios');
 const oracledb = require('oracledb');
-require('dotenv').config();
+require('dotenv').config({ quiet: true });
 
 const BASE_URL = 'http://localhost:5000';
 

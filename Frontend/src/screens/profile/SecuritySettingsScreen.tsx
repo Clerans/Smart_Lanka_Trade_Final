@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
-import { MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
+import { MaterialIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { colors, typography, layout } from '../../theme';
 import { authService } from '../../services/apiService';
@@ -65,7 +65,7 @@ export const SecuritySettingsScreen = () => {
 
         const storedPin = await AsyncStorage.getItem('@app_user_pin');
         if (storedPin) setSavedPin(storedPin);
-      } catch (e) {
+      } catch {
         // ignore load errors
       }
     };
@@ -118,7 +118,7 @@ export const SecuritySettingsScreen = () => {
       setPin('');
       setConfirmPin('');
       Alert.alert('Success', 'Your 4-digit security PIN has been updated successfully.');
-    } catch (e) {
+    } catch {
       Alert.alert('Error', 'Failed to save security PIN.');
     }
   };

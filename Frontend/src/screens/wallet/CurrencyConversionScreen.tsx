@@ -1,5 +1,4 @@
 import * as React from 'react';
-const { useState, useEffect } = React;
 import { 
   View, 
   Text, 
@@ -16,10 +15,11 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { MaterialIcons } from '@expo/vector-icons';
-import { colors, typography, layout } from '../../theme';
+import { colors, layout } from '../../theme';
 import { PrimaryButton, Card } from '../../components';
-import { marketService, walletService } from '../../services/apiService';
-import { formatLKR, formatNumber } from '../../utils/formatters';
+import { marketService } from '../../services/apiService';
+import { formatNumber } from '../../utils/formatters';
+const { useState, useEffect, useCallback } = React;
 
 export const CurrencyConversionScreen = () => {
   const navigation = useNavigation<any>();
@@ -31,18 +31,17 @@ export const CurrencyConversionScreen = () => {
   const [isLkrToUsd, setIsLkrToUsd] = useState(true);
   const [converting, setConverting] = useState(false);
 
-  const fetchRate = async () => {
+  const fetchRate = useCallback(async () => {
     try {
       const response = await marketService.getPriceLKR('BTCUSDT');
       if (response.success && response.data.usdToLkr) {
         const liveRate = response.data.usdToLkr;
         setRate(liveRate);
-        const num = parseFloat(fromAmount) || 0;
-        if (isLkrToUsd) {
-          setToAmount((num / liveRate).toFixed(2));
-        } else {
-          setToAmount((num * liveRate).toFixed(2));
-        }
+        setFromAmount(currentFrom => {
+          const num = parseFloat(currentFrom) || 0;
+          setToAmount(isLkrToUsd ? (num / liveRate).toFixed(2) : (num * liveRate).toFixed(2));
+          return currentFrom;
+        });
       }
     } catch (error) {
       console.error('Failed to fetch rate:', error);
@@ -50,11 +49,11 @@ export const CurrencyConversionScreen = () => {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, [isLkrToUsd]);
 
   useEffect(() => {
     fetchRate();
-  }, []);
+  }, [fetchRate]);
 
   const onRefresh = () => {
     setRefreshing(true);
@@ -78,7 +77,6 @@ export const CurrencyConversionScreen = () => {
   const toggleDirection = () => {
     const nextDir = !isLkrToUsd;
     setIsLkrToUsd(nextDir);
-    const oldFrom = fromAmount;
     const oldTo = toAmount;
     setFromAmount(oldTo);
     const num = parseFloat(oldTo);

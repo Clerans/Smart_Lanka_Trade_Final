@@ -1,5 +1,5 @@
 const oracledb = require('oracledb');
-require('dotenv').config();
+require('dotenv').config({ quiet: true });
 
 async function testConnection() {
   console.log('--- Oracle Connection Test ---');
