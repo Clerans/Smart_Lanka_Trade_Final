@@ -1,5 +1,5 @@
 import * as React from 'react';
-const { useState, useEffect } = React;
+const { useState, useEffect, useCallback } = React;
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, KeyboardAvoidingView, Platform, ActivityIndicator, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
@@ -28,7 +28,7 @@ export const TradingTerminalScreen = () => {
   const [allCoins, setAllCoins] = useState<any[]>([]);
   const [pickerSearchQuery, setPickerSearchQuery] = useState('');
 
-  const fetchPriceAndAI = async () => {
+  const fetchPriceAndAI = useCallback(async () => {
     try {
       setLoadingAi(true);
       const [priceRes, aiRes] = await Promise.allSettled([
@@ -54,7 +54,7 @@ export const TradingTerminalScreen = () => {
       setLoadingAi(false);
       setRefreshing(false);
     }
-  };
+  }, [selectedSymbol]);
 
   useEffect(() => {
     const fetchInitialData = async () => {
@@ -74,7 +74,7 @@ export const TradingTerminalScreen = () => {
     fetchPriceAndAI();
     const interval = setInterval(fetchPriceAndAI, 30000);
     return () => clearInterval(interval);
-  }, [selectedSymbol]);
+  }, [fetchPriceAndAI]);
 
   const onRefresh = () => {
     setRefreshing(true);

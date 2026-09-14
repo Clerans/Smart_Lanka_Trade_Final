@@ -1,5 +1,5 @@
 import * as React from 'react';
-const { useState, useEffect } = React;
+const { useState, useEffect, useCallback } = React;
 import { 
   View, 
   Text, 
@@ -31,18 +31,17 @@ export const CurrencyConversionScreen = () => {
   const [isLkrToUsd, setIsLkrToUsd] = useState(true);
   const [converting, setConverting] = useState(false);
 
-  const fetchRate = async () => {
+  const fetchRate = useCallback(async () => {
     try {
       const response = await marketService.getPriceLKR('BTCUSDT');
       if (response.success && response.data.usdToLkr) {
         const liveRate = response.data.usdToLkr;
         setRate(liveRate);
-        const num = parseFloat(fromAmount) || 0;
-        if (isLkrToUsd) {
-          setToAmount((num / liveRate).toFixed(2));
-        } else {
-          setToAmount((num * liveRate).toFixed(2));
-        }
+        setFromAmount(currentFrom => {
+          const num = parseFloat(currentFrom) || 0;
+          setToAmount(isLkrToUsd ? (num / liveRate).toFixed(2) : (num * liveRate).toFixed(2));
+          return currentFrom;
+        });
       }
     } catch (error) {
       console.error('Failed to fetch rate:', error);
@@ -50,11 +49,11 @@ export const CurrencyConversionScreen = () => {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, [isLkrToUsd]);
 
   useEffect(() => {
     fetchRate();
-  }, []);
+  }, [fetchRate]);
 
   const onRefresh = () => {
     setRefreshing(true);

@@ -114,7 +114,7 @@ export const WalletOverviewScreen = () => {
     }
   };
 
-  const fetchWalletData = async () => {
+  const fetchWalletData = useCallback(async () => {
     try {
       const [walletRes, txRes, portfolioRes] = await Promise.all([
         walletService.getWalletDetails().catch(() => null),
@@ -155,18 +155,18 @@ export const WalletOverviewScreen = () => {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     if (isFocused) {
       fetchWalletData();
     }
-  }, [isFocused]);
+  }, [isFocused, fetchWalletData]);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
     fetchWalletData();
-  }, []);
+  }, [fetchWalletData]);
 
   const availableCash = walletDetails?.availableBalance !== undefined && walletDetails?.availableBalance !== null
     ? Number(walletDetails.availableBalance) 

@@ -1,5 +1,5 @@
 import * as React from 'react';
-const { useEffect, useState } = React;
+const { useEffect, useState, useCallback } = React;
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Image, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useIsFocused } from '@react-navigation/native';
@@ -45,7 +45,7 @@ export const HomeScreen = () => {
   const [isNotificationModalVisible, setIsNotificationModalVisible] = useState(false);
 
   // Reload user info on focus (e.g. after updating profile image or name)
-  const loadUser = async () => {
+  const loadUser = useCallback(async () => {
     try {
       const userData = await storageService.getUserData();
       if (userData) {
@@ -59,15 +59,15 @@ export const HomeScreen = () => {
     } catch (e) {
       // Ignore offline error
     }
-  };
+  }, []);
 
   useEffect(() => {
     if (isFocused) {
       loadUser();
     }
-  }, [isFocused]);
+  }, [isFocused, loadUser]);
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
       // Fetch prices with sparkline data for all major pairs
       const symbols = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'ADAUSDT', 'XRPUSDT', 'DOGEUSDT'];
@@ -114,13 +114,13 @@ export const HomeScreen = () => {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchData();
     const interval = setInterval(fetchData, 30000);
     return () => clearInterval(interval);
-  }, []);
+  }, [fetchData]);
 
   const onRefresh = async () => {
     setRefreshing(true);
