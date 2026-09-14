@@ -79,7 +79,9 @@ export const SplashScreen = () => {
             <Text style={styles.percentageText}>75%</Text>
           </View>
           <View style={styles.progressBarBg}>
-            <Animated.View style={[styles.progressBarFill, { width: widthInterpolated }]} />
+            {widthInterpolated ? (
+              <Animated.View style={[styles.progressBarFill, { width: widthInterpolated }]} />
+            ) : null}
           </View>
         </View>
 
