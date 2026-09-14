@@ -5,7 +5,6 @@ import { MaterialIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { colors, typography } from '../../theme';
 import { authService } from '../../services/apiService';
-import { storageService } from '../../services/storageService';
 
 export const SplashScreen = () => {
   const navigation = useNavigation<any>();
@@ -40,7 +39,7 @@ export const SplashScreen = () => {
               await authService.sync();
               navigation.replace('MainApp');
               return;
-            } catch (validateErr) {
+            } catch {
               console.log('Stored token is invalid or expired. Clearing storage.');
               await authService.logout();
             }

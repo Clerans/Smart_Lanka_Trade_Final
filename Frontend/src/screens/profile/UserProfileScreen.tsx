@@ -82,7 +82,7 @@ export const UserProfileScreen = () => {
       await Clipboard.setStringAsync(cleanUid);
       setCopiedUid(true);
       setTimeout(() => setCopiedUid(false), 2000);
-    } catch (err) {
+    } catch {
       Alert.alert('Account UID', `Your SmartLanka Trade UID is ${cleanUid}`);
     }
   };
@@ -136,7 +136,7 @@ export const UserProfileScreen = () => {
         setUser(res.user);
         await storageService.setUserData(res.user);
       }
-    } catch (err) {
+    } catch {
       // Offline fallback
     }
 
@@ -158,7 +158,7 @@ export const UserProfileScreen = () => {
       if (res?.data?.status) {
         setKycStatus(res.data.status);
       }
-    } catch (e) {
+    } catch {
       // Not authenticated or offline
     } finally {
       setLoadingKyc(false);
@@ -328,45 +328,7 @@ export const UserProfileScreen = () => {
     ]);
   };
 
-  const getTierBadge = () => {
-    if (loadingKyc) {
-      return (
-        <View style={[styles.tierBadge, { backgroundColor: colors.bgInput }]}>
-          <ActivityIndicator size="small" color={colors.textSecondary} />
-        </View>
-      );
-    }
-    if (kycStatus === 'VERIFIED') {
-      return (
-        <TouchableOpacity style={[styles.tierBadge, { backgroundColor: colors.accentMuted }]} onPress={() => navigation.navigate('KYCVerification')}>
-          <MaterialIcons name="verified" size={14} color={colors.accent} />
-          <Text style={[styles.tierText, { color: colors.accent }]}>Tier 2 Verified</Text>
-        </TouchableOpacity>
-      );
-    }
-    if (kycStatus === 'PENDING') {
-      return (
-        <TouchableOpacity style={[styles.tierBadge, { backgroundColor: colors.yellow + '33' }]} onPress={() => navigation.navigate('KYCVerification')}>
-          <MaterialIcons name="pending-actions" size={14} color={colors.yellow} />
-          <Text style={[styles.tierText, { color: colors.yellow }]}>KYC Pending Review</Text>
-        </TouchableOpacity>
-      );
-    }
-    if (kycStatus === 'REJECTED') {
-      return (
-        <TouchableOpacity style={[styles.tierBadge, { backgroundColor: colors.red + '33' }]} onPress={() => navigation.navigate('KYCVerification')}>
-          <MaterialIcons name="error" size={14} color={colors.red} />
-          <Text style={[styles.tierText, { color: colors.red }]}>KYC Rejected (Retry)</Text>
-        </TouchableOpacity>
-      );
-    }
-    return (
-      <TouchableOpacity style={[styles.tierBadge, { backgroundColor: colors.bgInput }]} onPress={() => navigation.navigate('KYCVerification')}>
-        <MaterialIcons name="shield" size={14} color={colors.textSecondary} />
-        <Text style={[styles.tierText, { color: colors.textSecondary }]}>Verify Identity (KYC)</Text>
-      </TouchableOpacity>
-    );
-  };
+
 
   const renderHeaderKycBadge = () => {
     if (loadingKyc) {

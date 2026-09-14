@@ -15,10 +15,10 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { MaterialIcons } from '@expo/vector-icons';
-import { colors, typography, layout } from '../../theme';
+import { colors, layout } from '../../theme';
 import { PrimaryButton, Card } from '../../components';
-import { marketService, walletService } from '../../services/apiService';
-import { formatLKR, formatNumber } from '../../utils/formatters';
+import { marketService } from '../../services/apiService';
+import { formatNumber } from '../../utils/formatters';
 const { useState, useEffect, useCallback } = React;
 
 export const CurrencyConversionScreen = () => {
@@ -77,7 +77,6 @@ export const CurrencyConversionScreen = () => {
   const toggleDirection = () => {
     const nextDir = !isLkrToUsd;
     setIsLkrToUsd(nextDir);
-    const oldFrom = fromAmount;
     const oldTo = toAmount;
     setFromAmount(oldTo);
     const num = parseFloat(oldTo);
