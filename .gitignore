@@ -60,3 +60,8 @@ dist/
 .env
 .env.*
 !.env.example
+
+# User uploads and sensitive files
+Backend/uploads/
+uploads/
+!Backend/uploads/kyc/.gitkeep

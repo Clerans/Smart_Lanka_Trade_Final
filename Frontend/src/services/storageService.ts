@@ -67,15 +67,44 @@ export const storageService = {
     }
   },
 
+  // PIN methods (Backed by SecureStore for hardware security)
+  getPin: async (): Promise<string | null> => {
+    try {
+      return await SecureStore.getItemAsync('userSecurityPin');
+    } catch (error) {
+      console.error('Error retrieving PIN from SecureStore:', error);
+      return null;
+    }
+  },
+
+  setPin: async (pin: string): Promise<void> => {
+    try {
+      await SecureStore.setItemAsync('userSecurityPin', pin);
+    } catch (error) {
+      console.error('Error saving PIN to SecureStore:', error);
+    }
+  },
+
+  deletePin: async (): Promise<void> => {
+    try {
+      await SecureStore.deleteItemAsync('userSecurityPin');
+    } catch (error) {
+      console.error('Error deleting PIN from SecureStore:', error);
+    }
+  },
+
   // Clear all session credentials
   clearAuthSession: async (): Promise<void> => {
     try {
       await SecureStore.deleteItemAsync(TOKEN_KEY);
       await SecureStore.deleteItemAsync(USER_DATA_KEY);
+      await SecureStore.deleteItemAsync('userSecurityPin');
       await AsyncStorage.removeItem(TOKEN_KEY);
       await AsyncStorage.removeItem(USER_DATA_KEY);
+      await AsyncStorage.removeItem('@app_user_pin');
     } catch (error) {
       console.error('Error clearing auth session:', error);
     }
   }
 };
+
