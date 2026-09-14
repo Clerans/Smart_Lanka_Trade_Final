@@ -6,10 +6,8 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { colors, typography, layout } from '../../theme';
 import { PrimaryButton, Card } from '../../components';
 import { marketService, aiService } from '../../services/apiService';
-import { formatLKR, formatNumber } from '../../utils/formatters';
+import { formatLKR } from '../../utils/formatters';
 const { useState, useEffect, useCallback } = React;
-
-const tradeableSymbols = ['BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'SOLUSDT', 'ADAUSDT', 'XRPUSDT', 'DOGEUSDT'];
 
 export const TradingTerminalScreen = () => {
   const navigation = useNavigation<any>();
@@ -19,7 +17,6 @@ export const TradingTerminalScreen = () => {
   const [selectedSymbol, setSelectedSymbol] = useState(route.params?.symbol || 'BTCUSDT');
   const [lkrPriceData, setLkrPriceData] = useState<any>(null);
   const [aiRec, setAiRec] = useState<any>(null);
-  const [loadingAi, setLoadingAi] = useState(false);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [quantity, setQuantity] = useState('0.0025');
@@ -30,7 +27,6 @@ export const TradingTerminalScreen = () => {
 
   const fetchPriceAndAI = useCallback(async () => {
     try {
-      setLoadingAi(true);
       const [priceRes, aiRes] = await Promise.allSettled([
         marketService.getPriceLKR(selectedSymbol),
         aiService.getRecommendation(selectedSymbol, '1h')
@@ -51,7 +47,6 @@ export const TradingTerminalScreen = () => {
       console.error('Failed to fetch price and AI data:', error);
     } finally {
       setLoading(false);
-      setLoadingAi(false);
       setRefreshing(false);
     }
   }, [selectedSymbol]);
