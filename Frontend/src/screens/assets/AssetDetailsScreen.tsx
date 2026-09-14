@@ -1,14 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions, ActivityIndicator, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
-import { colors, typography, layout } from '../../theme';
+import { colors, typography } from '../../theme';
 import { PrimaryButton, Card, CandlestickChart } from '../../components';
 import { aiService, marketService } from '../../services/apiService';
 import { formatLKR, formatNumber } from '../../utils/formatters';
-
-const { width } = Dimensions.get('window');
 
 export const AssetDetailsScreen = () => {
   const navigation = useNavigation<any>();

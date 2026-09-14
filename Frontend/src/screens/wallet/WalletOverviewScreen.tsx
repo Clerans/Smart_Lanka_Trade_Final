@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
-import { useNavigation, useIsFocused } from '@react-navigation/native';
+import { useIsFocused } from '@react-navigation/native';
 import {
   Card,
   DepositModal,
@@ -77,7 +77,6 @@ const DEFAULT_HOLDINGS: HoldingItem[] = [
 ];
 
 export const WalletOverviewScreen = () => {
-  const navigation = useNavigation<any>();
   const isFocused = useIsFocused();
 
   const [walletDetails, setWalletDetails] = useState<any>(null);

@@ -9,7 +9,7 @@ import {
   ActivityIndicator,
   Dimensions
 } from 'react-native';
-import { MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
+import { MaterialIcons } from '@expo/vector-icons';
 import { colors, typography, layout } from '../theme';
 import { alertService } from '../services/apiService';
 import { formatNumber } from '../utils/formatters';
@@ -40,7 +40,7 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
       } else if (Array.isArray(res)) {
         setUserAlerts(res);
       }
-    } catch (e) {
+    } catch {
       // Keep empty if none or network issue
     } finally {
       setLoading(false);

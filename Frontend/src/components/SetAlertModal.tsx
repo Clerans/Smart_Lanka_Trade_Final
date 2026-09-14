@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Modal, View, Text, StyleSheet, TextInput, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
-import { colors, typography, layout } from '../theme';
+import { colors, typography } from '../theme';
 import { alertService } from '../services/apiService';
 
 interface SetAlertModalProps {
