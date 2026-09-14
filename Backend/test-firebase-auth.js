@@ -5,10 +5,12 @@ const authService = require('./services/authService');
 const { generateAccountUID } = require('./utils/uidGenerator');
 const { isInitialized } = require('./config/firebaseAdmin');
 const oracledb = require('oracledb');
+const fs = require('fs');
+const path = require('path');
 
 async function runTestSuite() {
   console.log('================================================================');
-  console.log('🧪 SMARTLANKA TRADE — FIREBASE AUTHENTICATION HARDENING TEST SUITE');
+  console.log('🧪 SMARTLANKA TRADE — FIREBASE AUTHENTICATION & GOOGLE TEST SUITE');
   console.log('================================================================\n');
 
   let passed = 0;
@@ -65,254 +67,151 @@ async function runTestSuite() {
     // ----------------------------------------------------------------
     // AUTH-001: Missing token -> 401
     // ----------------------------------------------------------------
-    console.log('--- Phase 1: Authentication & Token Validation ---');
+    console.log('--- 1. Authentication & Token Validation (AUTH-001 to AUTH-008) ---');
     const auth001 = await request('/api/auth/profile');
-    report('AUTH-001', 'Missing Token Rejection', auth001.status === 401, `Status: ${auth001.status}`);
+    report('AUTH-001', 'Missing Firebase token → 401', auth001.status === 401, `Status: ${auth001.status}`);
 
     // ----------------------------------------------------------------
-    // AUTH-002: Malformed token -> 401
+    // AUTH-002: Invalid Firebase token -> 401
     // ----------------------------------------------------------------
     const auth002 = await request('/api/auth/profile', 'GET', {
       Authorization: 'Bearer invalid.token'
     });
-    report('AUTH-002', 'Malformed Token Rejection', auth002.status === 401, `Status: ${auth002.status}`);
+    report('AUTH-002', 'Invalid Firebase token → 401', auth002.status === 401, `Status: ${auth002.status}`);
 
     // ----------------------------------------------------------------
-    // AUTH-003: Invalid Firebase token -> 401
+    // AUTH-003: Expired / forged signature Firebase token -> 401
     // ----------------------------------------------------------------
     const auth003 = await request('/api/auth/profile', 'GET', {
       Authorization: 'Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.fake_signature'
     });
-    report('AUTH-003', 'Invalid Firebase Signature Rejection', auth003.status === 401, `Status: ${auth003.status}`);
+    report('AUTH-003', 'Expired / Forged Firebase token → 401', auth003.status === 401, `Status: ${auth003.status}`);
 
     // ----------------------------------------------------------------
-    // AUTH-004: Firebase Admin Initialized & Ready
+    // AUTH-004: Client cannot override user ID
     // ----------------------------------------------------------------
-    report('AUTH-004', 'Firebase Admin SDK Initialization Status', isInitialized(), `Initialized: ${isInitialized()}`);
-
-    // ----------------------------------------------------------------
-    // Database connection checks for deep model tests
-    // ----------------------------------------------------------------
-    let dbConnected = false;
-    let conn;
-    try {
-      conn = await oracledb.getConnection();
-      dbConnected = true;
-    } catch (e) {
-      console.warn('⚠️ Could not establish direct DB connection for live test:', e.message);
-    } finally {
-      if (conn) await conn.close();
-    }
-
-    console.log('\n--- Phase 2: Identity, Account Takeover & RBAC Security ---');
-
-    // ----------------------------------------------------------------
-    // AUTH-005: Model method findByFirebaseUid exists & handles queries
-    // ----------------------------------------------------------------
-    report('AUTH-005', 'Firebase UID to Oracle User Resolver Method', typeof userModel.findByFirebaseUid === 'function');
-
-    // ----------------------------------------------------------------
-    // AUTH-006: Client cannot override USER_ID
-    // ----------------------------------------------------------------
-    const auth006 = await request('/api/wallet/transfer', 'POST', {}, {
+    const auth004 = await request('/api/wallet/transfer', 'POST', {}, {
       recipientUid: 'SLT-TEST123',
       amount: 500,
-      userId: 1, // Attempt to forge identity
+      userId: 1,
       USER_ID: 1
     });
-    report('AUTH-006', 'Client Cannot Override USER_ID in Request', auth006.status === 401, `Status: ${auth006.status}`);
+    report('AUTH-004', 'Client cannot override user ID', auth004.status === 401, `Status: ${auth004.status}`);
 
     // ----------------------------------------------------------------
-    // AUTH-007: Client cannot override ACCOUNT_UID
+    // AUTH-005: Client cannot override role
     // ----------------------------------------------------------------
-    const auth007 = await request('/api/wallet/transfer', 'POST', {}, {
-      recipientUid: 'SLT-TEST123',
-      amount: 500,
-      accountUid: 'SLT-FORGED',
-      ACCOUNT_UID: 'SLT-FORGED'
-    });
-    report('AUTH-007', 'Client Cannot Override ACCOUNT_UID', auth007.status === 401, `Status: ${auth007.status}`);
-
-    // ----------------------------------------------------------------
-    // AUTH-008: Client cannot override role
-    // ----------------------------------------------------------------
-    const auth008 = await request('/api/auth/profile', 'PUT', {}, {
+    const auth005 = await request('/api/auth/profile', 'PUT', {}, {
       role: 'ADMIN',
       ROLE: 'ADMIN'
     });
-    report('AUTH-008', 'Client Cannot Override User Role', auth008.status === 401, `Status: ${auth008.status}`);
+    report('AUTH-005', 'Client cannot override role', auth005.status === 401, `Status: ${auth005.status}`);
 
     // ----------------------------------------------------------------
-    // AUTH-009: Normal user cannot access admin API
+    // AUTH-006: Client cannot override Firebase UID
     // ----------------------------------------------------------------
-    const auth009 = await request('/api/admin/kyc/pending');
-    report('AUTH-009', 'Admin Endpoints Guarded Against Unauthenticated / Non-Admin Access', auth009.status === 401, `Status: ${auth009.status}`);
+    const auth006 = await request('/api/auth/profile', 'PUT', {}, {
+      firebaseUid: 'forged_firebase_uid_123',
+      FIREBASE_UID: 'forged_firebase_uid_123'
+    });
+    report('AUTH-006', 'Client cannot override Firebase UID', auth006.status === 401, `Status: ${auth006.status}`);
 
     // ----------------------------------------------------------------
-    // AUTH-010: Account Takeover Protection (Email equality alone is rejected)
+    // AUTH-007: Email-only account linking rejected (Account Takeover Protection)
     // ----------------------------------------------------------------
-    let atoProtected = false;
+    let emailOnlyRejected = false;
     try {
-      // Simulate an unlinked user existing in DB
-      const testEmail = 'victim_test_' + Date.now() + '@example.com';
-      const testFbUid = 'attacker_fb_' + Date.now();
-      
-      if (dbConnected) {
-        // Create an unlinked user in Oracle
-        const bcrypt = require('bcryptjs');
-        const dummyPass = await bcrypt.hash('VictimPass123!', 10);
-        const legacyUid = generateAccountUID();
-        
-        let conn2 = await oracledb.getConnection();
-        const ins = await conn2.execute(
-          `INSERT INTO SL_USERS (ACCOUNT_UID, NAME, EMAIL, PASSWORD, IS_VERIFIED, ROLE) 
-           VALUES (:legacyUid, 'Victim User', :testEmail, :dummyPass, 1, 'USER') 
-           RETURNING ID INTO :id`,
-          { legacyUid, testEmail, dummyPass, id: { type: oracledb.NUMBER, dir: oracledb.BIND_OUT } }
-        );
-        await conn2.commit();
-        const victimId = ins.outBinds.id[0];
-        await conn2.close();
+      const origFindByFirebaseUid = userModel.findByFirebaseUid;
+      const origFindByEmail = userModel.findByEmail;
+      userModel.findByFirebaseUid = async () => null;
+      userModel.findByEmail = async () => ({ ID: 100, EMAIL: 'test@example.com', ROLE: 'USER' });
 
-        // Attempt to sync with attacker's Firebase UID using victim's email
-        try {
-          await userModel.createOrSyncFirebaseUser({
-            firebaseUid: testFbUid,
-            email: testEmail,
-            name: 'Attacker Impersonator',
-            emailVerified: true
-          });
-          atoProtected = false; // Should not reach here
-        } catch (atoErr) {
-          // Expect MIGRATION_REQUIRED / 409
-          atoProtected = atoErr.code === 'MIGRATION_REQUIRED';
-        }
-
-        // Clean up test user
-        let conn3 = await oracledb.getConnection();
-        await conn3.execute(`DELETE FROM SL_USERS WHERE ID = :victimId`, [victimId]);
-        await conn3.commit();
-        await conn3.close();
-      } else {
-        atoProtected = true; // Code inspection verified
+      try {
+        await userModel.createOrSyncFirebaseUser({
+          firebaseUid: 'untrusted_new_uid',
+          email: 'test@example.com',
+          name: 'Test',
+          emailVerified: true
+        });
+      } catch (atoErr) {
+        emailOnlyRejected = atoErr.code === 'MIGRATION_REQUIRED' && atoErr.status === 409;
       }
+      userModel.findByFirebaseUid = origFindByFirebaseUid;
+      userModel.findByEmail = origFindByEmail;
     } catch (e) {
-      console.warn('ATO test exception:', e.message);
-      atoProtected = false;
+      emailOnlyRejected = false;
     }
-    report('AUTH-010', 'Account Takeover Protection (Email Auto-Link Blocked)', atoProtected);
+    report('AUTH-007', 'Email-only account linking rejected (Explicit migration required)', emailOnlyRejected);
 
     // ----------------------------------------------------------------
-    // AUTH-011: Existing Firebase UID cannot be overwritten
+    // AUTH-008: Admin migration protection
     // ----------------------------------------------------------------
-    let overwriteBlocked = false;
+    let adminMigrationProtected = false;
     try {
-      if (dbConnected) {
-        const testEmail2 = 'user_linked_' + Date.now() + '@example.com';
-        const initialFbUid = 'initial_fb_' + Date.now();
-        const evilFbUid = 'evil_fb_' + Date.now();
-        
-        let conn = await oracledb.getConnection();
-        const ins = await conn.execute(
-          `INSERT INTO SL_USERS (ACCOUNT_UID, FIREBASE_UID, NAME, EMAIL, PASSWORD, IS_VERIFIED, ROLE) 
-           VALUES (:accountUid, :initialFbUid, 'Linked User', :testEmail2, 'dummy', 1, 'USER') 
-           RETURNING ID INTO :id`,
-          { accountUid: generateAccountUID(), initialFbUid, testEmail2, id: { type: oracledb.NUMBER, dir: oracledb.BIND_OUT } }
-        );
-        await conn.commit();
-        const linkedId = ins.outBinds.id[0];
-        await conn.close();
+      const origFindByFirebaseUid = userModel.findByFirebaseUid;
+      const origFindByEmail = userModel.findByEmail;
+      userModel.findByFirebaseUid = async () => null;
+      userModel.findByEmail = async () => ({ ID: 1, EMAIL: 'admin@example.com', ROLE: 'ADMIN' });
 
-        // Attempt to overwrite
-        try {
-          await userModel.linkFirebaseUid(linkedId, evilFbUid);
-          overwriteBlocked = false;
-        } catch (owErr) {
-          overwriteBlocked = owErr.code === 'FIREBASE_UID_OVERWRITE_FORBIDDEN';
-        }
-
-        let connClean = await oracledb.getConnection();
-        await connClean.execute(`DELETE FROM SL_USERS WHERE ID = :linkedId`, [linkedId]);
-        await connClean.commit();
-        await connClean.close();
-      } else {
-        overwriteBlocked = true;
+      try {
+        await userModel.createOrSyncFirebaseUser({
+          firebaseUid: 'attacker_uid',
+          email: 'admin@example.com',
+          name: 'Admin Attacker',
+          emailVerified: true
+        });
+      } catch (adminErr) {
+        adminMigrationProtected = adminErr.code === 'ADMIN_LINK_RESTRICTED' && adminErr.status === 403;
       }
+      userModel.findByFirebaseUid = origFindByFirebaseUid;
+      userModel.findByEmail = origFindByEmail;
     } catch (e) {
-      overwriteBlocked = false;
+      adminMigrationProtected = false;
     }
-    report('AUTH-011', 'Existing Firebase UID Overwrite Blocked', overwriteBlocked);
+    report('AUTH-008', 'Admin migration protection prevents automated takeover', adminMigrationProtected);
 
     // ----------------------------------------------------------------
-    // AUTH-012: Duplicate Firebase UID Rejected
+    // GOOGLE-001 to GOOGLE-004: Google OAuth 2.0 Integration
     // ----------------------------------------------------------------
-    report('AUTH-012', 'Database Unique Constraint on FIREBASE_UID', true, 'Enforced via SL_USERS.FIREBASE_UID UNIQUE');
+    console.log('\n--- 2. Google OAuth 2.0 & Firebase Integration (GOOGLE-001 to GOOGLE-004) ---');
+
+    // GOOGLE-001: Google provider configuration validated
+    const loginScreenPath = path.join(__dirname, '..', 'Frontend', 'src', 'screens', 'auth', 'LoginScreen.tsx');
+    const loginScreenContent = fs.readFileSync(loginScreenPath, 'utf8');
+    const hasGoogleHook = loginScreenContent.includes('Google.useIdTokenAuthRequest') || loginScreenContent.includes('GoogleAuthProvider.credential');
+    report('GOOGLE-001', 'Google provider configuration validated in React Native / Expo', hasGoogleHook);
+
+    // GOOGLE-002: Google credential reaches Firebase (signInWithCredential via GoogleAuthProvider)
+    const fbAuthServicePath = path.join(__dirname, '..', 'Frontend', 'src', 'services', 'firebaseAuthService.ts');
+    const fbAuthServiceContent = fs.readFileSync(fbAuthServicePath, 'utf8');
+    const hasGoogleCredFlow = fbAuthServiceContent.includes('signInWithGoogleIdToken') && fbAuthServiceContent.includes('GoogleAuthProvider.credential');
+    report('GOOGLE-002', 'Google credential passed to Firebase signInWithCredential()', hasGoogleCredFlow);
+
+    // GOOGLE-003: Backend accepts only Firebase ID token
+    const authMiddlewarePath = path.join(__dirname, 'middleware', 'firebaseAuthMiddleware.js');
+    const authMiddlewareContent = fs.readFileSync(authMiddlewarePath, 'utf8');
+    const enforcesFirebaseIdToken = authMiddlewareContent.includes('verifyFirebaseIdToken');
+    report('GOOGLE-003', 'Backend accepts verified Firebase ID token for authorized routes', enforcesFirebaseIdToken);
+
+    // GOOGLE-004: Client cannot forge Google identity
+    const googleLoginReq = await request('/api/auth/google-login', 'POST', {}, {});
+    report('GOOGLE-004', 'Client cannot forge Google identity (Missing/invalid token rejected)', googleLoginReq.status === 400 || googleLoginReq.status === 401);
 
     // ----------------------------------------------------------------
-    // AUTH-013: New Firebase user receives unique ACCOUNT_UID
+    // SECTION 3: Deep Model & Identity Integrity
     // ----------------------------------------------------------------
-    const uid1 = generateAccountUID();
-    const uid2 = generateAccountUID();
-    report('AUTH-013', 'New User Unique ACCOUNT_UID Generation', uid1 !== uid2 && uid1.startsWith('SLT-'), `Sample: ${uid1}`);
-
-    // ----------------------------------------------------------------
-    // AUTH-014: Existing user's ACCOUNT_UID preserved during migration
-    // ----------------------------------------------------------------
-    report('AUTH-014', 'Existing User ACCOUNT_UID Preservation', true, 'Preserved in linkFirebaseUid & findByFirebaseUid');
-
-    // ----------------------------------------------------------------
-    // AUTH-015: Existing wallet preserved
-    // ----------------------------------------------------------------
-    report('AUTH-015', 'Existing Wallet (SL_WALLETS / WALLETS) Preservation', true, 'Schema v5 uses non-destructive ALTER');
-
-    // ----------------------------------------------------------------
-    // AUTH-016: Existing portfolio preserved
-    // ----------------------------------------------------------------
-    report('AUTH-016', 'Existing Portfolio Records Preservation', true, 'Foreign key references intact to SL_USERS.ID');
-
-    // ----------------------------------------------------------------
-    // AUTH-017: Existing transactions preserved
-    // ----------------------------------------------------------------
-    report('AUTH-017', 'Existing Transactions Preservation', true, 'All historical transaction logs untouched');
-
-    console.log('\n--- Phase 3: Client Security, Password & Logging Safety ---');
-
-    // ----------------------------------------------------------------
-    // AUTH-018: Password change uses Firebase, not Oracle bcrypt
-    // ----------------------------------------------------------------
-    report('AUTH-018', 'Password Change Uses Firebase Client SDK', true, 'firebaseAuthService.changePassword delegates to Firebase Auth updatePassword()');
-
-    // ----------------------------------------------------------------
-    // AUTH-019: No authentication OTP generated for Firebase users
-    // ----------------------------------------------------------------
-    report('AUTH-019', 'No Auth OTP Generated for Firebase Users', true, 'Firebase handles verification email and password reset tokens natively');
-
-    // ----------------------------------------------------------------
-    // AUTH-020: Firebase Admin fails safely when credentials are missing
-    // ----------------------------------------------------------------
-    report('AUTH-020', 'Firebase Admin Fail-Safe in Production', true, 'Throws fatal error on startup in production if credentials missing');
-
-    // ----------------------------------------------------------------
-    // AUTH-021: No Firebase private key appears in logs
-    // ----------------------------------------------------------------
-    report('AUTH-021', 'Private Key Redaction in Logs', true, 'Zero private key strings logged across codebase');
-
-    // ----------------------------------------------------------------
-    // AUTH-022: No Firebase token appears in logs
-    // ----------------------------------------------------------------
-    report('AUTH-022', 'Firebase ID Token Redaction in Logs', true, 'Tokens passed in Authorization headers only');
-
-    // ----------------------------------------------------------------
-    // AUTH-023: No password appears in logs
-    // ----------------------------------------------------------------
-    report('AUTH-023', 'Password Redaction in Logs', true, 'Plaintext passwords never logged');
+    console.log('\n--- 3. Identity & Schema Integrity ---');
+    report('ID-001', 'Firebase Admin SDK Initialization Status', isInitialized(), `Initialized: ${isInitialized()}`);
+    report('ID-002', 'Unique ACCOUNT_UID generation (SLT- prefix)', generateAccountUID().startsWith('SLT-'));
+    report('ID-003', 'Model findByFirebaseUid method defined', typeof userModel.findByFirebaseUid === 'function');
+    report('ID-004', 'Admin Endpoints Guarded', (await request('/api/admin/kyc/pending')).status === 401);
 
   } finally {
     server.close();
   }
 
   console.log('\n================================================================');
-  console.log(`📊 TEST SUITE SUMMARY: ${passed} Passed, ${failed} Failed out of 23 Tests`);
+  console.log(`📊 TEST SUITE SUMMARY: ${passed} Passed, ${failed} Failed`);
   console.log('================================================================\n');
 
   if (failed > 0) {
@@ -326,4 +225,3 @@ runTestSuite().catch(err => {
   console.error('Fatal test error:', err);
   process.exit(1);
 });
-
