@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, KeyboardAvoidingView, Platfor
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { MaterialIcons } from '@expo/vector-icons';
-import { colors, typography, layout } from '../../theme';
+import { colors, typography } from '../../theme';
 import { InputField, PrimaryButton, Toast, NetworkErrorScreen } from '../../components';
 import { authService } from '../../services/apiService';
 

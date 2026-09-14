@@ -13,7 +13,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { MaterialIcons } from '@expo/vector-icons';
-import { colors, typography, layout } from '../../theme';
+import { colors, typography } from '../../theme';
 import { PrimaryButton, Toast, NetworkErrorScreen } from '../../components';
 import { authService } from '../../services/apiService';
 import { firebaseAuthService } from '../../services/firebaseAuthService';
