@@ -38,9 +38,7 @@ exports.registerUser = async (name, email, password) => {
   await verificationModel.createEmailVerificationOTP(userId, otp, expiresAt);
 
   if (process.env.NODE_ENV !== 'production') {
-    console.log(`\n=================================================`);
-    console.log(`📧 Email Verification OTP for ${email}: ${otp}`);
-    console.log(`=================================================\n`);
+    console.log(`📧 Generated email verification OTP for ${email} (dispatching via Resend)`);
   }
 
   // Send verification OTP email (awaited)
@@ -225,9 +223,7 @@ exports.forgotPassword = async (email) => {
   await verificationModel.createPasswordResetOTP(user.ID, otp, expiresAt);
 
   if (process.env.NODE_ENV !== 'production') {
-    console.log(`\n=================================================`);
-    console.log(`🔑 Password Reset OTP for ${email}: ${otp}`);
-    console.log(`=================================================\n`);
+    console.log(`🔑 Generated password reset OTP for ${email} (dispatching via Resend)`);
   }
 
   // Send password reset OTP email (awaited)

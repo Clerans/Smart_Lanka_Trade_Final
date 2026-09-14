@@ -25,32 +25,34 @@ if (Test-Path $walletDir) {
     Write-Host "Oracle Wallet files packaged into wallet/"
 }
 
-# 3. Create production Linux .env file
+# 3. Create production Linux .env file template
 $envContent = @'
 PORT=5000
-BASE_URL=http://140.238.89.49:5000
-JWT_SECRET=smartlanka_super_secret_key_2024
+NODE_ENV=production
+BASE_URL=https://smart-lanka-trade-final.onrender.com
+JWT_SECRET=${JWT_SECRET}
 
-# Oracle Database
-DB_USER=ADMIN
-DB_CONNECT=smartlankatradedb_low
-DB_PASSWORD="KrishCl1228@#"
+# Oracle Autonomous AI Database 26ai
+DB_USER=${DB_USER}
+DB_CONNECT=${DB_CONNECT}
+DB_PASSWORD=${DB_PASSWORD}
 DB_WALLET_PATH=/home/opc/smartlanka-backend/wallet
-DB_WALLET_PASSWORD="KrishCl1228@#"
+DB_WALLET_PASSWORD=${DB_WALLET_PASSWORD}
 
-# Email
-EMAIL_USER=cleranspc@gmail.com
-EMAIL_PASS=gxheezokvkslvhwn
-SMTP_HOST=smtp.gmail.com
-SMTP_PORT=587
-SMTP_USER=cleranspc@gmail.com
-SMTP_PASS=gxheezokvkslvhwn
-EMAIL_FROM="SMARTLANKA TRADE <cleranspc@gmail.com>"
+# Email Delivery via Resend REST API (HTTPS / Port 443)
+EMAIL_PROVIDER=resend
+RESEND_API_KEY=${RESEND_API_KEY}
+EMAIL_FROM=${EMAIL_FROM}
 
 # Binance API Configuration
-BINANCE_API_KEY=c4xJHYQiWgOySOlffsYTTeCh37BwJt7wk5estOwZamK1KxozghzafNlFiq6v6hRm
-BINANCE_API_SECRET=uljLJfz9whdodDIOsxDECNCfTTilm9C6x8pRI9K8WVQnomC3mwofaa9kdnmdbKSV
+BINANCE_API_KEY=${BINANCE_API_KEY}
+BINANCE_API_SECRET=${BINANCE_API_SECRET}
 BINANCE_BASE_URL=https://api.binance.com
+
+# Firebase Admin Authentication
+FIREBASE_PROJECT_ID=${FIREBASE_PROJECT_ID}
+FIREBASE_CLIENT_EMAIL=${FIREBASE_CLIENT_EMAIL}
+FIREBASE_PRIVATE_KEY=${FIREBASE_PRIVATE_KEY}
 '@
 
 [System.IO.File]::WriteAllText("$staging\.env", $envContent, [System.Text.Encoding]::UTF8)

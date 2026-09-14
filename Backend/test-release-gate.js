@@ -259,6 +259,8 @@ async function runReleaseGateTests() {
 
   if (failed > 0) {
     process.exit(1);
+  } else {
+    process.exit(0);
   }
 }
 
@@ -266,3 +268,4 @@ runReleaseGateTests().catch(err => {
   console.error('Fatal release gate test error:', err);
   process.exit(1);
 });
+
