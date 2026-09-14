@@ -1,5 +1,5 @@
 const admin = require('firebase-admin');
-require('dotenv').config();
+require('dotenv').config({ quiet: true });
 
 let isInitialized = false;
 
@@ -27,7 +27,16 @@ function initFirebaseAdmin() {
 
     // 2. Individual Environment Variables
     if (process.env.FIREBASE_PROJECT_ID && process.env.FIREBASE_CLIENT_EMAIL && process.env.FIREBASE_PRIVATE_KEY) {
-      const privateKey = process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n');
+      const rawKey = process.env.FIREBASE_PRIVATE_KEY;
+      const privateKey = rawKey.replace(/\\n/g, '\n');
+
+      if (!privateKey.includes('-----BEGIN PRIVATE KEY-----')) {
+        throw new Error(
+          'FATAL: Malformed FIREBASE_PRIVATE_KEY. The private key must contain "-----BEGIN PRIVATE KEY-----" after newline replacement. ' +
+          'Please verify your environment variable formatting and escaped newlines (\\n).'
+        );
+      }
+
       admin.initializeApp({
         credential: admin.credential.cert({
           projectId: process.env.FIREBASE_PROJECT_ID,

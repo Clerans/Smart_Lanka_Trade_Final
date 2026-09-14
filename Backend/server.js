@@ -1,7 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const { rateLimit } = require('express-rate-limit');
-require('dotenv').config();
+require('dotenv').config({ quiet: true });
 const connectDB = require('./config/db');
 
 const app = express();
@@ -35,6 +35,42 @@ const marketLimiter = rateLimit({
   }
 });
 
+const walletLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 60, // 60 requests per 15 minutes per IP
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    code: 'TOO_MANY_REQUESTS',
+    message: 'Too many wallet requests from this IP, please try again later.'
+  }
+});
+
+const tradeLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 60, // 60 requests per 15 minutes per IP
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    code: 'TOO_MANY_REQUESTS',
+    message: 'Too many trade requests from this IP, please try again later.'
+  }
+});
+
+const kycLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 20, // 20 requests per 15 minutes per IP
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    code: 'TOO_MANY_REQUESTS',
+    message: 'Too many KYC requests from this IP, please try again later.'
+  }
+});
+
 // Middleware
 app.use(cors());
 app.use(express.json({ limit: '20mb' }));
@@ -48,15 +84,15 @@ app.use((req, res, next) => {
 
 // Routes
 app.use('/api/auth', authLimiter, require('./routes/authRoutes'));
-app.use('/api/wallet', require('./routes/walletRoutes'));
+app.use('/api/wallet', walletLimiter, require('./routes/walletRoutes'));
 app.use('/api/market', marketLimiter, require('./routes/marketRoutes'));
 app.use('/api/alerts', require('./routes/alertRoutes'));
-app.use('/api/trade', require('./routes/tradeRoutes'));
+app.use('/api/trade', tradeLimiter, require('./routes/tradeRoutes'));
 app.use('/api/portfolio', require('./routes/portfolioRoutes'));
 app.use('/api/transactions', require('./routes/transactionRoutes'));
 app.use('/api/ai/backtest', require('./routes/backtestRoutes'));
 app.use('/api/ai', require('./routes/aiRoutes'));
-app.use('/api/kyc', require('./routes/kycRoutes'));
+app.use('/api/kyc', kycLimiter, require('./routes/kycRoutes'));
 app.use('/api/admin/kyc', require('./routes/adminKycRoutes'));
 app.get('/api/test-market', (req, res) => res.json({ message: "Market route test works" }));
 

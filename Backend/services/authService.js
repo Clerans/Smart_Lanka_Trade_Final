@@ -33,7 +33,7 @@ exports.registerUser = async (name, email, password) => {
   const userId = await userModel.createUser(name, email, hashedPassword, token);
 
   // Generate 6-digit OTP for email verification
-  const otp = Math.floor(100000 + Math.random() * 900000).toString();
+  const otp = crypto.randomInt(100000, 1000000).toString();
   const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes expiry
   await verificationModel.createEmailVerificationOTP(userId, otp, expiresAt);
 
@@ -220,7 +220,7 @@ exports.forgotPassword = async (email) => {
     throw createError('USER_NOT_FOUND', 'User with this email does not exist.', 404);
   }
 
-  const otp = Math.floor(100000 + Math.random() * 900000).toString();
+  const otp = crypto.randomInt(100000, 1000000).toString();
   const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
   await verificationModel.createPasswordResetOTP(user.ID, otp, expiresAt);
 

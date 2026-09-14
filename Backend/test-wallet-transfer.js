@@ -1,5 +1,5 @@
 const oracledb = require('oracledb');
-require('dotenv').config();
+require('dotenv').config({ quiet: true });
 const connectDB = require('./config/db');
 const paymentService = require('./services/paymentService');
 const walletFundingService = require('./services/walletFundingService');

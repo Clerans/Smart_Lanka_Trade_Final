@@ -1,5 +1,5 @@
 const nodemailer = require('nodemailer');
-require('dotenv').config();
+require('dotenv').config({ quiet: true });
 
 // Provider selection: 'smtp' (strictly Nodemailer with Gmail SMTP)
 const getEmailProvider = () => (process.env.EMAIL_PROVIDER || 'smtp').toLowerCase();

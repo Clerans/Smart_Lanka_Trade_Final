@@ -13,6 +13,20 @@ const {
   getTransactionDetails
 } = require('../controllers/walletController');
 const { protect } = require('../middleware/authMiddleware');
+const { rateLimit } = require('express-rate-limit');
+
+// Strict rate limiter for sensitive transfer and enumeration-target endpoints
+const transferLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 15, // 15 requests per 15 min per IP
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    code: 'TOO_MANY_REQUESTS',
+    message: 'Too many transfer/lookup attempts from this IP, please try again later.'
+  }
+});
 
 // Wallet Balance & Details
 router.get('/', protect, getWalletDetails);
@@ -27,9 +41,9 @@ router.post('/deposit/verify', protect, verifyDeposit);
 router.post('/withdraw', protect, requestWithdrawal);
 
 // Internal P2P Transfers
-router.get('/recipient/:uid', protect, lookupRecipient);
-router.get('/users/:uid', protect, lookupRecipient);
-router.post('/transfer', protect, executeTransfer);
+router.get('/recipient/:uid', protect, transferLimiter, lookupRecipient);
+router.get('/users/:uid', protect, transferLimiter, lookupRecipient);
+router.post('/transfer', protect, transferLimiter, executeTransfer);
 
 // Transactions & Receipts
 router.get('/transactions', protect, getTransactions);

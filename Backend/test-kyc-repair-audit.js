@@ -17,7 +17,7 @@ const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
 const http = require('http');
-require('dotenv').config();
+require('dotenv').config({ quiet: true });
 
 const app = require('./server');
 

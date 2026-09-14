@@ -62,18 +62,6 @@ const executeBuyOrder = async (userId, symbol, amountLKR) => {
       { numAmount, userId }
     );
 
-    // Also deduct SL_WALLETS for backward compatibility
-    try {
-      await connection.execute(
-        `UPDATE SL_WALLETS 
-         SET BALANCE = BALANCE - :numAmount, LAST_UPDATED = CURRENT_TIMESTAMP 
-         WHERE USER_ID = :userId`,
-        { numAmount, userId }
-      );
-    } catch (err) {
-      console.warn('Syncing SL_WALLETS failed (non-blocking):', err.message);
-    }
-
     // 4. Query current portfolio record
     const portfolioRes = await connection.execute(
       `SELECT QUANTITY, AVERAGE_PRICE, INVESTED_AMOUNT 
@@ -122,17 +110,6 @@ const executeBuyOrder = async (userId, symbol, amountLKR) => {
       priceLKR,
       numAmount
     );
-
-    // Log to legacy SL_TRANSACTIONS for backward compatibility
-    try {
-      await connection.execute(
-        `INSERT INTO SL_TRANSACTIONS (USER_ID, AMOUNT, TYPE, STATUS) 
-         VALUES (:userId, :numAmount, 'BUY', 'COMPLETED')`,
-        { userId, numAmount }
-      );
-    } catch (err) {
-      console.warn('Syncing SL_TRANSACTIONS failed (non-blocking):', err.message);
-    }
 
     await connection.commit();
 
@@ -226,18 +203,6 @@ const executeSellOrder = async (userId, symbol, quantity) => {
       { sellValue, userId }
     );
 
-    // Also update SL_WALLETS for backward compatibility
-    try {
-      await connection.execute(
-        `UPDATE SL_WALLETS 
-         SET BALANCE = BALANCE + :sellValue, LAST_UPDATED = CURRENT_TIMESTAMP 
-         WHERE USER_ID = :userId`,
-        { sellValue, userId }
-      );
-    } catch (err) {
-      console.warn('Syncing SL_WALLETS failed (non-blocking):', err.message);
-    }
-
     // 5. Create transaction log
     await transactionModel.createTransaction(
       connection,
@@ -248,17 +213,6 @@ const executeSellOrder = async (userId, symbol, quantity) => {
       priceLKR,
       sellValue
     );
-
-    // Log to legacy SL_TRANSACTIONS for backward compatibility
-    try {
-      await connection.execute(
-        `INSERT INTO SL_TRANSACTIONS (USER_ID, AMOUNT, TYPE, STATUS) 
-         VALUES (:userId, :sellValue, 'SELL', 'COMPLETED')`,
-        { userId, sellValue }
-      );
-    } catch (err) {
-      console.warn('Syncing SL_TRANSACTIONS failed (non-blocking):', err.message);
-    }
 
     await connection.commit();
 

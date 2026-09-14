@@ -7,9 +7,12 @@ const userModel = require('../models/userModel');
  * 1. Get complete wallet details
  */
 const getWalletDetails = async (req, res) => {
+  if (!req.user || !req.user.id) {
+    return res.status(401).json({ success: false, code: 'UNAUTHORIZED', message: 'Authentication required.' });
+  }
   let connection;
   try {
-    const userId = req.user ? req.user.id : 1;
+    const userId = req.user.id;
     connection = await oracledb.getConnection();
     
     // 1. Get wallet cash balance
@@ -61,7 +64,10 @@ const getWalletDetails = async (req, res) => {
 const getWalletBalance = async (req, res) => {
   let connection;
   try {
-    const userId = req.user ? req.user.id : 1;
+    if (!req.user || !req.user.id) {
+      return res.status(401).json({ success: false, code: 'UNAUTHORIZED', message: 'Authentication required.' });
+    }
+    const userId = req.user.id;
     
     connection = await oracledb.getConnection();
     const result = await connection.execute(
@@ -96,8 +102,11 @@ const getWalletBalance = async (req, res) => {
  */
 const depositMoney = async (req, res) => {
   try {
+    if (!req.user || !req.user.id) {
+      return res.status(401).json({ success: false, code: 'UNAUTHORIZED', message: 'Authentication required.' });
+    }
     const { amount, method = 'CARD', idempotencyKey, simulateFailure } = req.body;
-    const userId = req.user ? req.user.id : 1;
+    const userId = req.user.id;
 
     // Phase 1: Initiate payment intent via payment provider
     const initResult = await paymentService.initiateDeposit({
@@ -142,8 +151,11 @@ const depositMoney = async (req, res) => {
  */
 const initiateDeposit = async (req, res) => {
   try {
+    if (!req.user || !req.user.id) {
+      return res.status(401).json({ success: false, code: 'UNAUTHORIZED', message: 'Authentication required.' });
+    }
     const { amount, method = 'CARD', idempotencyKey } = req.body;
-    const userId = req.user ? req.user.id : 1;
+    const userId = req.user.id;
 
     const result = await paymentService.initiateDeposit({
       userId,
@@ -170,8 +182,11 @@ const initiateDeposit = async (req, res) => {
  */
 const verifyDeposit = async (req, res) => {
   try {
+    if (!req.user || !req.user.id) {
+      return res.status(401).json({ success: false, code: 'UNAUTHORIZED', message: 'Authentication required.' });
+    }
     const { transactionId, providerReference, simulateFailure } = req.body;
-    const userId = req.user ? req.user.id : 1;
+    const userId = req.user.id;
 
     const result = await paymentService.verifyAndSettleDeposit({
       userId,
@@ -198,8 +213,11 @@ const verifyDeposit = async (req, res) => {
  */
 const requestWithdrawal = async (req, res) => {
   try {
+    if (!req.user || !req.user.id) {
+      return res.status(401).json({ success: false, code: 'UNAUTHORIZED', message: 'Authentication required.' });
+    }
     const { amount, method = 'BANK_ACCOUNT', destination, bankName, idempotencyKey } = req.body;
-    const userId = req.user ? req.user.id : 1;
+    const userId = req.user.id;
 
     const result = await walletFundingService.requestWithdrawal({
       userId,
@@ -229,8 +247,11 @@ const requestWithdrawal = async (req, res) => {
  */
 const lookupRecipient = async (req, res) => {
   try {
+    if (!req.user || !req.user.id) {
+      return res.status(401).json({ success: false, code: 'UNAUTHORIZED', message: 'Authentication required.' });
+    }
     const { uid } = req.params;
-    const senderUserId = req.user ? req.user.id : null;
+    const senderUserId = req.user.id;
 
     const result = await walletFundingService.lookupRecipient(uid, senderUserId);
     res.json({
@@ -251,8 +272,11 @@ const lookupRecipient = async (req, res) => {
  */
 const executeTransfer = async (req, res) => {
   try {
+    if (!req.user || !req.user.id) {
+      return res.status(401).json({ success: false, code: 'UNAUTHORIZED', message: 'Authentication required.' });
+    }
     const { recipientUid, amount, message, idempotencyKey } = req.body;
-    const senderUserId = req.user ? req.user.id : 1;
+    const senderUserId = req.user.id;
 
     const result = await walletFundingService.executeInternalTransfer({
       senderUserId,
@@ -281,7 +305,10 @@ const executeTransfer = async (req, res) => {
  */
 const getTransactions = async (req, res) => {
   try {
-    const userId = req.user ? req.user.id : 1;
+    if (!req.user || !req.user.id) {
+      return res.status(401).json({ success: false, code: 'UNAUTHORIZED', message: 'Authentication required.' });
+    }
+    const userId = req.user.id;
     const { limit = 20, type = 'ALL' } = req.query;
 
     const formatted = await walletFundingService.getTransactionHistory({
@@ -308,8 +335,11 @@ const getTransactions = async (req, res) => {
  */
 const getTransactionDetails = async (req, res) => {
   try {
+    if (!req.user || !req.user.id) {
+      return res.status(401).json({ success: false, code: 'UNAUTHORIZED', message: 'Authentication required.' });
+    }
     const { id } = req.params;
-    const userId = req.user ? req.user.id : 1;
+    const userId = req.user.id;
 
     const details = await walletFundingService.getTransactionDetails(id, userId);
     res.json({
