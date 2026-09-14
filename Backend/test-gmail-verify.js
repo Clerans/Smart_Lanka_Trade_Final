@@ -18,7 +18,7 @@ async function runSafeVerification() {
   console.log('\n✅ Resend REST API configuration detected');
   console.log('✅ Resend REST API connection initialized over HTTPS/443');
 
-  const testRecipient = process.env.TEST_EMAIL_RECIPIENT || 'test@example.com';
+  const testRecipient = process.env.TEST_EMAIL_RECIPIENT || 'delivered@resend.dev';
   if (process.env.RESEND_API_KEY) {
     console.log('\n2. Testing Single OTP Email Delivery via Resend REST API:');
     try {
