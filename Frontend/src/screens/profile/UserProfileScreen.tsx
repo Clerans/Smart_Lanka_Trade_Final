@@ -875,7 +875,7 @@ export const UserProfileScreen = () => {
             </View>
 
             <Text style={styles.aboutDesc}>
-              Sri Lanka's leading digital trading terminal combining CSE equities with global crypto assets. Features AI technical signal generation (SOMI Engine), real-time LKR exchange rate conversion, and automated Sri Lankan NIC OCR verification.
+              Sri Lanka&apos;s leading digital trading terminal combining CSE equities with global crypto assets. Features AI technical signal generation (SOMI Engine), real-time LKR exchange rate conversion, and automated Sri Lankan NIC OCR verification.
             </Text>
 
             <View style={styles.certRow}>
