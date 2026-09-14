@@ -1,5 +1,4 @@
 import * as React from 'react';
-const { useEffect, useState } = React;
 import {
   View,
   Text,
@@ -26,6 +25,7 @@ import { colors, typography, layout } from '../../theme';
 import { Card } from '../../components';
 import { authService, kycService } from '../../services/apiService';
 import { storageService } from '../../services/storageService';
+const { useEffect, useState } = React;
 
 const menuItems = [
   { id: 'kyc', title: 'KYC Identity Verification', icon: 'verified-user', screen: 'KYCVerification' },

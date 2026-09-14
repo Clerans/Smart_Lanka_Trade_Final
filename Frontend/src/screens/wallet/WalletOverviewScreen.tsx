@@ -1,5 +1,4 @@
 import * as React from 'react';
-const { useState, useEffect, useCallback } = React;
 import {
   View,
   Text,
@@ -23,6 +22,7 @@ import {
 import { colors } from '../../theme';
 import { walletService, portfolioService } from '../../services/apiService';
 import { formatLKR, formatNumber } from '../../utils/formatters';
+const { useState, useEffect, useCallback } = React;
 
 interface HoldingItem {
   coin: string;

@@ -77,33 +77,13 @@ export const LoginScreen = () => {
   }, []);
 
   // Handle Google OAuth response
-  useEffect(() => {
-    if (!response) return;
-
-    if (response.type === 'success') {
-      const idToken = response.params?.id_token;
-      if (idToken) {
-        handleGoogleLogin(idToken);
-      } else {
-        showToast('Google authentication could not be verified. Please try again.', 'error');
-        setGoogleLoading(false);
-      }
-    } else if (response.type === 'error') {
-      showToast('Google sign-in failed. Please try again.', 'error');
-      setGoogleLoading(false);
-    } else if (response.type === 'cancel' || response.type === 'dismiss') {
-      // User cancelled gracefully - return smoothly to the login screen
-      setGoogleLoading(false);
-    }
-  }, [response]);
-
-  const showToast = (message: string, type: 'success' | 'error' | 'warning') => {
+  const showToast = useCallback((message: string, type: 'success' | 'error' | 'warning') => {
     setToastMessage(message);
     setToastType(type);
     setToastVisible(true);
-  };
+  }, []);
 
-  const handleGoogleLogin = async (idToken: string) => {
+  const handleGoogleLogin = useCallback(async (idToken: string) => {
     setLoading(true);
     setIsNetworkError(false);
     try {
@@ -127,7 +107,27 @@ export const LoginScreen = () => {
       setLoading(false);
       setGoogleLoading(false);
     }
-  };
+  }, [navigation, showToast]);
+
+  useEffect(() => {
+    if (!response) return;
+
+    if (response.type === 'success') {
+      const idToken = response.params?.id_token;
+      if (idToken) {
+        handleGoogleLogin(idToken);
+      } else {
+        showToast('Google authentication could not be verified. Please try again.', 'error');
+        setGoogleLoading(false);
+      }
+    } else if (response.type === 'error') {
+      showToast('Google sign-in failed. Please try again.', 'error');
+      setGoogleLoading(false);
+    } else if (response.type === 'cancel' || response.type === 'dismiss') {
+      // User cancelled gracefully - return smoothly to the login screen
+      setGoogleLoading(false);
+    }
+  }, [response, handleGoogleLogin, showToast]);
 
   const handleGooglePress = async () => {
     if (loading || googleLoading) return;
@@ -416,7 +416,7 @@ export const LoginScreen = () => {
             {/* Footer */}
             <View style={styles.footer}>
               <Text style={styles.footerText}>
-                Don't have an account?{' '}
+                Don&apos;t have an account?{' '}
                 <Text
                   style={styles.registerLink}
                   onPress={() => navigation.navigate('Register')}

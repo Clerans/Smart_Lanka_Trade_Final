@@ -25,7 +25,7 @@ export const OTPVerificationScreen = () => {
 
   // 6-digit OTP State
   const [otp, setOtp] = useState<string[]>(['', '', '', '', '', '']);
-  const inputRefs = useRef<Array<TextInput | null>>([]);
+  const inputRefs = useRef<(TextInput | null)[]>([]);
 
   const [timer, setTimer] = useState(60);
   const [loading, setLoading] = useState(false);
@@ -201,7 +201,7 @@ export const OTPVerificationScreen = () => {
 
             <Text style={styles.mainTitle}>Verify Your Email</Text>
             <Text style={styles.description}>
-              We've sent a 6-digit verification code to
+              We&apos;ve sent a 6-digit verification code to
             </Text>
             <Text style={styles.highlightText}>{maskEmail(email)}</Text>
 
@@ -243,7 +243,7 @@ export const OTPVerificationScreen = () => {
 
             {/* Resend Action */}
             <View style={styles.resendSection}>
-              <Text style={styles.didNotReceive}>Didn't receive the code?</Text>
+              <Text style={styles.didNotReceive}>Didn&apos;t receive the code?</Text>
               <View style={styles.timerRow}>
                 {timer > 0 ? (
                   <View style={styles.timerPill}>

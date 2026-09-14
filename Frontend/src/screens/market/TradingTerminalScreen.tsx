@@ -1,5 +1,4 @@
 import * as React from 'react';
-const { useState, useEffect, useCallback } = React;
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, KeyboardAvoidingView, Platform, ActivityIndicator, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
@@ -8,6 +7,7 @@ import { colors, typography, layout } from '../../theme';
 import { PrimaryButton, Card } from '../../components';
 import { marketService, aiService } from '../../services/apiService';
 import { formatLKR, formatNumber } from '../../utils/formatters';
+const { useState, useEffect, useCallback } = React;
 
 const tradeableSymbols = ['BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'SOLUSDT', 'ADAUSDT', 'XRPUSDT', 'DOGEUSDT'];
 

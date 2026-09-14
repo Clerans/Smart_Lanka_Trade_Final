@@ -1,5 +1,4 @@
 import * as React from 'react';
-const { useEffect, useState, useCallback } = React;
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Image, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useIsFocused } from '@react-navigation/native';
@@ -10,6 +9,7 @@ import { Card, NotificationModal, SetAlertModal } from '../../components';
 import { storageService } from '../../services/storageService';
 import { marketService, walletService, portfolioService, authService } from '../../services/apiService';
 import { formatLKR, formatNumber } from '../../utils/formatters';
+const { useEffect, useState, useCallback } = React;
 
 // Helper to generate SVG path for sparklines
 const generateSparklinePath = (data: number[], width: number, height: number) => {

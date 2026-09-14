@@ -196,7 +196,7 @@ export const AssetDetailsScreen = () => {
 
               <View style={styles.quoteBlock}>
                 <Text style={styles.quoteText}>
-                  "{aiData?.summary || 'Multi-indicator scoring framework evaluated moving averages, RSI, and MACD signals.'}"
+                  &ldquo;{aiData?.summary || 'Multi-indicator scoring framework evaluated moving averages, RSI, and MACD signals.'}&rdquo;
                 </Text>
               </View>
             </>

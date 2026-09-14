@@ -1,5 +1,4 @@
 import * as React from 'react';
-const { useState, useEffect, useCallback } = React;
 import { 
   View, 
   Text, 
@@ -20,6 +19,7 @@ import { colors, typography, layout } from '../../theme';
 import { PrimaryButton, Card } from '../../components';
 import { marketService, walletService } from '../../services/apiService';
 import { formatLKR, formatNumber } from '../../utils/formatters';
+const { useState, useEffect, useCallback } = React;
 
 export const CurrencyConversionScreen = () => {
   const navigation = useNavigation<any>();
