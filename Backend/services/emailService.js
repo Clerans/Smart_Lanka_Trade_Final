@@ -1,118 +1,91 @@
-const nodemailer = require('nodemailer');
+const { Resend } = require('resend');
 require('dotenv').config({ quiet: true });
-
-// Provider selection: 'smtp' (strictly Nodemailer with Gmail SMTP)
-const getEmailProvider = () => (process.env.EMAIL_PROVIDER || 'smtp').toLowerCase();
 
 // Get configured sender address
 const getFromAddress = () => {
-  return process.env.EMAIL_FROM || '"SmartLanka Trade" <cleranspc@gmail.com>';
+  return process.env.EMAIL_FROM || 'SmartLanka Trade <onboarding@resend.dev>';
 };
 
-// Nodemailer SMTP Transporter (Singleton / Reusable)
-let smtpTransporter = null;
-const getSmtpTransporter = () => {
-  if (!smtpTransporter) {
-    const smtpHost = process.env.SMTP_HOST || 'smtp.gmail.com';
-    const smtpPort = parseInt(process.env.SMTP_PORT || '587', 10);
-    const smtpUser = process.env.SMTP_USER;
-    const smtpPass = process.env.SMTP_PASS;
-
-    if (!smtpUser || !smtpPass) {
-      throw new Error('SMTP_USER and SMTP_PASS environment variables are required for Gmail SMTP delivery.');
+// Resend Client Instance (Singleton / Reusable)
+let resendClient = null;
+const getResendClient = () => {
+  if (!resendClient) {
+    const apiKey = process.env.RESEND_API_KEY;
+    if (!apiKey) {
+      const err = new Error('RESEND_API_KEY environment variable is not configured.');
+      err.code = 'EMAIL_CONFIG_MISSING';
+      throw err;
     }
-
-    smtpTransporter = nodemailer.createTransport({
-      host: smtpHost,
-      port: smtpPort,
-      secure: smtpPort === 465, // false for port 587 (STARTTLS)
-      auth: {
-        user: smtpUser,
-        pass: smtpPass
-      },
-      connectionTimeout: 10000,
-      greetingTimeout: 10000,
-      socketTimeout: 15000
-    });
+    resendClient = new Resend(apiKey);
   }
-  return smtpTransporter;
+  return resendClient;
 };
 
 // Safe Startup Diagnostics (Validates configuration without logging secrets or keys)
 const verifyEmailService = async () => {
-  const provider = getEmailProvider();
+  const provider = (process.env.EMAIL_PROVIDER || 'resend').toLowerCase();
   console.log('🔍 [Email Service Diagnostics]');
   console.log(`- Email provider: ${provider}`);
 
-  if (provider !== 'smtp') {
-    console.error(`❌ Invalid EMAIL_PROVIDER '${provider}'. Expected 'smtp' for Gmail SMTP.`);
-    return false;
-  }
+  const hasApiKey = !!process.env.RESEND_API_KEY;
+  const fromAddress = getFromAddress();
+  const hasSender = !!fromAddress;
 
-  const host = process.env.SMTP_HOST || 'smtp.gmail.com';
-  const port = parseInt(process.env.SMTP_PORT || '587', 10);
-  const user = process.env.SMTP_USER;
-  const hasPass = !!process.env.SMTP_PASS;
-  const hasSender = !!getFromAddress();
-
-  console.log(`- SMTP host configured: ${host ? 'yes' : 'no'}`);
-  console.log(`- SMTP port: ${port}`);
-  console.log(`- SMTP user configured: ${user ? 'yes' : 'no'}`);
-  console.log(`- SMTP password configured: ${hasPass ? 'yes' : 'no'}`);
+  console.log(`- Resend API key configured: ${hasApiKey ? 'yes' : 'no'}`);
   console.log(`- Email sender configured: ${hasSender ? 'yes' : 'no'}`);
 
-  if (!user || !hasPass) {
-    console.warn('⚠️ SMTP credentials missing in environment variables.');
+  if (!hasApiKey) {
+    console.warn('⚠️ RESEND_API_KEY missing in environment variables.');
     return false;
   }
 
-  try {
-    const transporter = getSmtpTransporter();
-    await transporter.verify();
-    console.log('✅ Gmail Nodemailer SMTP connection verified successfully');
-    return true;
-  } catch (error) {
-    console.error('❌ Gmail Nodemailer SMTP verification failed:', {
-      code: error.code,
-      command: error.command,
-      responseCode: error.responseCode,
-      message: error.message
-    });
-    return false;
-  }
+  return true;
 };
 
-// Generic internal dispatch function
+// Generic internal dispatch function via Resend REST API (HTTPS / Port 443)
 const dispatchEmail = async ({ to, subject, html, logLabel }) => {
-  const provider = getEmailProvider();
-  if (provider !== 'smtp') {
-    throw new Error(`Email provider '${provider}' is not supported. Configure EMAIL_PROVIDER=smtp.`);
-  }
-
   const fromAddress = getFromAddress();
+  const resend = getResendClient();
+
+  const recipient = Array.isArray(to) ? to : [to];
+
   try {
-    const transporter = getSmtpTransporter();
-    const mailOptions = {
+    const { data, error } = await resend.emails.send({
       from: fromAddress,
-      to: Array.isArray(to) ? to.join(', ') : to,
+      to: recipient,
       subject,
       html
-    };
-    const info = await transporter.sendMail(mailOptions);
-    console.log(`✅ ${logLabel} sent successfully via Gmail SMTP to ${to} (Message ID: ${info.messageId})`);
-    return info;
+    });
+
+    if (error) {
+      console.error(`❌ Resend REST API ${logLabel} failed:`, {
+        name: error.name,
+        message: error.message
+      });
+      const dispatchErr = new Error(`Email delivery failed via Resend REST API: ${error.message}`);
+      dispatchErr.code = 'EMAIL_SEND_FAILED';
+      dispatchErr.status = 503;
+      throw dispatchErr;
+    }
+
+    console.log(`✅ ${logLabel} sent successfully via Resend REST API to ${Array.isArray(to) ? to.join(', ') : to} (ID: ${data?.id || 'delivered'})`);
+    return { id: data?.id || 'delivered', success: true };
   } catch (error) {
-    console.error(`❌ Gmail SMTP ${logLabel} delivery failed for ${to}:`, {
-      code: error.code,
-      command: error.command,
-      responseCode: error.responseCode,
+    if (error.code === 'EMAIL_CONFIG_MISSING' || error.code === 'EMAIL_SEND_FAILED') {
+      throw error;
+    }
+    console.error(`❌ Resend REST API dispatch exception:`, {
+      name: error.name,
       message: error.message
     });
-    throw error;
+    const customErr = new Error('Email delivery could not be completed at this time.');
+    customErr.code = 'EMAIL_SEND_FAILED';
+    customErr.status = 503;
+    throw customErr;
   }
 };
 
-// 1. Send OTP for Email Verification (Registration / Resend)
+// 1. Send OTP for Email Verification (Primary Verification Mechanism)
 const sendVerificationOTPEmail = async (email, otp) => {
   const html = `
     <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 25px; border: 1px solid #e0e0e0; border-radius: 12px; background-color: #ffffff;">
@@ -172,7 +145,8 @@ const sendPasswordResetOTPEmail = async (email, otp) => {
 
 // 3. Send Verification Email (Link based fallback)
 const sendVerificationEmail = async (email, token) => {
-  const url = `${process.env.BASE_URL}/api/auth/verify/${token}`;
+  const baseUrl = process.env.BASE_URL || 'https://smart-lanka-trade-final.onrender.com';
+  const url = `${baseUrl}/api/auth/verify/${token}`;
   const html = `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #eee; border-radius: 10px;">
       <h2 style="color: #4CAF50; text-align: center;">Welcome to SmartLanka!</h2>
@@ -231,3 +205,4 @@ module.exports = {
   sendVerificationEmail, 
   sendPriceAlertEmail 
 };
+

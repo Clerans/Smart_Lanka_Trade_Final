@@ -317,6 +317,8 @@ async function runTestSuite() {
 
   if (failed > 0) {
     process.exit(1);
+  } else {
+    process.exit(0);
   }
 }
 
@@ -324,3 +326,4 @@ runTestSuite().catch(err => {
   console.error('Fatal test error:', err);
   process.exit(1);
 });
+
