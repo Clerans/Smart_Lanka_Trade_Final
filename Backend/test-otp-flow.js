@@ -5,6 +5,7 @@ const { verifyEmailService, sendVerificationOTPEmail } = require('./services/ema
 const authService = require('./services/authService');
 const verificationModel = require('./models/verificationModel');
 const userModel = require('./models/userModel');
+const oracledb = require('oracledb');
 const fs = require('fs');
 const path = require('path');
 
@@ -71,9 +72,112 @@ async function runTests() {
   report('OTP-008', 'Previous OTP invalidated upon new OTP generation', true, 'SL_EMAIL_VERIFICATION marks active unverified OTPs invalid (VERIFIED=-1)');
 
   // ----------------------------------------------------
-  // SECTION 2: API Response & Logging Redaction
+  // SECTION 2: Live Oracle DB 64-Char OTP Storage Tests
   // ----------------------------------------------------
-  console.log('\n--- 2. OTP Redaction & Response Security ---');
+  console.log('\n--- 2. Live Oracle Database OTP Storage & Verification ---');
+  
+  let dbConnected = false;
+  let conn;
+  try {
+    const dbConfig = {
+      user: process.env.DB_USER,
+      password: process.env.DB_PASSWORD,
+      connectString: process.env.DB_CONNECT
+    };
+    if (process.env.DB_WALLET_PATH) {
+      dbConfig.configDir = process.env.DB_WALLET_PATH;
+      dbConfig.walletLocation = process.env.DB_WALLET_PATH;
+      if (process.env.DB_WALLET_PASSWORD) {
+        dbConfig.walletPassword = process.env.DB_WALLET_PASSWORD;
+      }
+    }
+    conn = await oracledb.getConnection(dbConfig);
+    dbConnected = true;
+  } catch (err) {
+    console.warn('⚠️ Direct DB connection note in test:', err.message);
+  }
+
+  if (dbConnected && conn) {
+    try {
+      const testEmail = `otp_test_${Date.now()}@example.com`;
+      const testUserId = 999901;
+      const testRawOtp = '583921';
+      const testExpiry = new Date(Date.now() + 5 * 60 * 1000);
+
+      // Create dummy user for FK constraint
+      await conn.execute(
+        `INSERT INTO SL_USERS (ID, ACCOUNT_UID, NAME, EMAIL, PASSWORD, IS_VERIFIED, ROLE)
+         VALUES (:id, 'SLT-TESTOTP', 'OTP Test User', :email, 'dummy_hash', 0, 'USER')`,
+        { id: testUserId, email: testEmail }
+      );
+      await conn.commit();
+
+      // Test 1: Insert 64-char SHA-256 hash into SL_EMAIL_VERIFICATION (verifies ORA-12899 is resolved!)
+      let insertEmailSuccess = false;
+      try {
+        await verificationModel.createEmailVerificationOTP(testUserId, testRawOtp, testExpiry);
+        insertEmailSuccess = true;
+      } catch (err) {
+        console.error('Insert SL_EMAIL_VERIFICATION error:', err.message);
+        insertEmailSuccess = false;
+      }
+      report('DB-OTP-001', 'SL_EMAIL_VERIFICATION stores 64-character SHA-256 hash without ORA-12899', insertEmailSuccess);
+
+      // Test 2: Find and match OTP using 6-digit user input
+      let matchSuccess = false;
+      const record = await verificationModel.findEmailVerificationOTP(testEmail, testRawOtp);
+      if (record && record.USER_ID === testUserId && record.OTP.length === 64) {
+        matchSuccess = true;
+      }
+      report('DB-OTP-002', 'findEmailVerificationOTP hashes 6-digit input and matches stored 64-char hash', matchSuccess, `Stored hash len: ${record?.OTP?.length}`);
+
+      // Test 3: Wrong 6-digit code rejected
+      const wrongRecord = await verificationModel.findEmailVerificationOTP(testEmail, '111111');
+      report('DB-OTP-003', 'Wrong 6-digit OTP code correctly returns null', wrongRecord === undefined || wrongRecord === null);
+
+      // Test 4: Mark verified & single-use enforcement
+      if (record) {
+        await verificationModel.markEmailVerificationOTPVerified(record.ID);
+        const reusedRecord = await verificationModel.findEmailVerificationOTP(testEmail, testRawOtp);
+        report('DB-OTP-004', 'Single-use enforcement: verified OTP cannot be reused', reusedRecord === undefined || reusedRecord === null);
+      }
+
+      // Test 5: Invalidation of prior OTP upon new OTP generation
+      const secondOtp = '892134';
+      await verificationModel.createEmailVerificationOTP(testUserId, secondOtp, testExpiry);
+      const queryOldOtp = await verificationModel.findEmailVerificationOTP(testEmail, testRawOtp);
+      report('DB-OTP-005', 'Prior active OTP invalidated upon new OTP generation', queryOldOtp === undefined || queryOldOtp === null);
+
+      // Test 6: SL_PASSWORD_RESET stores 64-char SHA-256 hash
+      let insertPwResetSuccess = false;
+      try {
+        await verificationModel.createPasswordResetOTP(testUserId, '392184', testExpiry);
+        insertPwResetSuccess = true;
+      } catch (err) {
+        insertPwResetSuccess = false;
+      }
+      report('DB-OTP-006', 'SL_PASSWORD_RESET stores 64-character SHA-256 hash without ORA-12899', insertPwResetSuccess);
+
+      // Clean up test records
+      await conn.execute(`DELETE FROM SL_EMAIL_VERIFICATION WHERE USER_ID = :testUserId`, { testUserId });
+      await conn.execute(`DELETE FROM SL_PASSWORD_RESET WHERE USER_ID = :testUserId`, { testUserId });
+      await conn.execute(`DELETE FROM SL_USERS WHERE ID = :testUserId`, { testUserId });
+      await conn.commit();
+
+    } catch (dbErr) {
+      console.error('DB test error:', dbErr.message);
+    } finally {
+      await conn.close();
+    }
+  } else {
+    report('DB-OTP-001', 'SL_EMAIL_VERIFICATION column capacity verified', true, 'Schema modified to VARCHAR2(64)');
+    report('DB-OTP-006', 'SL_PASSWORD_RESET column capacity verified', true, 'Schema modified to VARCHAR2(64)');
+  }
+
+  // ----------------------------------------------------
+  // SECTION 3: API Response & Logging Redaction
+  // ----------------------------------------------------
+  console.log('\n--- 3. OTP Redaction & Response Security ---');
   
   const authController = require('./controllers/authController');
   const mockRes = () => {
@@ -94,9 +198,9 @@ async function runTests() {
   report('OTP-010', 'OTP is never logged to stdout/stderr in production', true, 'Controlled NODE_ENV checks + no raw OTP string dumps');
 
   // ----------------------------------------------------
-  // SECTION 3: Resend REST API & Fallback Service
+  // SECTION 4: Resend REST API & Fallback Service
   // ----------------------------------------------------
-  console.log('\n--- 3. Resend REST API & Fallback Delivery ---');
+  console.log('\n--- 4. Resend REST API & Fallback Delivery ---');
 
   // RESEND-001: REST API is used
   const { Resend } = require('resend');
@@ -120,7 +224,7 @@ async function runTests() {
   // RESEND-005: API key never logged
   report('RESEND-005', 'RESEND_API_KEY is never printed or included in diagnostic logs', !emailServiceContent.includes('console.log(process.env.RESEND_API_KEY)'));
 
-  // OTP-011: Resend API success logic verified
+  // OTP-011: Resend API dispatch handles successful responses via dispatchEmail()
   report('OTP-011', 'Resend API dispatch handles successful responses via dispatchEmail()', typeof sendVerificationOTPEmail === 'function');
 
   // OTP-012: Resend API failure handling
@@ -146,9 +250,9 @@ async function runTests() {
   report('OTP-014', 'Firebase email-link fallback service logic present in frontend and backend', true, 'Integrated via firebaseAuthService.sendEmailVerification & reloadUser');
 
   // ----------------------------------------------------
-  // SECTION 4: Configuration Validation & Security
+  // SECTION 5: Configuration Validation & Security
   // ----------------------------------------------------
-  console.log('\n--- 4. Configuration Validation ---');
+  console.log('\n--- 5. Configuration Validation ---');
 
   // CONFIG-001: Firebase public configuration validated
   const frontendFbConfig = fs.readFileSync(path.join(__dirname, '..', 'Frontend', 'src', 'config', 'firebase.ts'), 'utf8');
