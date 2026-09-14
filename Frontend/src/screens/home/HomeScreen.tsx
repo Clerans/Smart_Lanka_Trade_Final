@@ -7,7 +7,7 @@ import Svg, { Path } from 'react-native-svg';
 import { colors, typography, layout } from '../../theme';
 import { Card, NotificationModal, SetAlertModal } from '../../components';
 import { storageService } from '../../services/storageService';
-import { marketService, walletService, portfolioService, authService } from '../../services/apiService';
+import { marketService, portfolioService, authService } from '../../services/apiService';
 import { formatLKR, formatNumber } from '../../utils/formatters';
 const { useEffect, useState, useCallback } = React;
 
@@ -56,7 +56,7 @@ export const HomeScreen = () => {
         setUser(profileRes.user);
         await storageService.setUserData(profileRes.user);
       }
-    } catch (e) {
+    } catch {
       // Ignore offline error
     }
   }, []);
