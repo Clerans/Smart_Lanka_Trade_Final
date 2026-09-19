@@ -30,7 +30,7 @@
     },
     "extra": {
       "eas": {
-        "projectId": "31b5c59a-44f0-4384-bfaa-b6695653d86b"
+        "projectId": "11edd79f-b9a7-40e2-a423-c8b7e1538962"
       }
     },
     "plugins": [
@@ -44,6 +44,7 @@
       ],
       "expo-secure-store",
       "expo-web-browser"
-    ]
+    ],
+    "owner": "cleranspc"
   }
 }
