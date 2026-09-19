@@ -157,20 +157,6 @@ export const LoginScreen = () => {
     try {
       const authResult = await authService.login(email.trim(), password);
       if (authResult && authResult.token) {
-        const { firebaseAuthService } = require('../../services/firebaseAuthService');
-        const currentUser = firebaseAuthService.getCurrentUser();
-        
-        if (currentUser && !currentUser.emailVerified) {
-          showToast('Verification required. Sending new 6-digit code...', 'warning');
-          try {
-            await authService.sendVerification(email.trim());
-          } catch (e) {}
-          setTimeout(() => {
-            navigation.navigate('OTPVerification', { email: email.trim() });
-          }, 1200);
-          return;
-        }
-
         if (rememberMe) {
           await AsyncStorage.setItem('rememberMe', 'true');
           await AsyncStorage.setItem('savedEmail', email.trim());
@@ -181,7 +167,15 @@ export const LoginScreen = () => {
         navigation.replace('MainApp');
       }
     } catch (error: any) {
-      if (error.code === 'NETWORK_ERROR') {
+      if (error.code === 'EMAIL_NOT_VERIFIED') {
+        showToast('Email not verified. Sending verification code...', 'warning');
+        try {
+          await authService.sendVerification(email.trim());
+        } catch (e) {}
+        setTimeout(() => {
+          navigation.navigate('OTPVerification', { email: email.trim() });
+        }, 1200);
+      } else if (error.code === 'NETWORK_ERROR') {
         setIsNetworkError(true);
       } else {
         showToast(error.message || 'Login failed. Please check your credentials.', 'error');
