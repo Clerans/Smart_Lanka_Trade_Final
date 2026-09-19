@@ -25,20 +25,17 @@ export const SplashScreen = () => {
     }).start(async ({ finished }) => {
       if (finished) {
         try {
+          const { storageService } = require('../../services/storageService');
           const rememberMe = await AsyncStorage.getItem('rememberMe');
-          const { firebaseAuthService } = require('../../services/firebaseAuthService');
-          const currentUser = firebaseAuthService.getCurrentUser();
-          const token = await firebaseAuthService.getIdToken();
+          const token = await storageService.getToken();
 
-          if (rememberMe === 'true' && (currentUser || token)) {
+          if (rememberMe === 'true' && token) {
             try {
-              if (currentUser && !currentUser.emailVerified) {
-                navigation.replace('OTPVerification', { email: currentUser.email });
+              const res = await authService.validateToken();
+              if (res && res.success) {
+                navigation.replace('MainApp');
                 return;
               }
-              await authService.sync();
-              navigation.replace('MainApp');
-              return;
             } catch {
               console.log('Stored token is invalid or expired. Clearing storage.');
               await authService.logout();

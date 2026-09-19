@@ -16,12 +16,12 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { colors, typography } from '../../theme';
 import { PrimaryButton, Toast, NetworkErrorScreen } from '../../components';
 import { authService } from '../../services/apiService';
-import { firebaseAuthService } from '../../services/firebaseAuthService';
+import { firebaseVerificationService } from '../../services/firebaseVerificationService';
 
 export const OTPVerificationScreen = () => {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
-  const email = route.params?.email || firebaseAuthService.getCurrentUser()?.email || '';
+  const email = route.params?.email || '';
 
   // 6-digit OTP State
   const [otp, setOtp] = useState<string[]>(['', '', '', '', '', '']);
@@ -166,7 +166,7 @@ export const OTPVerificationScreen = () => {
     setSendingLink(true);
     setIsNetworkError(false);
     try {
-      await firebaseAuthService.sendEmailVerification();
+      await firebaseVerificationService.sendVerificationLink(email);
       setFallbackMode(true);
       showToast('Firebase verification link sent to your email!', 'success');
     } catch (error: any) {
@@ -180,10 +180,9 @@ export const OTPVerificationScreen = () => {
   const handleCheckEmailLinkVerification = async () => {
     setCheckingLinkStatus(true);
     try {
-      const reloadedUser = await firebaseAuthService.reloadUser();
-      if (reloadedUser && reloadedUser.emailVerified) {
-        // Refresh token and synchronize with Oracle backend
-        await firebaseAuthService.getIdToken(true);
+      const isVerified = await firebaseVerificationService.checkEmailLinkVerified();
+      if (isVerified) {
+        // Synchronize with Oracle backend
         await authService.sync();
         showToast('Email verified successfully! Welcome to SmartLanka Trade.', 'success');
         setTimeout(() => {
