@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  TouchableOpacity, 
-  ScrollView, 
-  Image, 
-  ActivityIndicator, 
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  ScrollView,
+  Image,
+  ActivityIndicator,
   Alert,
   TextInput
 } from 'react-native';
@@ -160,10 +160,10 @@ export const KYCVerificationScreen = () => {
           <Text style={styles.stepText}>Sri Lankan NIC OCR Pipeline</Text>
           <View style={styles.progressBarBg}>
             <View style={[
-              styles.progressBarFill, 
-              isVerified ? { width: '100%', backgroundColor: colors.accent } : 
-              isPending ? { width: '66%', backgroundColor: colors.yellow } : 
-              { width: '33%', backgroundColor: colors.accent }
+              styles.progressBarFill,
+              isVerified ? { width: '100%', backgroundColor: colors.accent } :
+                isPending ? { width: '66%', backgroundColor: colors.yellow } :
+                  { width: '33%', backgroundColor: colors.accent }
             ]} />
           </View>
           <Text style={styles.stepLabel}>
@@ -240,21 +240,21 @@ export const KYCVerificationScreen = () => {
             <View style={styles.cardHeader}>
               <Text style={styles.cardTitle}>OCR Extraction Results</Text>
               <View style={[
-                styles.statusBadge, 
-                isVerified ? { backgroundColor: colors.accentMuted } : 
-                isRejected ? { backgroundColor: colors.red + '33' } : 
-                { backgroundColor: colors.yellow + '33' }
+                styles.statusBadge,
+                isVerified ? { backgroundColor: colors.accentMuted } :
+                  isRejected ? { backgroundColor: colors.red + '33' } :
+                    { backgroundColor: colors.yellow + '33' }
               ]}>
-                <MaterialIcons 
-                  name={isVerified ? "verified" : isRejected ? "cancel" : "pending-actions"} 
-                  size={14} 
-                  color={isVerified ? colors.accent : isRejected ? colors.red : colors.yellow} 
+                <MaterialIcons
+                  name={isVerified ? "verified" : isRejected ? "cancel" : "pending-actions"}
+                  size={14}
+                  color={isVerified ? colors.accent : isRejected ? colors.red : colors.yellow}
                 />
                 <Text style={[
-                  styles.statusText, 
-                  isVerified ? { color: colors.accent } : 
-                  isRejected ? { color: colors.red } : 
-                  { color: colors.yellow }
+                  styles.statusText,
+                  isVerified ? { color: colors.accent } :
+                    isRejected ? { color: colors.red } :
+                      { color: colors.yellow }
                 ]}>
                   {status}
                 </Text>
@@ -332,8 +332,8 @@ export const KYCVerificationScreen = () => {
         )}
 
         {isRejected && (
-          <TouchableOpacity 
-            style={styles.retryBtn} 
+          <TouchableOpacity
+            style={styles.retryBtn}
             onPress={() => {
               setSelectedImage(null);
               setVerificationResult(null);

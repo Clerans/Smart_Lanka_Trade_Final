@@ -1,12 +1,12 @@
 import React, { useState, useRef } from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  TouchableOpacity, 
-  TextInput, 
-  ScrollView, 
-  KeyboardAvoidingView, 
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  TextInput,
+  ScrollView,
+  KeyboardAvoidingView,
   Platform,
   ActivityIndicator
 } from 'react-native';
@@ -119,17 +119,17 @@ export const SOMIAIChatScreen = () => {
         </View>
 
         {/* Chat Area */}
-        <ScrollView 
+        <ScrollView
           ref={scrollViewRef}
-          contentContainerStyle={styles.chatScroll} 
+          contentContainerStyle={styles.chatScroll}
           showsVerticalScrollIndicator={false}
           onContentSizeChange={scrollToBottom}
         >
           {messages.map((msg) => {
             const isUser = msg.sender === 'user';
             return (
-              <View 
-                key={msg.id} 
+              <View
+                key={msg.id}
                 style={[styles.messageRow, isUser && styles.messageRowUser]}
               >
                 {!isUser && (
@@ -172,8 +172,8 @@ export const SOMIAIChatScreen = () => {
           {/* Quick Prompts */}
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.quickRepliesScroll}>
             {QUICK_PROMPTS.map((prompt, idx) => (
-              <TouchableOpacity 
-                key={idx} 
+              <TouchableOpacity
+                key={idx}
                 style={styles.quickReplyPill}
                 onPress={() => handleSend(prompt)}
               >
@@ -193,8 +193,8 @@ export const SOMIAIChatScreen = () => {
               onSubmitEditing={() => handleSend()}
               returnKeyType="send"
             />
-            <TouchableOpacity 
-              style={[styles.sendBtn, !inputMessage.trim() && { opacity: 0.6 }]} 
+            <TouchableOpacity
+              style={[styles.sendBtn, !inputMessage.trim() && { opacity: 0.6 }]}
               onPress={() => handleSend()}
               disabled={!inputMessage.trim() || isTyping}
             >

@@ -320,8 +320,8 @@ export const UserProfileScreen = () => {
         {/* Header */}
         <View style={styles.header}>
           <Text style={styles.headerTitle}>Profile</Text>
-          <TouchableOpacity 
-            style={styles.iconBtn} 
+          <TouchableOpacity
+            style={styles.iconBtn}
             onPress={() => navigation.navigate('SecuritySettings')}
             activeOpacity={0.7}
           >
@@ -373,8 +373,8 @@ export const UserProfileScreen = () => {
               </Text>
 
               {/* UID Pill */}
-              <TouchableOpacity 
-                style={styles.uidPill} 
+              <TouchableOpacity
+                style={styles.uidPill}
                 onPress={handleCopyUid}
                 activeOpacity={0.7}
               >
@@ -404,15 +404,15 @@ export const UserProfileScreen = () => {
                 <Text style={styles.detailValue}>
                   {showEmail ? (user?.email || 'trader@smartlanka.com') : getMaskedEmail(user?.email || 'trader@smartlanka.com')}
                 </Text>
-                <TouchableOpacity 
-                  style={styles.privacyIconBtn} 
+                <TouchableOpacity
+                  style={styles.privacyIconBtn}
                   onPress={() => setShowEmail(!showEmail)}
                   activeOpacity={0.7}
                 >
-                  <MaterialIcons 
-                    name={showEmail ? 'visibility' : 'visibility-off'} 
-                    size={16} 
-                    color={colors.textSecondary} 
+                  <MaterialIcons
+                    name={showEmail ? 'visibility' : 'visibility-off'}
+                    size={16}
+                    color={colors.textSecondary}
                   />
                 </TouchableOpacity>
               </View>
@@ -425,15 +425,15 @@ export const UserProfileScreen = () => {
                 <Text style={styles.detailValue}>
                   {showPhone ? (user?.phoneNumber || '+94 77 123 4542') : getMaskedPhone(user?.phoneNumber || '+94 77 123 4542')}
                 </Text>
-                <TouchableOpacity 
-                  style={styles.privacyIconBtn} 
+                <TouchableOpacity
+                  style={styles.privacyIconBtn}
                   onPress={() => setShowPhone(!showPhone)}
                   activeOpacity={0.7}
                 >
-                  <MaterialIcons 
-                    name={showPhone ? 'visibility' : 'visibility-off'} 
-                    size={16} 
-                    color={colors.textSecondary} 
+                  <MaterialIcons
+                    name={showPhone ? 'visibility' : 'visibility-off'}
+                    size={16}
+                    color={colors.textSecondary}
                   />
                 </TouchableOpacity>
               </View>
@@ -446,8 +446,8 @@ export const UserProfileScreen = () => {
                 <Text style={[styles.detailValue, { color: colors.accent }]}>
                   {showUid ? getFullUid() : 'SLT-••••••••'}
                 </Text>
-                <TouchableOpacity 
-                  style={styles.privacyIconBtn} 
+                <TouchableOpacity
+                  style={styles.privacyIconBtn}
                   onPress={handleCopyUid}
                   activeOpacity={0.7}
                 >
@@ -510,7 +510,7 @@ export const UserProfileScreen = () => {
               >
                 <View style={styles.menuLeft}>
                   <View style={[
-                    styles.menuIconBg, 
+                    styles.menuIconBg,
                     item.id === 'kyc' && styles.menuIconBgKyc
                   ]}>
                     <MaterialIcons
@@ -528,7 +528,7 @@ export const UserProfileScreen = () => {
                   {item.id === 'kyc' && (
                     <View style={[
                       styles.menuBadgePill,
-                      { 
+                      {
                         backgroundColor: kycStatus === 'VERIFIED' ? colors.accentMuted : kycStatus === 'PENDING' ? colors.yellow + '22' : colors.bgInput,
                         borderColor: kycStatus === 'VERIFIED' ? colors.accent + '44' : kycStatus === 'PENDING' ? colors.yellow + '44' : colors.border,
                       }

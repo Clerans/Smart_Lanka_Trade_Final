@@ -65,11 +65,11 @@ export const SetAlertModal: React.FC<SetAlertModalProps> = ({ visible, onClose, 
                 style={styles.input}
                 value={targetPrice}
                 onChangeText={(text) => {
-                    setTargetPrice(text);
-                    const val = parseFloat(text);
-                    if (!isNaN(val)) {
-                        setAlertType(val > currentPrice ? 'ABOVE' : 'BELOW');
-                    }
+                  setTargetPrice(text);
+                  const val = parseFloat(text);
+                  if (!isNaN(val)) {
+                    setAlertType(val > currentPrice ? 'ABOVE' : 'BELOW');
+                  }
                 }}
                 keyboardType="numeric"
                 placeholder="Enter price..."
@@ -105,10 +105,10 @@ export const SetAlertModal: React.FC<SetAlertModalProps> = ({ visible, onClose, 
               </View>
             </View>
 
-            <TouchableOpacity 
-                style={styles.submitButton} 
-                onPress={handleSetAlert}
-                disabled={loading}
+            <TouchableOpacity
+              style={styles.submitButton}
+              onPress={handleSetAlert}
+              disabled={loading}
             >
               {loading ? (
                 <ActivityIndicator color="#000" />

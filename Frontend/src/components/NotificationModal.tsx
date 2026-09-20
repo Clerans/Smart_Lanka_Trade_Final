@@ -142,7 +142,7 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
     >
       <View style={styles.modalOverlay}>
         <View style={styles.modalContent}>
-          
+
           {/* Modal Header */}
           <View style={styles.headerRow}>
             <View style={styles.headerTitleRow}>

@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  ScrollView, 
-  TouchableOpacity, 
-  ActivityIndicator, 
-  RefreshControl 
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  ActivityIndicator,
+  RefreshControl
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
@@ -154,21 +154,21 @@ export const AIAnalyticsScreen = () => {
 
       {/* Recommendations List */}
       {!loading && !error ? (
-        <ScrollView 
+        <ScrollView
           contentContainerStyle={styles.listContainer}
           refreshControl={
-            <RefreshControl 
-              refreshing={refreshing} 
-              onRefresh={() => fetchRecommendations(true)} 
-              tintColor={colors.accent} 
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => fetchRecommendations(true)}
+              tintColor={colors.accent}
             />
           }
         >
           {recommendations.map((item) => {
-            const meta = ASSET_METADATA[item.symbol] || { 
-              name: item.coin || item.symbol, 
-              icon: 'coins', 
-              color: colors.accent 
+            const meta = ASSET_METADATA[item.symbol] || {
+              name: item.coin || item.symbol,
+              icon: 'coins',
+              color: colors.accent
             };
             const recColor = getRecommendationBadgeColor(item.recommendation);
             const isExpanded = expandedSymbol === item.symbol;
@@ -211,10 +211,10 @@ export const AIAnalyticsScreen = () => {
                   <View style={styles.trendContainer}>
                     <Text style={styles.trendLabel}>Trend Direction</Text>
                     <View style={[styles.trendBadge, { backgroundColor: item.trend === 'BULLISH' ? colors.accentMuted : colors.bgInput }]}>
-                      <MaterialIcons 
-                        name={item.trend === 'BULLISH' ? 'trending-up' : item.trend === 'BEARISH' ? 'trending-down' : 'trending-flat'} 
-                        size={16} 
-                        color={item.trend === 'BULLISH' ? colors.accent : item.trend === 'BEARISH' ? colors.red : colors.textSecondary} 
+                      <MaterialIcons
+                        name={item.trend === 'BULLISH' ? 'trending-up' : item.trend === 'BEARISH' ? 'trending-down' : 'trending-flat'}
+                        size={16}
+                        color={item.trend === 'BULLISH' ? colors.accent : item.trend === 'BEARISH' ? colors.red : colors.textSecondary}
                       />
                       <Text style={[styles.trendText, { color: item.trend === 'BULLISH' ? colors.accent : item.trend === 'BEARISH' ? colors.red : colors.textSecondary }]}>
                         {item.trend}
@@ -245,17 +245,17 @@ export const AIAnalyticsScreen = () => {
                 </View>
 
                 {/* Toggle Button for Full Technical Indicators */}
-                <TouchableOpacity 
+                <TouchableOpacity
                   style={styles.toggleIndicatorsBtn}
                   onPress={() => toggleExpand(item.symbol)}
                 >
                   <Text style={styles.toggleIndicatorsText}>
                     {isExpanded ? 'Hide Technical Indicators' : 'View Indicator Breakdown & Signals'}
                   </Text>
-                  <MaterialIcons 
-                    name={isExpanded ? 'keyboard-arrow-up' : 'keyboard-arrow-down'} 
-                    size={20} 
-                    color={colors.accent} 
+                  <MaterialIcons
+                    name={isExpanded ? 'keyboard-arrow-up' : 'keyboard-arrow-down'}
+                    size={20}
+                    color={colors.accent}
                   />
                 </TouchableOpacity>
 
@@ -263,7 +263,7 @@ export const AIAnalyticsScreen = () => {
                 {isExpanded && (
                   <View style={styles.expandedSection}>
                     <Text style={styles.indicatorsTitle}>Key Technical Indicators</Text>
-                    
+
                     <View style={styles.indicatorsGrid}>
                       <View style={styles.indicatorBox}>
                         <Text style={styles.indicatorName}>RSI (14)</Text>

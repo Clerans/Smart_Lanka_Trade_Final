@@ -20,7 +20,7 @@ import {
   TransactionDetailsModal
 } from '../../components';
 import { colors } from '../../theme';
-import { walletService, portfolioService } from '../../services/apiService';
+import { walletService, portfolioService, marketService } from '../../services/apiService';
 import { formatLKR, formatNumber } from '../../utils/formatters';
 const { useState, useEffect, useCallback } = React;
 
@@ -83,6 +83,8 @@ export const WalletOverviewScreen = () => {
   const [holdings, setHoldings] = useState<HoldingItem[]>(DEFAULT_HOLDINGS);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [usdToLkr, setUsdToLkr] = useState<number>(331.27);
+  const [pnlPct, setPnlPct] = useState<number>(0);
 
   // Modals
   const [isDepositVisible, setIsDepositVisible] = useState(false);
@@ -115,11 +117,24 @@ export const WalletOverviewScreen = () => {
 
   const fetchWalletData = useCallback(async () => {
     try {
-      const [walletRes, txRes, portfolioRes] = await Promise.all([
+      const [walletRes, txRes, portfolioRes, lkrRes] = await Promise.all([
         walletService.getWalletDetails().catch(() => null),
         walletService.getTransactions('ALL', 10).catch(() => null),
-        portfolioService.getPortfolio().catch(() => null)
+        portfolioService.getPortfolio().catch(() => null),
+        marketService.getPriceLKR('BTCUSDT').catch(() => null),
       ]);
+
+      if (lkrRes?.data?.usdToLkr) {
+        setUsdToLkr(Number(lkrRes.data.usdToLkr));
+      } else if (lkrRes?.usdToLkr) {
+        setUsdToLkr(Number(lkrRes.usdToLkr));
+      }
+
+      if (portfolioRes?.data?.todaysProfitPercentage !== undefined) {
+        setPnlPct(Number(portfolioRes.data.todaysProfitPercentage));
+      } else if (portfolioRes?.data?.totalProfitPercentage !== undefined) {
+        setPnlPct(Number(portfolioRes.data.totalProfitPercentage));
+      }
 
       if (walletRes?.success) {
         setWalletDetails(walletRes);
@@ -260,15 +275,49 @@ export const WalletOverviewScreen = () => {
 
           {/* Total Asset Value Card */}
           <Card style={styles.totalAssetCard}>
-            <Text style={styles.totalAssetLabel}>TOTAL ASSET VALUE</Text>
-            <Text style={styles.totalAssetNumber}>
-              LKR {formatLKR(totalAssetVal, 2)}
-            </Text>
-            <View style={styles.cashRow}>
-              <Text style={styles.cashLabel}>Available Cash: </Text>
-              <Text style={styles.cashValue}>
-                LKR {formatLKR(availableCash, 2)}
+            <View style={styles.balanceHeaderRow}>
+              <Text style={styles.totalAssetLabel}>EST. TOTAL VALUE</Text>
+              <View style={styles.liveRateBadge}>
+                <View style={styles.liveRateDot} />
+                <Text style={styles.liveRateText}>
+                  1 USDT ≈ Rs {usdToLkr ? usdToLkr.toFixed(2) : '331.27'}
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.balanceMainRow}>
+              <Text style={styles.balanceCurrencyPrefix}>LKR</Text>
+              <Text style={styles.totalAssetNumber}>
+                {formatLKR(totalAssetVal, 2)}
               </Text>
+            </View>
+
+            <View style={styles.balanceCardDivider} />
+
+            <View style={styles.balanceFooterRow}>
+              <View style={[
+                styles.pnlPill,
+                pnlPct < 0 ? styles.pnlPillRed : styles.pnlPillGreen
+              ]}>
+                <MaterialIcons
+                  name={pnlPct >= 0 ? "trending-up" : "trending-down"}
+                  size={16}
+                  color={pnlPct >= 0 ? colors.accent : colors.red}
+                />
+                <Text style={[
+                  styles.pnlText,
+                  pnlPct >= 0 ? { color: colors.accent } : { color: colors.red }
+                ]}>
+                  {pnlPct >= 0 ? '+' : ''}{pnlPct.toFixed(2)}% PNL
+                </Text>
+              </View>
+
+              <View style={styles.cashRow}>
+                <Text style={styles.cashLabel}>Available: </Text>
+                <Text style={styles.cashValue}>
+                  LKR {formatNumber(availableCash, 0)}
+                </Text>
+              </View>
             </View>
           </Card>
 
@@ -518,39 +567,108 @@ const styles = StyleSheet.create({
   totalAssetCard: {
     marginHorizontal: 20,
     marginBottom: 24,
-    padding: 22,
-    borderRadius: 20,
+    padding: 20,
+    borderRadius: 24,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.bgCard,
   },
+  balanceHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
   totalAssetLabel: {
     fontSize: 12,
     fontWeight: '800',
+    letterSpacing: 0.8,
     color: colors.accent,
-    letterSpacing: 1,
-    textTransform: 'uppercase',
+  },
+  liveRateBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.bgElevated,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  liveRateDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: colors.accent,
+    marginRight: 6,
+  },
+  liveRateText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.textSecondary,
+  },
+  balanceMainRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    marginBottom: 16,
+  },
+  balanceCurrencyPrefix: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: colors.textSecondary,
+    marginRight: 8,
   },
   totalAssetNumber: {
-    fontSize: 32,
-    fontWeight: '800',
+    fontSize: 34,
+    fontWeight: '900',
     color: colors.textPrimary,
-    marginVertical: 8,
     letterSpacing: -0.5,
+  },
+  balanceCardDivider: {
+    height: 1,
+    backgroundColor: colors.border,
+    marginBottom: 14,
+  },
+  balanceFooterRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  pnlPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 10,
+  },
+  pnlPillGreen: {
+    backgroundColor: colors.accentMuted,
+    borderWidth: 1,
+    borderColor: colors.accentDark,
+  },
+  pnlPillRed: {
+    backgroundColor: 'rgba(255, 68, 68, 0.15)',
+    borderWidth: 1,
+    borderColor: colors.red,
+  },
+  pnlText: {
+    fontWeight: '800',
+    fontSize: 12,
+    marginLeft: 5,
   },
   cashRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 4,
   },
   cashLabel: {
-    fontSize: 14,
+    fontSize: 12,
     color: colors.textSecondary,
     fontWeight: '500',
   },
   cashValue: {
-    fontSize: 14,
-    fontWeight: '700',
+    fontSize: 12.5,
+    fontWeight: '800',
     color: colors.textPrimary,
   },
   actionsRow: {

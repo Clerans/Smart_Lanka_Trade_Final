@@ -35,8 +35,8 @@ export const TradingTerminalScreen = () => {
       if (priceRes.status === 'fulfilled' && priceRes.value.success) {
         setLkrPriceData(priceRes.value.data);
         const price = priceRes.value.data.priceLKR;
-        const formattedPrice = price < 10 
-          ? price.toFixed(4) 
+        const formattedPrice = price < 10
+          ? price.toFixed(4)
           : Math.round(price).toString();
         setLimitPrice(formattedPrice);
       }
@@ -76,7 +76,7 @@ export const TradingTerminalScreen = () => {
     fetchPriceAndAI();
   };
 
-  const filteredPickerCoins = allCoins.filter(coin => 
+  const filteredPickerCoins = allCoins.filter(coin =>
     coin.symbol.toLowerCase().includes(pickerSearchQuery.toLowerCase())
   ).slice(0, 50); // Limit to 50 for performance
 
@@ -88,7 +88,7 @@ export const TradingTerminalScreen = () => {
         style={styles.keyboardAvoiding}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        <ScrollView 
+        <ScrollView
           contentContainerStyle={styles.container}
           refreshControl={
             <RefreshControl
@@ -163,9 +163,9 @@ export const TradingTerminalScreen = () => {
               <ScrollView style={{ maxHeight: 300 }}>
                 {filteredPickerCoins.length > 0 ? (
                   filteredPickerCoins.map((coin) => (
-                    <TouchableOpacity 
-                      key={coin.symbol} 
-                      style={styles.pickerItem} 
+                    <TouchableOpacity
+                      key={coin.symbol}
+                      style={styles.pickerItem}
                       onPress={() => {
                         setSelectedSymbol(coin.symbol);
                         setShowPicker(false);
@@ -195,7 +195,7 @@ export const TradingTerminalScreen = () => {
 
           {/* Live AI Recommendation Banner */}
           {aiRec && (
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.aiBannerCard}
               activeOpacity={0.8}
               onPress={() => navigation.navigate('AIAnalytics')}
@@ -204,7 +204,7 @@ export const TradingTerminalScreen = () => {
                 <View style={[
                   styles.aiActionPill,
                   aiRec.recommendation === 'BUY' ? styles.aiPillBuy :
-                  aiRec.recommendation === 'SELL' ? styles.aiPillSell : styles.aiPillHold
+                    aiRec.recommendation === 'SELL' ? styles.aiPillSell : styles.aiPillHold
                 ]}>
                   <Text style={styles.aiActionPillText}>AI: {aiRec.recommendation}</Text>
                 </View>
@@ -256,8 +256,8 @@ export const TradingTerminalScreen = () => {
                     keyboardType="numeric"
                     placeholderTextColor={colors.textSecondary}
                   />
-                  <TouchableOpacity 
-                    style={styles.syncBtn} 
+                  <TouchableOpacity
+                    style={styles.syncBtn}
                     onPress={() => {
                       if (lkrPriceData) setLimitPrice(Math.round(lkrPriceData.priceLKR || 0).toString());
                     }}

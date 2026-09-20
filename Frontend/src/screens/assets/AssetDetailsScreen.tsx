@@ -14,7 +14,7 @@ export const AssetDetailsScreen = () => {
 
   const symbol = (route.params?.symbol || route.params?.pair || 'BTCUSDT').replace('/', '').replace('LKR', 'USDT');
   const coin = route.params?.coin || symbol.replace('USDT', '');
-  
+
   const [selectedInterval, setSelectedInterval] = useState('1h');
   const [priceData, setPriceData] = useState<any>(null);
   const [aiData, setAiData] = useState<any>(null);
@@ -71,8 +71,8 @@ export const AssetDetailsScreen = () => {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <ScrollView 
-        contentContainerStyle={styles.container} 
+      <ScrollView
+        contentContainerStyle={styles.container}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
@@ -106,10 +106,10 @@ export const AssetDetailsScreen = () => {
             {priceLKR > 0 ? `රු ${formatLKR(priceLKR, 2)}` : 'Loading...'}
           </Text>
           <View style={[styles.changePill, !isPositive && { backgroundColor: colors.red + '22' }]}>
-            <MaterialIcons 
-              name={isPositive ? "arrow-upward" : "arrow-downward"} 
-              size={16} 
-              color={isPositive ? colors.accent : colors.red} 
+            <MaterialIcons
+              name={isPositive ? "arrow-upward" : "arrow-downward"}
+              size={16}
+              color={isPositive ? colors.accent : colors.red}
             />
             <Text style={[styles.changeText, !isPositive && { color: colors.red }]}>
               {isPositive ? '+' : ''}{changePercent.toFixed(2)}% 24h
