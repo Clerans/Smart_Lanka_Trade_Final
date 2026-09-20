@@ -10,7 +10,7 @@ exports.findByEmail = async (email) => {
   try {
     connection = await oracledb.getConnection();
     const result = await connection.execute(
-      `SELECT ID, ACCOUNT_UID, NAME, EMAIL, PASSWORD, IS_VERIFIED, ROLE, KYC_STATUS, NIC_NUMBER, PHONE_NUMBER, PROFILE_IMAGE, FAILED_ATTEMPTS, ACCOUNT_LOCKED_UNTIL, LAST_LOGIN FROM SL_USERS WHERE EMAIL = :email`,
+      `SELECT ID, ACCOUNT_UID, NAME, EMAIL, PASSWORD, IS_VERIFIED, NVL(EMAIL_VERIFIED, IS_VERIFIED) AS EMAIL_VERIFIED, ROLE, KYC_STATUS, NIC_NUMBER, PHONE_NUMBER, PROFILE_IMAGE, FAILED_ATTEMPTS, ACCOUNT_LOCKED_UNTIL, LAST_LOGIN FROM SL_USERS WHERE EMAIL = :email`,
       [email],
       { outFormat: oracledb.OUT_FORMAT_OBJECT }
     );
@@ -35,7 +35,7 @@ exports.findById = async (id) => {
   try {
     connection = await oracledb.getConnection();
     const result = await connection.execute(
-      `SELECT ID, ACCOUNT_UID, NAME, EMAIL, PASSWORD, IS_VERIFIED, ROLE, KYC_STATUS, NIC_NUMBER, PHONE_NUMBER, PROFILE_IMAGE, CREATED_AT FROM SL_USERS WHERE ID = :id`,
+      `SELECT ID, ACCOUNT_UID, NAME, EMAIL, PASSWORD, IS_VERIFIED, NVL(EMAIL_VERIFIED, IS_VERIFIED) AS EMAIL_VERIFIED, ROLE, KYC_STATUS, NIC_NUMBER, PHONE_NUMBER, PROFILE_IMAGE, CREATED_AT FROM SL_USERS WHERE ID = :id`,
       [id],
       { outFormat: oracledb.OUT_FORMAT_OBJECT }
     );
@@ -61,7 +61,7 @@ exports.findByUid = async (uid) => {
     connection = await oracledb.getConnection();
     const cleanUid = (uid || '').trim().toUpperCase();
     const result = await connection.execute(
-      `SELECT ID, ACCOUNT_UID, NAME, EMAIL, IS_VERIFIED, ROLE, KYC_STATUS, CREATED_AT FROM SL_USERS WHERE UPPER(ACCOUNT_UID) = :cleanUid`,
+      `SELECT ID, ACCOUNT_UID, NAME, EMAIL, IS_VERIFIED, NVL(EMAIL_VERIFIED, IS_VERIFIED) AS EMAIL_VERIFIED, ROLE, KYC_STATUS, CREATED_AT FROM SL_USERS WHERE UPPER(ACCOUNT_UID) = :cleanUid`,
       [cleanUid],
       { outFormat: oracledb.OUT_FORMAT_OBJECT }
     );
@@ -118,7 +118,7 @@ exports.verifyUser = async (userId) => {
   try {
     connection = await oracledb.getConnection();
     await connection.execute(
-      `UPDATE SL_USERS SET IS_VERIFIED = 1, VERIFICATION_TOKEN = NULL WHERE ID = :userId`,
+      `UPDATE SL_USERS SET IS_VERIFIED = 1, EMAIL_VERIFIED = 1, VERIFICATION_TOKEN = NULL, UPDATED_AT = CURRENT_TIMESTAMP WHERE ID = :userId`,
       [userId]
     );
     await connection.commit();
@@ -135,10 +135,10 @@ exports.createUser = async (name, email, password, token) => {
     // Generate unique account UID
     const accountUid = generateAccountUID();
 
-    // Insert User with token and unique UID
+    // Insert User with token, unique UID, and unverified status
     const result = await connection.execute(
-      `INSERT INTO SL_USERS (ACCOUNT_UID, NAME, EMAIL, PASSWORD, VERIFICATION_TOKEN) 
-       VALUES (:accountUid, :name, :email, :password, :token) 
+      `INSERT INTO SL_USERS (ACCOUNT_UID, NAME, EMAIL, PASSWORD, VERIFICATION_TOKEN, IS_VERIFIED, EMAIL_VERIFIED) 
+       VALUES (:accountUid, :name, :email, :password, :token, 0, 0) 
        RETURNING ID INTO :id`,
       {
         accountUid,
