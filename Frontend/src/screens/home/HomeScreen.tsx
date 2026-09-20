@@ -217,14 +217,14 @@ export const HomeScreen = () => {
         {/* Quick Actions */}
         <View style={styles.quickActionsRow}>
           <TouchableOpacity
-            style={[styles.actionCard, styles.actionCardBuy]}
+            style={styles.actionCard}
             onPress={() => navigation.navigate('Trade')}
             activeOpacity={0.8}
           >
-            <View style={styles.actionIconBoxBuy}>
-              <MaterialIcons name="shopping-cart" size={20} color="#000" />
+            <View style={styles.actionIconBox}>
+              <MaterialIcons name="shopping-cart" size={20} color={colors.accent} />
             </View>
-            <Text style={styles.actionCardBuyText}>Buy</Text>
+            <Text style={styles.actionCardText}>Buy</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -620,28 +620,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 6,
   },
-  actionCardBuy: {
-    backgroundColor: colors.accent,
-    borderColor: colors.accent,
-  },
-  actionIconBoxBuy: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    backgroundColor: '#00C853',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 6,
-  },
   actionCardText: {
     fontSize: 11,
     color: '#FFFFFF',
     fontWeight: '600',
-  },
-  actionCardBuyText: {
-    fontSize: 11,
-    color: '#000000',
-    fontWeight: '800',
   },
   rateBanner: {
     flexDirection: 'row',

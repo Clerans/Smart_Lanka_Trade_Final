@@ -19,6 +19,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useNavigation, useIsFocused } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
+import * as LocalAuthentication from 'expo-local-authentication';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { colors, typography, layout } from '../../theme';
 import { Card } from '../../components';
@@ -263,11 +264,43 @@ export const UserProfileScreen = () => {
   };
 
   const handleBiometricToggle = async (val: boolean) => {
-    setBiometricEnabled(val);
-    await AsyncStorage.setItem('@pref_biometric', String(val));
     if (val) {
-      Alert.alert('Biometrics Enabled', 'Biometric authentication is active for fast sign-in.');
+      try {
+        const hasHardware = await LocalAuthentication.hasHardwareAsync();
+        const isEnrolled = await LocalAuthentication.isEnrolledAsync();
+
+        if (!hasHardware) {
+          Alert.alert('Biometrics Unavailable', 'Biometric sensor hardware was not detected on this device.');
+          return;
+        }
+
+        if (!isEnrolled) {
+          Alert.alert('No Biometrics Enrolled', 'Please enroll your fingerprint or Face ID in your device settings first.');
+          return;
+        }
+
+        const result = await LocalAuthentication.authenticateAsync({
+          promptMessage: 'Authenticate with Fingerprint or Face ID to enable Biometric Login',
+          fallbackLabel: 'Cancel',
+          disableDeviceFallback: true,
+        });
+
+        if (result.success) {
+          setBiometricEnabled(true);
+          await AsyncStorage.setItem('@pref_biometric', 'true');
+          Alert.alert('Biometric Login Enabled', 'You can now use fingerprint and Face ID for instant sign-in.');
+        } else {
+          setBiometricEnabled(false);
+          await AsyncStorage.setItem('@pref_biometric', 'false');
+          Alert.alert('Authentication Failed', 'Could not verify your identity. Biometric login remains disabled.');
+        }
+      } catch (err: any) {
+        setBiometricEnabled(false);
+        Alert.alert('Error', err.message || 'Failed to authenticate biometrics.');
+      }
     } else {
+      setBiometricEnabled(false);
+      await AsyncStorage.setItem('@pref_biometric', 'false');
       Alert.alert('Biometrics Disabled', 'Standard password login is now required.');
     }
   };
