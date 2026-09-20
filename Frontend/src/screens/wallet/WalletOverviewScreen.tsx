@@ -168,10 +168,10 @@ export const WalletOverviewScreen = () => {
   }, [fetchWalletData]);
 
   const availableCash = walletDetails?.availableBalance !== undefined && walletDetails?.availableBalance !== null
-    ? Number(walletDetails.availableBalance) 
+    ? Number(walletDetails.availableBalance)
     : 892300.00;
   const totalAssetVal = walletDetails?.balanceLKR !== undefined && walletDetails?.balanceLKR !== null
-    ? Number(walletDetails.balanceLKR) 
+    ? Number(walletDetails.balanceLKR)
     : 1247850.40;
 
   const handleOpenTxDetails = (tx: any) => {
@@ -243,8 +243,8 @@ export const WalletOverviewScreen = () => {
                 <Text style={styles.headerUidText}>UID: {walletDetails.accountUid}</Text>
               )}
             </View>
-            <TouchableOpacity 
-              style={styles.gridBtn} 
+            <TouchableOpacity
+              style={styles.gridBtn}
               onPress={() => {
                 if (transactions.length > 0) {
                   handleOpenTxDetails(transactions[0]);
@@ -390,10 +390,10 @@ export const WalletOverviewScreen = () => {
               </View>
             ) : (
               transactions.slice(0, 5).map((tx, idx) => {
-                const isIncoming = tx.isIncoming !== undefined 
-                  ? tx.isIncoming 
+                const isIncoming = tx.isIncoming !== undefined
+                  ? tx.isIncoming
                   : ['DEPOSIT', 'TRANSFER_RECEIVED', 'SELL'].includes(tx.type || tx.TYPE);
-                
+
                 const rawAmount = tx.amount !== undefined ? tx.amount : (tx.AMOUNT !== undefined ? tx.AMOUNT : (tx.total || 0));
 
                 return (

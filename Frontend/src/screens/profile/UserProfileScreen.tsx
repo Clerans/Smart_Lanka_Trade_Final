@@ -38,13 +38,20 @@ export const UserProfileScreen = () => {
   const navigation = useNavigation<any>();
   const isFocused = useIsFocused();
   const [user, setUser] = useState<{
+    id?: number;
     name: string;
     email: string;
     phoneNumber?: string | null;
-    profileImage?: string | null
+    profileImage?: string | null;
+    createdAt?: string | null;
   } | null>(null);
   const [kycStatus, setKycStatus] = useState<string>('NOT_SUBMITTED');
   const [loadingKyc, setLoadingKyc] = useState<boolean>(true);
+
+  // Privacy toggles for Profile Details
+  const [showEmail, setShowEmail] = useState(false);
+  const [showPhone, setShowPhone] = useState(false);
+  const [showUid, setShowUid] = useState(false);
 
   // Functional Preferences
   const [biometricEnabled, setBiometricEnabled] = useState(true);
@@ -62,6 +69,52 @@ export const UserProfileScreen = () => {
   const [editPhone, setEditPhone] = useState('');
   const [editImage, setEditImage] = useState<string | null>(null);
   const [savingProfile, setSavingProfile] = useState(false);
+
+  const getInitials = (name?: string) => {
+    if (!name) return 'KP';
+    const parts = name.trim().split(/\s+/);
+    if (parts.length >= 2) {
+      return (parts[0][0] + parts[1][0]).toUpperCase();
+    }
+    return name.substring(0, 2).toUpperCase();
+  };
+
+  const getMaskedEmail = (email?: string) => {
+    if (!email) return '••••••@gmail.com';
+    const atIdx = email.indexOf('@');
+    if (atIdx === -1) return '••••••@gmail.com';
+    return '••••••' + email.substring(atIdx);
+  };
+
+  const getMaskedPhone = (phone?: string) => {
+    if (!phone) return '+94 7• ••• ••42';
+    const clean = phone.replace(/[^0-9+]/g, '');
+    if (clean.length > 5) {
+      const end = clean.slice(-2);
+      return `+94 7• ••• ••${end}`;
+    }
+    return '+94 7• ••• ••42';
+  };
+
+  const getFullUid = () => {
+    return `SLT-${String(user?.id || 1).padStart(8, '0')}`;
+  };
+
+  const handleCopyUid = () => {
+    const fullUid = getFullUid();
+    Alert.alert('Account UID Copied', `${fullUid} has been copied to your clipboard.`);
+  };
+
+  const formatMemberSince = (createdAt?: string | null) => {
+    if (!createdAt) return 'Member since Mar 2026';
+    try {
+      const d = new Date(createdAt);
+      if (isNaN(d.getTime())) return 'Member since Mar 2026';
+      return `Member since ${d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}`;
+    } catch {
+      return 'Member since Mar 2026';
+    }
+  };
 
   const loadUserProfile = async () => {
     try {
@@ -260,91 +313,146 @@ export const UserProfileScreen = () => {
     ]);
   };
 
-  const getTierBadge = () => {
-    if (loadingKyc) {
-      return (
-        <View style={[styles.tierBadge, { backgroundColor: colors.bgInput }]}>
-          <ActivityIndicator size="small" color={colors.textSecondary} />
-        </View>
-      );
-    }
-    if (kycStatus === 'VERIFIED') {
-      return (
-        <TouchableOpacity style={[styles.tierBadge, { backgroundColor: colors.accentMuted }]} onPress={() => navigation.navigate('KYCVerification')}>
-          <MaterialIcons name="verified" size={14} color={colors.accent} />
-          <Text style={[styles.tierText, { color: colors.accent }]}>Tier 2 Verified</Text>
-        </TouchableOpacity>
-      );
-    }
-    if (kycStatus === 'PENDING') {
-      return (
-        <TouchableOpacity style={[styles.tierBadge, { backgroundColor: colors.yellow + '33' }]} onPress={() => navigation.navigate('KYCVerification')}>
-          <MaterialIcons name="pending-actions" size={14} color={colors.yellow} />
-          <Text style={[styles.tierText, { color: colors.yellow }]}>KYC Pending Review</Text>
-        </TouchableOpacity>
-      );
-    }
-    if (kycStatus === 'REJECTED') {
-      return (
-        <TouchableOpacity style={[styles.tierBadge, { backgroundColor: colors.red + '33' }]} onPress={() => navigation.navigate('KYCVerification')}>
-          <MaterialIcons name="error" size={14} color={colors.red} />
-          <Text style={[styles.tierText, { color: colors.red }]}>KYC Rejected (Retry)</Text>
-        </TouchableOpacity>
-      );
-    }
-    return (
-      <TouchableOpacity style={[styles.tierBadge, { backgroundColor: colors.bgInput }]} onPress={() => navigation.navigate('KYCVerification')}>
-        <MaterialIcons name="shield" size={14} color={colors.textSecondary} />
-        <Text style={[styles.tierText, { color: colors.textSecondary }]}>Verify Identity (KYC)</Text>
-      </TouchableOpacity>
-    );
-  };
-
   return (
     <SafeAreaView style={styles.safeArea}>
-      <ScrollView contentContainerStyle={styles.container}>
+      <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
 
         {/* Header */}
         <View style={styles.header}>
           <Text style={styles.headerTitle}>Profile</Text>
-          <TouchableOpacity style={styles.iconBtn} onPress={() => navigation.navigate('SecuritySettings')}>
+          <TouchableOpacity 
+            style={styles.iconBtn} 
+            onPress={() => navigation.navigate('SecuritySettings')}
+            activeOpacity={0.7}
+          >
             <MaterialIcons name="settings" size={24} color={colors.textPrimary} />
           </TouchableOpacity>
         </View>
 
-        {/* User Card */}
-        <Card style={styles.userCard}>
-          <View style={styles.userInfoRow}>
-            <TouchableOpacity onPress={handleOpenEditModal} activeOpacity={0.8} style={styles.avatarWrapper}>
+        {/* User Card with Details & Privacy Masking */}
+        <Card style={styles.profileCard}>
+          {/* Top Section */}
+          <View style={styles.cardTopRow}>
+            {/* Avatar Circle with Initials or Image */}
+            <TouchableOpacity onPress={handleOpenEditModal} activeOpacity={0.8} style={styles.avatarCircle}>
               {user?.profileImage ? (
                 <Image source={{ uri: user.profileImage }} style={styles.avatarImage} />
               ) : (
-                <View style={styles.avatarLarge}>
-                  <MaterialIcons name="person" size={38} color={colors.accent} />
-                </View>
+                <Text style={styles.avatarInitialsText}>{getInitials(user?.name)}</Text>
               )}
-              <View style={styles.avatarEditBadge}>
+              <View style={styles.avatarCamBadge}>
                 <MaterialIcons name="camera-alt" size={10} color="#000" />
               </View>
             </TouchableOpacity>
 
-            <View style={styles.userDetails}>
-              <View style={styles.userNameHeaderRow}>
-                <Text style={styles.userName} numberOfLines={1}>{user?.name || 'SmartLanka Trader'}</Text>
-                <TouchableOpacity onPress={handleOpenEditModal} style={styles.editPillBtn}>
-                  <MaterialIcons name="edit" size={12} color={colors.accent} />
-                  <Text style={styles.editPillText}>Edit</Text>
+            {/* Middle Info */}
+            <View style={styles.profileHeaderInfo}>
+              <View style={styles.nameBadgeRow}>
+                <Text style={styles.profileUserName} numberOfLines={1}>
+                  {user?.name || 'SmartLanka Trader'}
+                </Text>
+                <TouchableOpacity
+                  activeOpacity={0.7}
+                  onPress={() => navigation.navigate('KYCVerification')}
+                  style={[
+                    styles.statusPillBadge,
+                    kycStatus === 'VERIFIED' ? styles.statusPillVerified : styles.statusPillUnverified
+                  ]}
+                >
+                  <Text style={[
+                    styles.statusPillText,
+                    kycStatus === 'VERIFIED' ? styles.statusTextVerified : styles.statusTextUnverified
+                  ]}>
+                    {kycStatus === 'VERIFIED' ? 'VERIFIED' : 'UNVERIFIED'}
+                  </Text>
                 </TouchableOpacity>
               </View>
-              <Text style={styles.userEmail} numberOfLines={1}>{user?.email || 'trader@smartlanka.com'}</Text>
-              {user?.phoneNumber ? (
-                <View style={styles.userPhoneRow}>
-                  <MaterialIcons name="phone" size={12} color={colors.textSecondary} />
-                  <Text style={styles.userPhoneText}>{user.phoneNumber}</Text>
-                </View>
-              ) : null}
-              <View style={{ marginTop: 4 }}>
-                {getTierBadge()}
+
+              <Text style={styles.memberSinceText}>
+                {formatMemberSince(user?.createdAt)}
+              </Text>
+
+              {/* UID Pill */}
+              <TouchableOpacity 
+                style={styles.uidPill} 
+                onPress={handleCopyUid}
+                activeOpacity={0.7}
+              >
+                <MaterialIcons name="grid-view" size={12} color={colors.textSecondary} style={{ marginRight: 4 }} />
+                <Text style={styles.uidPillLabel}>UID: </Text>
+                <Text style={styles.uidPillValue}>{showUid ? getFullUid() : 'SLT-••••••••'}</Text>
+                <MaterialIcons name="content-copy" size={12} color={colors.textSecondary} style={{ marginLeft: 6 }} />
+              </TouchableOpacity>
+            </View>
+
+            {/* Edit Button on Top Right */}
+            <TouchableOpacity onPress={handleOpenEditModal} style={styles.editBtn} activeOpacity={0.8}>
+              <MaterialIcons name="edit" size={13} color={colors.accent} style={{ marginRight: 4 }} />
+              <Text style={styles.editBtnText}>Edit</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Divider */}
+          <View style={styles.cardDivider} />
+
+          {/* Details Rows with Privacy Toggles */}
+          <View style={styles.detailsList}>
+            {/* Email Row */}
+            <View style={styles.detailRow}>
+              <Text style={styles.detailLabel}>Email</Text>
+              <View style={styles.detailRight}>
+                <Text style={styles.detailValue}>
+                  {showEmail ? (user?.email || 'trader@smartlanka.com') : getMaskedEmail(user?.email || 'trader@smartlanka.com')}
+                </Text>
+                <TouchableOpacity 
+                  style={styles.privacyIconBtn} 
+                  onPress={() => setShowEmail(!showEmail)}
+                  activeOpacity={0.7}
+                >
+                  <MaterialIcons 
+                    name={showEmail ? 'visibility' : 'visibility-off'} 
+                    size={16} 
+                    color={colors.textSecondary} 
+                  />
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* Phone Row */}
+            <View style={styles.detailRow}>
+              <Text style={styles.detailLabel}>Phone</Text>
+              <View style={styles.detailRight}>
+                <Text style={styles.detailValue}>
+                  {showPhone ? (user?.phoneNumber || '+94 77 123 4542') : getMaskedPhone(user?.phoneNumber || '+94 77 123 4542')}
+                </Text>
+                <TouchableOpacity 
+                  style={styles.privacyIconBtn} 
+                  onPress={() => setShowPhone(!showPhone)}
+                  activeOpacity={0.7}
+                >
+                  <MaterialIcons 
+                    name={showPhone ? 'visibility' : 'visibility-off'} 
+                    size={16} 
+                    color={colors.textSecondary} 
+                  />
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* Account UID Row */}
+            <View style={styles.detailRow}>
+              <Text style={styles.detailLabel}>Account UID</Text>
+              <View style={styles.detailRight}>
+                <Text style={[styles.detailValue, { color: colors.accent }]}>
+                  {showUid ? getFullUid() : 'SLT-••••••••'}
+                </Text>
+                <TouchableOpacity 
+                  style={styles.privacyIconBtn} 
+                  onPress={handleCopyUid}
+                  activeOpacity={0.7}
+                >
+                  <MaterialIcons name="content-copy" size={16} color={colors.textSecondary} />
+                </TouchableOpacity>
               </View>
             </View>
           </View>
@@ -354,7 +462,9 @@ export const UserProfileScreen = () => {
         <View style={styles.preferencesSection}>
           <View style={styles.prefRow}>
             <View style={styles.prefLeft}>
-              <MaterialIcons name="fingerprint" size={24} color={colors.accent} style={styles.prefIcon} />
+              <View style={styles.prefIconBox}>
+                <MaterialIcons name="fingerprint" size={22} color={colors.accent} />
+              </View>
               <View>
                 <Text style={styles.prefText}>Biometric Login</Text>
                 <Text style={styles.prefSubtext}>Fingerprint & Face authentication</Text>
@@ -368,10 +478,12 @@ export const UserProfileScreen = () => {
               onValueChange={handleBiometricToggle}
             />
           </View>
-          <View style={styles.divider} />
+          <View style={styles.cardDivider} />
           <View style={styles.prefRow}>
             <View style={styles.prefLeft}>
-              <MaterialIcons name="notifications-active" size={24} color={colors.accent} style={styles.prefIcon} />
+              <View style={styles.prefIconBox}>
+                <MaterialIcons name="notifications-active" size={22} color={colors.accent} />
+              </View>
               <View>
                 <Text style={styles.prefText}>Push Notifications</Text>
                 <Text style={styles.prefSubtext}>Price alerts and order executions</Text>
@@ -389,54 +501,63 @@ export const UserProfileScreen = () => {
 
         {/* Menu List */}
         <View style={styles.menuSection}>
-          {menuItems.map((item) => (
-            <TouchableOpacity
-              key={item.id}
-              style={styles.menuItem}
-              onPress={() => handleMenuItemPress(item)}
-            >
-              <View style={styles.menuLeft}>
-                <View style={[styles.menuIconBg, item.id === 'kyc' && { backgroundColor: colors.accentMuted }]}>
-                  <MaterialIcons
-                    name={item.icon as any}
-                    size={20}
-                    color={item.id === 'kyc' ? colors.accent : colors.textPrimary}
-                  />
-                </View>
-                <Text style={[styles.menuTitle, item.id === 'kyc' && { fontWeight: '700' }]} numberOfLines={1}>
-                  {item.title}
-                </Text>
-              </View>
-
-              <View style={styles.menuRight}>
-                {item.id === 'kyc' && (
+          {menuItems.map((item, idx) => (
+            <React.Fragment key={item.id}>
+              <TouchableOpacity
+                style={styles.menuItem}
+                onPress={() => handleMenuItemPress(item)}
+                activeOpacity={0.7}
+              >
+                <View style={styles.menuLeft}>
                   <View style={[
-                    styles.menuBadgePill,
-                    { backgroundColor: kycStatus === 'VERIFIED' ? colors.accentMuted : colors.yellow + '22' }
+                    styles.menuIconBg, 
+                    item.id === 'kyc' && styles.menuIconBgKyc
                   ]}>
-                    <Text style={[
-                      styles.menuBadgeText,
-                      { color: kycStatus === 'VERIFIED' ? colors.accent : colors.yellow }
+                    <MaterialIcons
+                      name={item.icon as any}
+                      size={20}
+                      color={item.id === 'kyc' ? colors.accent : colors.textPrimary}
+                    />
+                  </View>
+                  <Text style={[styles.menuTitle, item.id === 'kyc' && { fontWeight: '700' }]} numberOfLines={1}>
+                    {item.title}
+                  </Text>
+                </View>
+
+                <View style={styles.menuRight}>
+                  {item.id === 'kyc' && (
+                    <View style={[
+                      styles.menuBadgePill,
+                      { 
+                        backgroundColor: kycStatus === 'VERIFIED' ? colors.accentMuted : kycStatus === 'PENDING' ? colors.yellow + '22' : colors.bgInput,
+                        borderColor: kycStatus === 'VERIFIED' ? colors.accent + '44' : kycStatus === 'PENDING' ? colors.yellow + '44' : colors.border,
+                      }
                     ]}>
-                      {kycStatus === 'VERIFIED' ? 'Verified' : kycStatus === 'PENDING' ? 'Pending' : 'Required'}
-                    </Text>
-                  </View>
-                )}
-                {item.id === '4' && (
-                  <View style={[styles.menuBadgePill, { backgroundColor: colors.accentMuted }]}>
-                    <Text style={[styles.menuBadgeText, { color: colors.accent }]}>
-                      2 Active
-                    </Text>
-                  </View>
-                )}
-                <MaterialIcons name="chevron-right" size={20} color={colors.textSecondary} />
-              </View>
-            </TouchableOpacity>
+                      <Text style={[
+                        styles.menuBadgeText,
+                        { color: kycStatus === 'VERIFIED' ? colors.accent : kycStatus === 'PENDING' ? colors.yellow : colors.textSecondary }
+                      ]}>
+                        {kycStatus === 'VERIFIED' ? 'Verified' : kycStatus === 'PENDING' ? 'Pending' : 'Required'}
+                      </Text>
+                    </View>
+                  )}
+                  {item.id === '4' && (
+                    <View style={[styles.menuBadgePill, { backgroundColor: colors.accentMuted, borderColor: colors.accent + '44' }]}>
+                      <Text style={[styles.menuBadgeText, { color: colors.accent }]}>
+                        2 Active
+                      </Text>
+                    </View>
+                  )}
+                  <MaterialIcons name="chevron-right" size={20} color={colors.textSecondary} />
+                </View>
+              </TouchableOpacity>
+              {idx < menuItems.length - 1 && <View style={styles.menuDivider} />}
+            </React.Fragment>
           ))}
         </View>
 
         {/* Log Out Button */}
-        <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
+        <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout} activeOpacity={0.75}>
           <MaterialIcons name="logout" size={20} color={colors.red} style={styles.logoutIcon} />
           <Text style={styles.logoutText}>Log Out</Text>
         </TouchableOpacity>
@@ -736,137 +857,201 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 24,
-    paddingTop: 20,
-    marginBottom: 24,
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    marginBottom: 18,
   },
   headerTitle: {
     ...typography.h1,
     color: colors.textPrimary,
   },
   iconBtn: {
-    padding: 8,
-    backgroundColor: colors.bgCard,
+    width: 42,
+    height: 42,
     borderRadius: layout.borderRadiusSmall,
+    backgroundColor: colors.bgCard,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
   },
-  userCard: {
-    marginHorizontal: 24,
-    marginBottom: 20,
-    padding: 16,
+  profileCard: {
+    marginHorizontal: 16,
+    marginBottom: 16,
     borderRadius: layout.borderRadius,
+    padding: 16,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.bgCard,
   },
-  userInfoRow: {
+  cardTopRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
   },
-  avatarWrapper: {
-    position: 'relative',
-    marginRight: 16,
-  },
-  avatarLarge: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+  avatarCircle: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
     backgroundColor: colors.accentMuted,
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 2,
+    marginRight: 14,
+    borderWidth: 1.5,
     borderColor: colors.accent,
+    position: 'relative',
+  },
+  avatarInitialsText: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: colors.accent,
+    letterSpacing: -0.5,
   },
   avatarImage: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    borderWidth: 2,
-    borderColor: colors.accent,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
   },
-  avatarEditBadge: {
+  avatarCamBadge: {
     position: 'absolute',
     bottom: -2,
     right: -2,
     backgroundColor: colors.accent,
-    width: 20,
-    height: 20,
-    borderRadius: 10,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 2,
+    borderWidth: 1.5,
     borderColor: colors.bgCard,
   },
-  userDetails: {
+  profileHeaderInfo: {
     flex: 1,
+    paddingRight: 6,
   },
-  userNameHeaderRow: {
+  nameBadgeRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 2,
-  },
-  userName: {
-    ...typography.h2,
-    fontSize: 20,
-    color: colors.textPrimary,
-    flex: 1,
-    marginRight: 8,
-  },
-  editPillBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.accentMuted,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: colors.accent + '33',
-  },
-  editPillText: {
-    ...typography.bodySmall,
-    color: colors.accent,
-    fontSize: 11,
-    fontWeight: '700',
-    marginLeft: 3,
-  },
-  userEmail: {
-    ...typography.bodySmall,
-    color: colors.textSecondary,
-    fontSize: 13,
-    marginBottom: 2,
-  },
-  userPhoneRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexWrap: 'nowrap',
     marginBottom: 4,
   },
-  userPhoneText: {
+  profileUserName: {
+    ...typography.h2,
+    fontSize: 17,
+    color: colors.textPrimary,
+    marginRight: 8,
+    maxWidth: 130,
+  },
+  statusPillBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+    borderWidth: 1,
+  },
+  statusPillUnverified: {
+    backgroundColor: colors.bgInput,
+    borderColor: colors.border,
+  },
+  statusPillVerified: {
+    backgroundColor: colors.accentMuted,
+    borderColor: colors.accent + '44',
+  },
+  statusPillText: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  statusTextUnverified: {
+    color: colors.textSecondary,
+  },
+  statusTextVerified: {
+    color: colors.accent,
+  },
+  memberSinceText: {
     ...typography.bodySmall,
     color: colors.textSecondary,
-    fontSize: 12,
-    marginLeft: 4,
+    fontSize: 11,
+    marginBottom: 6,
   },
-  tierBadge: {
+  uidPill: {
     flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: colors.bgInput,
     alignSelf: 'flex-start',
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: layout.borderRadiusSmall,
-    marginTop: 2,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
-  tierText: {
-    ...typography.bodySmall,
+  uidPillLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: colors.textSecondary,
+  },
+  uidPillValue: {
+    fontSize: 11,
     fontWeight: '700',
-    marginLeft: 4,
+    color: colors.accent,
+  },
+  editBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.accentMuted,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.accent + '33',
+  },
+  editBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.accent,
+  },
+  cardDivider: {
+    height: 1,
+    backgroundColor: colors.border,
+    marginVertical: 14,
+  },
+  detailsList: {
+    gap: 12,
+  },
+  detailRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  detailLabel: {
+    ...typography.bodySmall,
+    color: colors.textSecondary,
+    fontWeight: '500',
+  },
+  detailRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  detailValue: {
+    ...typography.body,
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.textPrimary,
+  },
+  privacyIconBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 6,
+    backgroundColor: colors.bgInput,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 8,
   },
   preferencesSection: {
     backgroundColor: colors.bgCard,
-    marginHorizontal: 24,
+    marginHorizontal: 16,
     borderRadius: layout.borderRadius,
     paddingHorizontal: 16,
-    paddingVertical: 8,
-    marginBottom: 24,
+    paddingVertical: 4,
+    marginBottom: 16,
     borderWidth: 1,
     borderColor: colors.border,
   },
@@ -881,13 +1066,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flex: 1,
   },
-  prefIcon: {
-    marginRight: 16,
+  prefIconBox: {
+    width: 38,
+    height: 38,
+    borderRadius: 10,
+    backgroundColor: colors.accentMuted,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 14,
   },
   prefText: {
     ...typography.body,
     color: colors.textPrimary,
-    fontWeight: '500',
+    fontWeight: '600',
   },
   prefSubtext: {
     ...typography.bodySmall,
@@ -895,24 +1086,21 @@ const styles = StyleSheet.create({
     fontSize: 11,
     marginTop: 2,
   },
-  divider: {
-    height: 1,
-    backgroundColor: colors.border,
-  },
   menuSection: {
     backgroundColor: colors.bgCard,
-    marginHorizontal: 24,
+    marginHorizontal: 16,
     borderRadius: layout.borderRadius,
     paddingHorizontal: 16,
-    marginBottom: 24,
+    paddingVertical: 4,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   menuItem: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    paddingVertical: 14,
   },
   menuLeft: {
     flexDirection: 'row',
@@ -921,18 +1109,25 @@ const styles = StyleSheet.create({
     marginRight: 10,
   },
   menuIconBg: {
-    width: 36,
-    height: 36,
-    borderRadius: layout.borderRadiusSmall,
+    width: 38,
+    height: 38,
+    borderRadius: 10,
     backgroundColor: colors.bgInput,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 14,
   },
+  menuIconBgKyc: {
+    backgroundColor: colors.accentMuted,
+  },
   menuTitle: {
     ...typography.body,
     color: colors.textPrimary,
     flexShrink: 1,
+  },
+  menuDivider: {
+    height: 1,
+    backgroundColor: colors.border,
   },
   menuRight: {
     flexDirection: 'row',
@@ -943,6 +1138,7 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
     borderRadius: 6,
     marginRight: 6,
+    borderWidth: 1,
   },
   menuBadgeText: {
     fontSize: 11,
@@ -952,8 +1148,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    marginHorizontal: 24,
-    paddingVertical: 16,
+    marginHorizontal: 16,
+    paddingVertical: 14,
     backgroundColor: colors.bgCard,
     borderRadius: layout.borderRadius,
     borderWidth: 1,
@@ -967,7 +1163,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: colors.red,
   },
-  // Modal Styling
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.8)',
@@ -993,7 +1188,7 @@ const styles = StyleSheet.create({
   },
   modalTitle: {
     ...typography.h2,
-    color: '#FFF',
+    color: colors.textPrimary,
     fontSize: 18,
     fontWeight: '700',
   },
@@ -1054,7 +1249,7 @@ const styles = StyleSheet.create({
   },
   imageActionBtnText: {
     ...typography.bodySmall,
-    color: '#FFF',
+    color: colors.textPrimary,
     fontSize: 11,
     marginLeft: 6,
     fontWeight: '600',
@@ -1083,7 +1278,7 @@ const styles = StyleSheet.create({
   textInput: {
     flex: 1,
     paddingVertical: 12,
-    color: '#FFF',
+    color: colors.textPrimary,
     fontSize: 14,
   },
   modalBtnRow: {
@@ -1132,7 +1327,7 @@ const styles = StyleSheet.create({
   limitTierTitle: {
     ...typography.body,
     fontWeight: '600',
-    color: '#FFF',
+    color: colors.textPrimary,
   },
   limitValue: {
     ...typography.body,
@@ -1169,7 +1364,7 @@ const styles = StyleSheet.create({
   },
   feeValue: {
     ...typography.bodySmall,
-    color: '#FFF',
+    color: colors.textPrimary,
     fontWeight: '600',
   },
   aboutLogoBg: {
@@ -1183,7 +1378,7 @@ const styles = StyleSheet.create({
   },
   aboutAppName: {
     ...typography.h2,
-    color: '#FFF',
+    color: colors.textPrimary,
     fontSize: 20,
     fontWeight: '700',
   },
@@ -1237,7 +1432,7 @@ const styles = StyleSheet.create({
   supportOptionTitle: {
     ...typography.body,
     fontWeight: '600',
-    color: '#FFF',
+    color: colors.textPrimary,
   },
   supportOptionSub: {
     ...typography.bodySmall,
