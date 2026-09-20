@@ -338,7 +338,7 @@ export const UserProfileScreen = () => {
               {user?.profileImage ? (
                 <Image source={{ uri: user.profileImage }} style={styles.avatarImage} />
               ) : (
-                <Text style={styles.avatarInitialsText}>{getInitials(user?.name)}</Text>
+                <MaterialIcons name="person" size={32} color={colors.accent} />
               )}
               <View style={styles.avatarCamBadge}>
                 <MaterialIcons name="camera-alt" size={10} color="#000" />
@@ -356,14 +356,22 @@ export const UserProfileScreen = () => {
                   onPress={() => navigation.navigate('KYCVerification')}
                   style={[
                     styles.statusPillBadge,
-                    kycStatus === 'VERIFIED' ? styles.statusPillVerified : styles.statusPillUnverified
+                    kycStatus === 'VERIFIED'
+                      ? styles.statusPillVerified
+                      : kycStatus === 'PENDING'
+                      ? styles.statusPillPending
+                      : styles.statusPillUnverified
                   ]}
                 >
                   <Text style={[
                     styles.statusPillText,
-                    kycStatus === 'VERIFIED' ? styles.statusTextVerified : styles.statusTextUnverified
+                    kycStatus === 'VERIFIED'
+                      ? styles.statusTextVerified
+                      : kycStatus === 'PENDING'
+                      ? styles.statusTextPending
+                      : styles.statusTextUnverified
                   ]}>
-                    {kycStatus === 'VERIFIED' ? 'VERIFIED' : 'UNVERIFIED'}
+                    {kycStatus === 'VERIFIED' ? 'VERIFIED' : kycStatus === 'PENDING' ? 'PENDING' : 'UNVERIFIED'}
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -951,6 +959,10 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bgInput,
     borderColor: colors.border,
   },
+  statusPillPending: {
+    backgroundColor: colors.bgInput,
+    borderColor: colors.yellow,
+  },
   statusPillVerified: {
     backgroundColor: colors.accentMuted,
     borderColor: colors.accent + '44',
@@ -962,6 +974,9 @@ const styles = StyleSheet.create({
   },
   statusTextUnverified: {
     color: colors.textSecondary,
+  },
+  statusTextPending: {
+    color: colors.yellow,
   },
   statusTextVerified: {
     color: colors.accent,

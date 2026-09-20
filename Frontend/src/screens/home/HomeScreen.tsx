@@ -139,12 +139,12 @@ export const HomeScreen = () => {
               {user?.profileImage ? (
                 <Image source={{ uri: user.profileImage }} style={styles.avatarImage} />
               ) : (
-                <Text style={styles.avatarText}>{getInitials(user?.name)}</Text>
+                <MaterialIcons name="person" size={24} color={colors.accent} />
               )}
             </View>
             <View style={styles.headerTextContainer}>
-              <Text style={styles.greetingText}>Ayubowan,</Text>
-              <Text style={styles.userName} numberOfLines={1}>{user?.name || 'Trader'}</Text>
+              <Text style={styles.greetingText}>WELCOME,</Text>
+              <Text style={styles.userName} numberOfLines={1}>{user?.name?.toUpperCase() || 'CLERANS'}</Text>
             </View>
           </TouchableOpacity>
 
@@ -445,35 +445,32 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     borderWidth: 1.5,
     borderColor: colors.accent,
-    backgroundColor: colors.accentMuted,
+    backgroundColor: '#000000',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
     overflow: 'hidden',
   },
   avatarImage: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-  },
-  avatarText: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: colors.accent,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
   },
   headerTextContainer: {
     flex: 1,
   },
   greetingText: {
-    ...typography.bodySmall,
-    color: colors.textSecondary,
-    fontSize: 12,
+    color: colors.accent,
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.8,
   },
   userName: {
-    ...typography.h3,
-    fontSize: 17,
-    fontWeight: '800',
-    color: colors.textPrimary,
+    fontSize: 18,
+    fontWeight: '900',
+    color: '#FFFFFF',
+    letterSpacing: 0.3,
+    marginTop: 1,
   },
   headerIcons: {
     flexDirection: 'row',
