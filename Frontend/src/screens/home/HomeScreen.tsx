@@ -1,5 +1,5 @@
 import * as React from 'react';
-const { useEffect, useState } = React;
+const { useEffect, useState, useCallback } = React;
 import {
   View,
   Text,
@@ -8,13 +8,14 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Image,
-  Platform
+  Platform,
+  RefreshControl
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { MaterialIcons } from '@expo/vector-icons';
 import Svg, { Path } from 'react-native-svg';
-import { colors, typography, layout } from '../../theme';
+import { colors, typography, layout, TAB_BAR_BOTTOM_OFFSET } from '../../theme';
 import { Card } from '../../components';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { marketService, portfolioService } from '../../services/apiService';
@@ -43,6 +44,7 @@ export const HomeScreen = () => {
   const [topLoser, setTopLoser] = useState<any>(null);
   const [trendTab, setTrendTab] = useState<'gainer' | 'loser'>('gainer');
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [balance, setBalance] = useState<number | null>(null);
   const [portfolioValue, setPortfolioValue] = useState<number | null>(null);
   const [todaysProfit, setTodaysProfit] = useState<number | null>(null);
@@ -59,65 +61,73 @@ export const HomeScreen = () => {
     return name.substring(0, 2).toUpperCase();
   };
 
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        // Load user info
-        const userData = await AsyncStorage.getItem('userData');
-        if (userData) {
-          setUser(JSON.parse(userData));
-        }
-
-        // Fetch prices with sparkline data for all major pairs
-        const symbols = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'ADAUSDT', 'XRPUSDT', 'DOGEUSDT'];
-        const marketResponse = await marketService.getMultiplePricesLKR(symbols, true);
-
-        // Fetch portfolio summary
-        const portfolioResponse = await portfolioService.getPortfolio();
-
-        if (marketResponse.success && marketResponse.data?.prices) {
-          const prices = marketResponse.data.prices;
-          const formatted = prices.map((p: any) => ({
-            symbol: p.symbol,
-            pair: `${p.symbol.replace('USDT', '')}/LKR`,
-            change: `${p.changePercent >= 0 ? '+' : ''}${p.changePercent.toFixed(2)}%`,
-            changeVal: p.changePercent,
-            price: p.priceLKR < 10
-              ? `Rs ${p.priceLKR.toFixed(4)}`
-              : `Rs ${p.priceLKR.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`,
-            rawPrice: p.priceLKR,
-            color: p.changePercent >= 0 ? colors.accent : colors.red,
-            path: generateSparklinePath(p.sparkline, 110, 42),
-            sparkline: p.sparkline || []
-          }));
-          setWatchlist(formatted);
-          setLkrPriceData(marketResponse.data);
-
-          // Find top gainer & loser
-          const sorted = [...formatted].sort((a, b) => b.changeVal - a.changeVal);
-          setTopGainer(sorted[0]);
-          setTopLoser(sorted[sorted.length - 1]);
-        }
-
-        if (portfolioResponse.success) {
-          const { summary } = portfolioResponse.data;
-          setBalance(summary.availableCash);
-          setPortfolioValue(summary.totalPortfolioValue);
-          setTodaysProfit(summary.todaysProfit);
-          setPnlPercent(summary.profitLossPercent);
-        }
-
-      } catch (error) {
-        console.error('Failed to fetch home data:', error);
-      } finally {
-        setLoading(false);
+  const fetchData = useCallback(async (isRefresh = false) => {
+    try {
+      if (isRefresh) {
+        setRefreshing(true);
       }
-    };
+      // Load user info
+      const userData = await AsyncStorage.getItem('userData');
+      if (userData) {
+        setUser(JSON.parse(userData));
+      }
 
-    fetchData();
-    const interval = setInterval(fetchData, 30000);
-    return () => clearInterval(interval);
+      // Fetch prices with sparkline data for all major pairs
+      const symbols = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'ADAUSDT', 'XRPUSDT', 'DOGEUSDT'];
+      const marketResponse = await marketService.getMultiplePricesLKR(symbols, true);
+
+      // Fetch portfolio summary
+      const portfolioResponse = await portfolioService.getPortfolio();
+
+      if (marketResponse.success && marketResponse.data?.prices) {
+        const prices = marketResponse.data.prices;
+        const formatted = prices.map((p: any) => ({
+          symbol: p.symbol,
+          pair: `${p.symbol.replace('USDT', '')}/LKR`,
+          change: `${p.changePercent >= 0 ? '+' : ''}${p.changePercent.toFixed(2)}%`,
+          changeVal: p.changePercent,
+          price: p.priceLKR < 10
+            ? `Rs ${p.priceLKR.toFixed(4)}`
+            : `Rs ${p.priceLKR.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`,
+          rawPrice: p.priceLKR,
+          color: p.changePercent >= 0 ? colors.accent : colors.red,
+          path: generateSparklinePath(p.sparkline, 110, 42),
+          sparkline: p.sparkline || []
+        }));
+        setWatchlist(formatted);
+        setLkrPriceData(marketResponse.data);
+
+        // Find top gainer & loser
+        const sorted = [...formatted].sort((a, b) => b.changeVal - a.changeVal);
+        setTopGainer(sorted[0]);
+        setTopLoser(sorted[sorted.length - 1]);
+      }
+
+      if (portfolioResponse.success) {
+        const { summary } = portfolioResponse.data;
+        setBalance(summary.availableCash);
+        setPortfolioValue(summary.totalPortfolioValue);
+        setTodaysProfit(summary.todaysProfit);
+        setPnlPercent(summary.profitLossPercent);
+      }
+
+    } catch (error) {
+      console.error('Failed to fetch home data:', error);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
   }, []);
+
+  useEffect(() => {
+    fetchData();
+    const interval = setInterval(() => fetchData(), 30000);
+    return () => clearInterval(interval);
+  }, [fetchData]);
+
+  const onRefresh = useCallback(() => {
+    fetchData(true);
+  }, [fetchData]);
 
   const activeTrend = trendTab === 'gainer' ? topGainer : topLoser;
 
@@ -126,6 +136,14 @@ export const HomeScreen = () => {
       <ScrollView
         contentContainerStyle={styles.container}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={colors.accent}
+            colors={[colors.accent]}
+          />
+        }
       >
 
         {/* Top Header */}
@@ -426,6 +444,7 @@ const styles = StyleSheet.create({
   },
   container: {
     paddingTop: 12,
+    paddingBottom: TAB_BAR_BOTTOM_OFFSET,
   },
   header: {
     flexDirection: 'row',

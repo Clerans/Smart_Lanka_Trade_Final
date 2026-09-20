@@ -19,7 +19,7 @@ import {
   TransferModal,
   TransactionDetailsModal
 } from '../../components';
-import { colors } from '../../theme';
+import { colors, layout, typography, SCREEN_PADDING, TAB_BAR_BOTTOM_OFFSET } from '../../theme';
 import { walletService, portfolioService, marketService } from '../../services/apiService';
 import { formatLKR, formatNumber } from '../../utils/formatters';
 const { useState, useEffect, useCallback } = React;
@@ -531,13 +531,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   container: {
-    paddingBottom: 40,
+    paddingBottom: TAB_BAR_BOTTOM_OFFSET,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
+    paddingHorizontal: SCREEN_PADDING,
     paddingTop: 16,
     marginBottom: 16,
   },
@@ -565,8 +565,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   totalAssetCard: {
-    marginHorizontal: 20,
-    marginBottom: 24,
+    marginHorizontal: SCREEN_PADDING,
+    marginBottom: 20,
     padding: 20,
     borderRadius: 24,
     borderWidth: 1,
@@ -674,15 +674,15 @@ const styles = StyleSheet.create({
   actionsRow: {
     flexDirection: 'row',
     justifyContent: 'space-around',
-    paddingHorizontal: 20,
-    marginBottom: 28,
+    paddingHorizontal: SCREEN_PADDING,
+    marginBottom: 24,
   },
   actionItem: {
     alignItems: 'center',
   },
   actionSquareBtn: {
-    width: 58,
-    height: 58,
+    width: 56,
+    height: 56,
     borderRadius: 18,
     backgroundColor: colors.bgCard,
     borderWidth: 1,
@@ -696,13 +696,13 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   actionLabel: {
-    fontSize: 13,
+    fontSize: 12.5,
     fontWeight: '600',
     color: colors.textSecondary,
     marginTop: 8,
   },
   holdingsSection: {
-    paddingHorizontal: 20,
+    paddingHorizontal: SCREEN_PADDING,
   },
   holdingsHeaderRow: {
     flexDirection: 'row',
