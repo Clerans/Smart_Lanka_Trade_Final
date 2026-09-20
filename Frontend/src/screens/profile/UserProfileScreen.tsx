@@ -19,6 +19,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useNavigation, useIsFocused } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
+import * as LocalAuthentication from 'expo-local-authentication';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { colors, typography, layout } from '../../theme';
 import { Card } from '../../components';
@@ -263,11 +264,43 @@ export const UserProfileScreen = () => {
   };
 
   const handleBiometricToggle = async (val: boolean) => {
-    setBiometricEnabled(val);
-    await AsyncStorage.setItem('@pref_biometric', String(val));
     if (val) {
-      Alert.alert('Biometrics Enabled', 'Biometric authentication is active for fast sign-in.');
+      try {
+        const hasHardware = await LocalAuthentication.hasHardwareAsync();
+        const isEnrolled = await LocalAuthentication.isEnrolledAsync();
+
+        if (!hasHardware) {
+          Alert.alert('Biometrics Unavailable', 'Biometric sensor hardware was not detected on this device.');
+          return;
+        }
+
+        if (!isEnrolled) {
+          Alert.alert('No Biometrics Enrolled', 'Please enroll your fingerprint or Face ID in your device settings first.');
+          return;
+        }
+
+        const result = await LocalAuthentication.authenticateAsync({
+          promptMessage: 'Authenticate with Fingerprint or Face ID to enable Biometric Login',
+          fallbackLabel: 'Cancel',
+          disableDeviceFallback: true,
+        });
+
+        if (result.success) {
+          setBiometricEnabled(true);
+          await AsyncStorage.setItem('@pref_biometric', 'true');
+          Alert.alert('Biometric Login Enabled', 'You can now use fingerprint and Face ID for instant sign-in.');
+        } else {
+          setBiometricEnabled(false);
+          await AsyncStorage.setItem('@pref_biometric', 'false');
+          Alert.alert('Authentication Failed', 'Could not verify your identity. Biometric login remains disabled.');
+        }
+      } catch (err: any) {
+        setBiometricEnabled(false);
+        Alert.alert('Error', err.message || 'Failed to authenticate biometrics.');
+      }
     } else {
+      setBiometricEnabled(false);
+      await AsyncStorage.setItem('@pref_biometric', 'false');
       Alert.alert('Biometrics Disabled', 'Standard password login is now required.');
     }
   };
@@ -338,7 +371,7 @@ export const UserProfileScreen = () => {
               {user?.profileImage ? (
                 <Image source={{ uri: user.profileImage }} style={styles.avatarImage} />
               ) : (
-                <Text style={styles.avatarInitialsText}>{getInitials(user?.name)}</Text>
+                <MaterialIcons name="person" size={32} color={colors.accent} />
               )}
               <View style={styles.avatarCamBadge}>
                 <MaterialIcons name="camera-alt" size={10} color="#000" />
@@ -356,14 +389,22 @@ export const UserProfileScreen = () => {
                   onPress={() => navigation.navigate('KYCVerification')}
                   style={[
                     styles.statusPillBadge,
-                    kycStatus === 'VERIFIED' ? styles.statusPillVerified : styles.statusPillUnverified
+                    kycStatus === 'VERIFIED'
+                      ? styles.statusPillVerified
+                      : kycStatus === 'PENDING'
+                      ? styles.statusPillPending
+                      : styles.statusPillUnverified
                   ]}
                 >
                   <Text style={[
                     styles.statusPillText,
-                    kycStatus === 'VERIFIED' ? styles.statusTextVerified : styles.statusTextUnverified
+                    kycStatus === 'VERIFIED'
+                      ? styles.statusTextVerified
+                      : kycStatus === 'PENDING'
+                      ? styles.statusTextPending
+                      : styles.statusTextUnverified
                   ]}>
-                    {kycStatus === 'VERIFIED' ? 'VERIFIED' : 'UNVERIFIED'}
+                    {kycStatus === 'VERIFIED' ? 'VERIFIED' : kycStatus === 'PENDING' ? 'PENDING' : 'UNVERIFIED'}
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -951,6 +992,10 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bgInput,
     borderColor: colors.border,
   },
+  statusPillPending: {
+    backgroundColor: colors.bgInput,
+    borderColor: colors.yellow,
+  },
   statusPillVerified: {
     backgroundColor: colors.accentMuted,
     borderColor: colors.accent + '44',
@@ -962,6 +1007,9 @@ const styles = StyleSheet.create({
   },
   statusTextUnverified: {
     color: colors.textSecondary,
+  },
+  statusTextPending: {
+    color: colors.yellow,
   },
   statusTextVerified: {
     color: colors.accent,

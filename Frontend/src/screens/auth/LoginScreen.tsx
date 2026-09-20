@@ -83,8 +83,61 @@ export const LoginScreen = () => {
     setToastVisible(true);
   }, []);
 
+  const checkAndOfferBiometrics = async (onComplete: () => void) => {
+    try {
+      const existingBioPref = await AsyncStorage.getItem('@pref_biometric');
+      if (existingBioPref === null) {
+        const hasHardware = await LocalAuthentication.hasHardwareAsync().catch(() => false);
+        const isEnrolled = await LocalAuthentication.isEnrolledAsync().catch(() => false);
+
+        if (hasHardware && isEnrolled) {
+          Alert.alert(
+            'Enable Biometric Login',
+            'Would you like to enable fingerprint or Face ID for faster and secure future sign-ins?',
+            [
+              {
+                text: 'Not Now',
+                style: 'cancel',
+                onPress: async () => {
+                  await AsyncStorage.setItem('@pref_biometric', 'false');
+                  onComplete();
+                }
+              },
+              {
+                text: 'Enable',
+                onPress: async () => {
+                  try {
+                    const bioAuth = await LocalAuthentication.authenticateAsync({
+                      promptMessage: 'Authenticate with Fingerprint or Face ID',
+                      fallbackLabel: 'Cancel',
+                      disableDeviceFallback: true,
+                    });
+                    if (bioAuth.success) {
+                      await AsyncStorage.setItem('@pref_biometric', 'true');
+                      showToast('Biometric login enabled!', 'success');
+                    } else {
+                      await AsyncStorage.setItem('@pref_biometric', 'false');
+                    }
+                  } catch {
+                    await AsyncStorage.setItem('@pref_biometric', 'false');
+                  }
+                  onComplete();
+                }
+              }
+            ]
+          );
+          return;
+        }
+      }
+    } catch {
+      // Fallback
+    }
+    onComplete();
+  };
+
   const handleGoogleLogin = useCallback(async (idToken: string) => {
     setLoading(true);
+    setGoogleLoading(true);
     setIsNetworkError(false);
     try {
       const authResult = await authService.googleLogin(idToken);
@@ -92,8 +145,10 @@ export const LoginScreen = () => {
         await AsyncStorage.setItem('rememberMe', 'true');
         showToast('Successfully signed in with Google!', 'success');
         setTimeout(() => {
-          navigation.replace('MainApp');
-        }, 800);
+          checkAndOfferBiometrics(() => {
+            navigation.replace('MainApp');
+          });
+        }, 600);
       }
     } catch (error: any) {
       if (error.code === 'NETWORK_ERROR') {
@@ -164,7 +219,9 @@ export const LoginScreen = () => {
           await AsyncStorage.removeItem('rememberMe');
           await AsyncStorage.removeItem('savedEmail');
         }
-        navigation.replace('MainApp');
+        await checkAndOfferBiometrics(() => {
+          navigation.replace('MainApp');
+        });
       }
     } catch (error: any) {
       if (error.code === 'EMAIL_NOT_VERIFIED') {

@@ -139,12 +139,12 @@ export const HomeScreen = () => {
               {user?.profileImage ? (
                 <Image source={{ uri: user.profileImage }} style={styles.avatarImage} />
               ) : (
-                <Text style={styles.avatarText}>{getInitials(user?.name)}</Text>
+                <MaterialIcons name="person" size={24} color={colors.accent} />
               )}
             </View>
             <View style={styles.headerTextContainer}>
-              <Text style={styles.greetingText}>Ayubowan,</Text>
-              <Text style={styles.userName} numberOfLines={1}>{user?.name || 'Trader'}</Text>
+              <Text style={styles.greetingText}>WELCOME,</Text>
+              <Text style={styles.userName} numberOfLines={1}>{user?.name?.toUpperCase() || 'CLERANS'}</Text>
             </View>
           </TouchableOpacity>
 
@@ -217,14 +217,14 @@ export const HomeScreen = () => {
         {/* Quick Actions */}
         <View style={styles.quickActionsRow}>
           <TouchableOpacity
-            style={[styles.actionCard, styles.actionCardBuy]}
+            style={styles.actionCard}
             onPress={() => navigation.navigate('Trade')}
             activeOpacity={0.8}
           >
-            <View style={styles.actionIconBoxBuy}>
-              <MaterialIcons name="shopping-cart" size={20} color="#000" />
+            <View style={styles.actionIconBox}>
+              <MaterialIcons name="shopping-cart" size={20} color={colors.accent} />
             </View>
-            <Text style={styles.actionCardBuyText}>Buy</Text>
+            <Text style={styles.actionCardText}>Buy</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -445,35 +445,32 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     borderWidth: 1.5,
     borderColor: colors.accent,
-    backgroundColor: colors.accentMuted,
+    backgroundColor: '#000000',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
     overflow: 'hidden',
   },
   avatarImage: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-  },
-  avatarText: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: colors.accent,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
   },
   headerTextContainer: {
     flex: 1,
   },
   greetingText: {
-    ...typography.bodySmall,
-    color: colors.textSecondary,
-    fontSize: 12,
+    color: colors.accent,
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.8,
   },
   userName: {
-    ...typography.h3,
-    fontSize: 17,
-    fontWeight: '800',
-    color: colors.textPrimary,
+    fontSize: 18,
+    fontWeight: '900',
+    color: '#FFFFFF',
+    letterSpacing: 0.3,
+    marginTop: 1,
   },
   headerIcons: {
     flexDirection: 'row',
@@ -623,28 +620,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 6,
   },
-  actionCardBuy: {
-    backgroundColor: colors.accent,
-    borderColor: colors.accent,
-  },
-  actionIconBoxBuy: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    backgroundColor: '#00C853',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 6,
-  },
   actionCardText: {
     fontSize: 11,
     color: '#FFFFFF',
     fontWeight: '600',
-  },
-  actionCardBuyText: {
-    fontSize: 11,
-    color: '#000000',
-    fontWeight: '800',
   },
   rateBanner: {
     flexDirection: 'row',

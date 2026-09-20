@@ -15,6 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { MaterialIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as LocalAuthentication from 'expo-local-authentication';
 import { colors, typography, layout } from '../../theme';
 import { authService } from '../../services/apiService';
 import { storageService } from '../../services/storageService';
@@ -75,12 +76,44 @@ export const SecuritySettingsScreen = () => {
 
   // Handlers for toggles
   const handleBiometricToggle = async (val: boolean) => {
-    setBiometricEnabled(val);
-    await AsyncStorage.setItem('@pref_biometric', String(val));
     if (val) {
-      Alert.alert('Biometric Login Enabled', 'You can now use fingerprint and biometric authentication for quick login.');
+      try {
+        const hasHardware = await LocalAuthentication.hasHardwareAsync();
+        const isEnrolled = await LocalAuthentication.isEnrolledAsync();
+
+        if (!hasHardware) {
+          Alert.alert('Biometrics Unavailable', 'Biometric hardware sensor was not detected on this device.');
+          return;
+        }
+
+        if (!isEnrolled) {
+          Alert.alert('No Biometrics Enrolled', 'Please enroll your fingerprint or Face ID in your device settings first.');
+          return;
+        }
+
+        const result = await LocalAuthentication.authenticateAsync({
+          promptMessage: 'Authenticate with Fingerprint or Face ID to enable Biometric Login',
+          fallbackLabel: 'Cancel',
+          disableDeviceFallback: true,
+        });
+
+        if (result.success) {
+          setBiometricEnabled(true);
+          await AsyncStorage.setItem('@pref_biometric', 'true');
+          Alert.alert('Biometric Login Enabled', 'You can now use fingerprint and Face ID for instant sign-in.');
+        } else {
+          setBiometricEnabled(false);
+          await AsyncStorage.setItem('@pref_biometric', 'false');
+          Alert.alert('Authentication Failed', 'Could not verify your identity. Biometric login remains disabled.');
+        }
+      } catch (err: any) {
+        setBiometricEnabled(false);
+        Alert.alert('Error', err.message || 'Failed to authenticate biometrics.');
+      }
     } else {
-      Alert.alert('Biometric Login Disabled', 'Password or PIN will be required upon app launch.');
+      setBiometricEnabled(false);
+      await AsyncStorage.setItem('@pref_biometric', 'false');
+      Alert.alert('Biometric Login Disabled', 'Standard password login is now required.');
     }
   };
 
@@ -95,10 +128,37 @@ export const SecuritySettingsScreen = () => {
   };
 
   const handleFaceIdToggle = async (val: boolean) => {
-    setFaceIdEnabled(val);
-    await AsyncStorage.setItem('@pref_face_id', String(val));
     if (val) {
-      Alert.alert('Face ID Enabled', 'Facial recognition authentication is enabled for high-security transactions.');
+      try {
+        const hasHardware = await LocalAuthentication.hasHardwareAsync();
+        const isEnrolled = await LocalAuthentication.isEnrolledAsync();
+
+        if (!hasHardware || !isEnrolled) {
+          Alert.alert('Face ID Unavailable', 'Face ID hardware or enrolled biometric was not detected.');
+          return;
+        }
+
+        const result = await LocalAuthentication.authenticateAsync({
+          promptMessage: 'Authenticate with Face ID',
+          fallbackLabel: 'Cancel',
+          disableDeviceFallback: true,
+        });
+
+        if (result.success) {
+          setFaceIdEnabled(true);
+          await AsyncStorage.setItem('@pref_face_id', 'true');
+          Alert.alert('Face ID Enabled', 'Facial recognition authentication is enabled for high-security transactions.');
+        } else {
+          setFaceIdEnabled(false);
+          await AsyncStorage.setItem('@pref_face_id', 'false');
+        }
+      } catch {
+        setFaceIdEnabled(false);
+      }
+    } else {
+      setFaceIdEnabled(false);
+      await AsyncStorage.setItem('@pref_face_id', 'false');
+      Alert.alert('Face ID Disabled', 'Standard authentication will be used.');
     }
   };
 
