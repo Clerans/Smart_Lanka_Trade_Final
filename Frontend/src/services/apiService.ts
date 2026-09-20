@@ -147,10 +147,43 @@ export const authService = {
       throw error;
     }
   },
+  sendOtp: async (email?: string) => {
+    try {
+      const targetEmail = email || (await storageService.getUserData())?.email;
+      const response = await api.post('/auth/send-otp', {
+        email: targetEmail?.trim().toLowerCase()
+      });
+      return response.data;
+    } catch (error: any) {
+      throw error;
+    }
+  },
+  verifyOtp: async (email: string, otp: string) => {
+    try {
+      const response = await api.post('/auth/verify-otp', {
+        email: email.trim().toLowerCase(),
+        otp: otp.trim()
+      });
+      return response.data;
+    } catch (error: any) {
+      throw error;
+    }
+  },
+  resendOtp: async (email?: string) => {
+    try {
+      const targetEmail = email || (await storageService.getUserData())?.email;
+      const response = await api.post('/auth/send-otp', {
+        email: targetEmail?.trim().toLowerCase()
+      });
+      return response.data;
+    } catch (error: any) {
+      throw error;
+    }
+  },
   sendVerification: async (email?: string) => {
     try {
       const targetEmail = email || (await storageService.getUserData())?.email;
-      const response = await api.post('/auth/send-verification', {
+      const response = await api.post('/auth/send-otp', {
         email: targetEmail?.trim().toLowerCase()
       });
       return response.data;
@@ -160,7 +193,7 @@ export const authService = {
   },
   verifyEmail: async (email: string, otp: string) => {
     try {
-      const response = await api.post('/auth/verify-email', {
+      const response = await api.post('/auth/verify-otp', {
         email: email.trim().toLowerCase(),
         otp: otp.trim()
       });
@@ -172,7 +205,7 @@ export const authService = {
   resendVerification: async (email?: string) => {
     try {
       const targetEmail = email || (await storageService.getUserData())?.email;
-      const response = await api.post('/auth/resend-verification', {
+      const response = await api.post('/auth/send-otp', {
         email: targetEmail?.trim().toLowerCase()
       });
       return response.data;

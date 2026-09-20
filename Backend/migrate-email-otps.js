@@ -11,6 +11,7 @@ async function runMigration() {
   };
 
   if (process.env.DB_WALLET_PATH) {
+    dbConfig.configDir = process.env.DB_WALLET_PATH;
     dbConfig.walletLocation = process.env.DB_WALLET_PATH;
     if (process.env.DB_WALLET_PASSWORD) {
       dbConfig.walletPassword = process.env.DB_WALLET_PASSWORD;

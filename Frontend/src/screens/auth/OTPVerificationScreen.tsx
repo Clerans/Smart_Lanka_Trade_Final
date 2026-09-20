@@ -124,7 +124,7 @@ export const OTPVerificationScreen = () => {
     setLoading(true);
     setIsNetworkError(false);
     try {
-      const result = await authService.verifyEmail(email, otpString);
+      const result = await authService.verifyOtp(email, otpString);
       showToast(result.message || 'Email verified successfully!', 'success');
       setTimeout(() => {
         navigation.replace('MainApp');
@@ -145,7 +145,7 @@ export const OTPVerificationScreen = () => {
     setResending(true);
     setIsNetworkError(false);
     try {
-      await authService.resendVerification(email);
+      await authService.sendOtp(email);
       showToast('A new 6-digit verification code has been sent!', 'success');
       setTimer(60);
       setOtp(['', '', '', '', '', '']);
@@ -275,6 +275,8 @@ export const OTPVerificationScreen = () => {
                       maxLength={6} // Allows paste
                       selectTextOnFocus
                       textAlign="center"
+                      textContentType="oneTimeCode"
+                      autoComplete="one-time-code"
                       accessibilityLabel={`OTP Digit ${index + 1}`}
                     />
                   ))}
