@@ -4,6 +4,8 @@ const {
   login,
   register,
   getUsers,
+  sendOtp,
+  verifyOtp,
   verifyEmail,
   verifyEmailToken,
   sendVerification,
@@ -33,7 +35,9 @@ router.post('/google-login', googleLogin);
 router.get('/users', protect, requireAdmin, getUsers);
 router.get('/verify/:token', verifyEmailToken); // Legacy HTML verification support
 
-// New OTP & security endpoints
+// Email OTP Endpoints
+router.post('/send-otp', sendOtp);
+router.post('/verify-otp', verifyOtp);
 router.post('/send-verification', sendVerification);
 router.post('/verify-email', verifyEmail);
 router.post('/resend-verification', resendVerification);
