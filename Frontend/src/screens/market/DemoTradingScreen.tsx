@@ -13,25 +13,25 @@ export const DemoTradingScreen = () => {
   const navigation = useNavigation<any>();
   const [selectedSymbol, setSelectedSymbol] = useState('BTCUSDT');
   const [tradeType, setTradeType] = useState<'BUY' | 'SELL'>('BUY');
-  
+
   const [walletDetails, setWalletDetails] = useState<any>(null);
   const [portfolioSummary, setPortfolioSummary] = useState<any>(null);
   const [portfolioHoldings, setPortfolioHoldings] = useState<any[]>([]);
   const [liveCoins, setLiveCoins] = useState<any[]>([]);
   const [activeCoinPriceLKR, setActiveCoinPriceLKR] = useState<number>(0);
   const [activeCoinChange, setActiveCoinChange] = useState<number>(0);
-  
+
   const [amountLKR, setAmountLKR] = useState('');
   const [quantityCoin, setQuantityCoin] = useState('');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [tradeLoading, setTradeLoading] = useState(false);
   const [txHistory, setTxHistory] = useState<any[]>([]);
-  
+
   const [pickerVisible, setPickerVisible] = useState(false);
   const [pickerSearchQuery, setPickerSearchQuery] = useState('');
   const [confirmModalVisible, setConfirmModalVisible] = useState(false);
-  
+
   // Toast & Network states
   const [toastVisible, setToastVisible] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
@@ -186,7 +186,7 @@ export const DemoTradingScreen = () => {
     }
   };
 
-  const filteredPickerCoins = liveCoins.filter(coin => 
+  const filteredPickerCoins = liveCoins.filter(coin =>
     coin.coin.toLowerCase().includes(pickerSearchQuery.toLowerCase())
   );
 
@@ -261,8 +261,8 @@ export const DemoTradingScreen = () => {
               </View>
             )}
 
-            <ScrollView 
-              contentContainerStyle={styles.container} 
+            <ScrollView
+              contentContainerStyle={styles.container}
               keyboardShouldPersistTaps="handled"
               refreshControl={
                 <RefreshControl
@@ -274,202 +274,202 @@ export const DemoTradingScreen = () => {
               }
             >
 
-            {/* Virtual Balance Card */}
-            <Card style={styles.balanceCard}>
-              <View style={styles.balanceHeader}>
-                <Text style={styles.balanceLabel}>VIRTUAL BALANCE</Text>
-                <TouchableOpacity onPress={fetchTradingData}>
-                  <MaterialIcons name="refresh" size={20} color={colors.accent} />
-                </TouchableOpacity>
-              </View>
-              <Text style={styles.balanceValue}>
-                LKR {formatLKR(walletDetails?.balanceLKR ?? walletDetails?.balance ?? 1000000, 2)}
-              </Text>
-              <Text style={[
-                styles.balanceSubtitle,
-                portfolioSummary && portfolioSummary.todaysProfit >= 0 ? { color: colors.accent } : { color: colors.red }
-              ]}>
-                PNL: {portfolioSummary && portfolioSummary.todaysProfit >= 0 ? '+' : ''}{formatNumber(portfolioSummary?.todaysProfit, 0)} LKR ({portfolioSummary ? (portfolioSummary.profitLossPercent >= 0 ? '+' : '') + Number(portfolioSummary.profitLossPercent || 0).toFixed(2) : '0.00'}%)
-              </Text>
-            </Card>
-
-            {/* Live Price & Chart */}
-            <View style={styles.chartSection}>
-              <View style={styles.priceRow}>
-                <View>
-                  <Text style={styles.livePrice}>
-                    Rs {formatLKR(activeCoinPriceLKR, 2)}
-                  </Text>
-                  <Text style={[styles.liveChange, activeCoinChange >= 0 ? { color: colors.accent } : { color: colors.red }]}>
-                    {activeCoinChange >= 0 ? '+' : ''}{Number(activeCoinChange || 0).toFixed(2)}%
-                  </Text>
+              {/* Virtual Balance Card */}
+              <Card style={styles.balanceCard}>
+                <View style={styles.balanceHeader}>
+                  <Text style={styles.balanceLabel}>VIRTUAL BALANCE</Text>
+                  <TouchableOpacity onPress={fetchTradingData}>
+                    <MaterialIcons name="refresh" size={20} color={colors.accent} />
+                  </TouchableOpacity>
                 </View>
-                <View style={styles.timeFilter}>
-                  {['1H', '1D', '1W'].map(t => (
-                    <TouchableOpacity key={t} style={[styles.timeBtn, t === '1D' && styles.timeBtnActive]}>
-                      <Text style={[styles.timeText, t === '1D' && styles.timeTextActive]}>{t}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </View>
-
-              <View style={styles.chartContainer}>
-                <Svg height="120" width="100%" viewBox="0 0 300 120" preserveAspectRatio="none">
-                  <Path
-                    d={activeCoinChange >= 0 
-                      ? "M0 100 Q 50 80, 100 90 T 200 40 T 300 20"
-                      : "M0 20 Q 50 40, 100 30 T 200 80 T 300 100"
-                    }
-                    fill="none"
-                    stroke={activeCoinChange >= 0 ? colors.accent : colors.red}
-                    strokeWidth="2.5"
-                  />
-                </Svg>
-              </View>
-            </View>
-
-            {/* Trade Form Card */}
-            <Card style={styles.formCard}>
-              <View style={styles.tradeTabs}>
-                <TouchableOpacity
-                  style={[
-                    styles.tradeTab,
-                    tradeType === 'BUY' ? styles.tradeTabBuyActive : styles.tradeTabInactive
-                  ]}
-                  onPress={() => {
-                    setTradeType('BUY');
-                    setAmountLKR('');
-                    setQuantityCoin('');
-                  }}
-                >
-                  <Text style={[styles.tradeTabText, tradeType === 'BUY' && styles.tradeTabTextBuyActive]}>BUY</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[
-                    styles.tradeTab,
-                    tradeType === 'SELL' ? styles.tradeTabSellActive : styles.tradeTabInactive
-                  ]}
-                  onPress={() => {
-                    setTradeType('SELL');
-                    setAmountLKR('');
-                    setQuantityCoin('');
-                  }}
-                >
-                  <Text style={[styles.tradeTabText, tradeType === 'SELL' && styles.tradeTabTextSellActive]}>SELL</Text>
-                </TouchableOpacity>
-              </View>
-
-              <Text style={styles.inputLabel}>ORDER TYPE</Text>
-              <View style={styles.dropdownInput}>
-                <Text style={styles.inputText}>Market Order</Text>
-                <MaterialIcons name="keyboard-arrow-down" size={20} color={colors.textSecondary} />
-              </View>
-
-              <View style={styles.inputRow}>
-                <View style={styles.inputGroup}>
-                  <Text style={styles.inputLabel}>AMOUNT ({selectedSymbol.replace('USDT', '')})</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={quantityCoin}
-                    onChangeText={handleQuantityCoinChange}
-                    placeholder="0.00"
-                    keyboardType="numeric"
-                    placeholderTextColor={colors.textSecondary}
-                  />
-                </View>
-                <View style={{ width: 16 }} />
-                <View style={styles.inputGroup}>
-                  <Text style={styles.inputLabel}>TOTAL (LKR)</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={amountLKR}
-                    onChangeText={handleAmountLKRChange}
-                    placeholder="0"
-                    keyboardType="numeric"
-                    placeholderTextColor={colors.textSecondary}
-                  />
-                </View>
-              </View>
-
-              <View style={styles.balanceInfoRow}>
-                <Text style={styles.availableText}>
-                  {tradeType === 'BUY' 
-                    ? `Available: ${formatNumber(walletDetails?.availableBalance ?? 1000000, 0)} LKR`
-                    : `Holding: ${getOwnedQuantity().toFixed(6)} ${selectedSymbol.replace('USDT', '')}`
-                  }
+                <Text style={styles.balanceValue}>
+                  LKR {formatLKR(walletDetails?.balanceLKR ?? walletDetails?.balance ?? 1000000, 2)}
                 </Text>
-                <TouchableOpacity onPress={() => {
-                  if (tradeType === 'BUY') {
-                    if (walletDetails) {
-                      handleAmountLKRChange((walletDetails.availableBalance ?? 0).toString());
-                    }
-                  } else {
-                    handleQuantityCoinChange(getOwnedQuantity().toString());
-                  }
-                }}>
-                  <Text style={styles.maxBuyText}>{tradeType === 'BUY' ? 'Max Buy' : 'Max Sell'}</Text>
-                </TouchableOpacity>
-              </View>
+                <Text style={[
+                  styles.balanceSubtitle,
+                  portfolioSummary && portfolioSummary.todaysProfit >= 0 ? { color: colors.accent } : { color: colors.red }
+                ]}>
+                  PNL: {portfolioSummary && portfolioSummary.todaysProfit >= 0 ? '+' : ''}{formatNumber(portfolioSummary?.todaysProfit, 0)} LKR ({portfolioSummary ? (portfolioSummary.profitLossPercent >= 0 ? '+' : '') + Number(portfolioSummary.profitLossPercent || 0).toFixed(2) : '0.00'}%)
+                </Text>
+              </Card>
 
-              {tradeLoading ? (
-                <ActivityIndicator color={colors.accent} size="large" style={{ marginVertical: 16 }} />
-              ) : (
-                <PrimaryButton 
-                  title={tradeType === 'BUY' ? 'EXECUTE VIRTUAL BUY ⚡' : 'EXECUTE VIRTUAL SELL ⚡'} 
-                  onPress={handleOpenConfirmation} 
-                  style={tradeType === 'SELL' && { backgroundColor: colors.red }}
-                />
-              )}
-            </Card>
-
-            {/* Virtual History */}
-            <View style={styles.historySection}>
-              <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>VIRTUAL HISTORY</Text>
-                <TouchableOpacity onPress={fetchTradingData}><Text style={styles.seeAllText}>Refresh</Text></TouchableOpacity>
-              </View>
-
-              {txHistory.length > 0 ? (
-                txHistory.map((tx) => (
-                  <View key={tx.id} style={styles.txRow}>
-                    <View style={styles.txLeft}>
-                      <View style={[
-                        styles.txIconContainer,
-                        tx.action === 'BUY' || tx.action === 'DEPOSIT' ? styles.txBgGreen : styles.txBgRed
-                      ]}>
-                        <MaterialIcons 
-                          name={tx.action === 'BUY' || tx.action === 'DEPOSIT' ? 'call-received' : 'call-made'} 
-                          size={20} 
-                          color={tx.action === 'BUY' || tx.action === 'DEPOSIT' ? colors.accent : colors.red} 
-                        />
-                      </View>
-                      <View>
-                        <Text style={styles.txPair}>{tx.action} {tx.coin}</Text>
-                        <Text style={styles.txTime}>{tx.date ? new Date(tx.date).toLocaleDateString() : 'Recent'}</Text>
-                      </View>
-                    </View>
-                    <View style={styles.txRight}>
-                      <Text style={[
-                        styles.txAmount,
-                        tx.action === 'BUY' || tx.action === 'DEPOSIT' ? styles.txAmountGreen : styles.txAmountRed
-                      ]}>
-                        {tx.action === 'BUY' || tx.action === 'DEPOSIT' ? '+' : '-'}{Number(tx.quantity || 0).toFixed(4)} {tx.coin}
-                      </Text>
-                      <Text style={styles.txTotalVal}>LKR {formatNumber(tx.total, 0)}</Text>
-                    </View>
+              {/* Live Price & Chart */}
+              <View style={styles.chartSection}>
+                <View style={styles.priceRow}>
+                  <View>
+                    <Text style={styles.livePrice}>
+                      Rs {formatLKR(activeCoinPriceLKR, 2)}
+                    </Text>
+                    <Text style={[styles.liveChange, activeCoinChange >= 0 ? { color: colors.accent } : { color: colors.red }]}>
+                      {activeCoinChange >= 0 ? '+' : ''}{Number(activeCoinChange || 0).toFixed(2)}%
+                    </Text>
                   </View>
-                ))
-              ) : (
-                <View style={styles.emptyHistory}>
-                  <Text style={styles.emptyText}>No virtual trading history yet.</Text>
+                  <View style={styles.timeFilter}>
+                    {['1H', '1D', '1W'].map(t => (
+                      <TouchableOpacity key={t} style={[styles.timeBtn, t === '1D' && styles.timeBtnActive]}>
+                        <Text style={[styles.timeText, t === '1D' && styles.timeTextActive]}>{t}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
                 </View>
-              )}
-            </View>
 
-          </ScrollView>
-        </View>
-      )}
-    </KeyboardAvoidingView>
+                <View style={styles.chartContainer}>
+                  <Svg height="120" width="100%" viewBox="0 0 300 120" preserveAspectRatio="none">
+                    <Path
+                      d={activeCoinChange >= 0
+                        ? "M0 100 Q 50 80, 100 90 T 200 40 T 300 20"
+                        : "M0 20 Q 50 40, 100 30 T 200 80 T 300 100"
+                      }
+                      fill="none"
+                      stroke={activeCoinChange >= 0 ? colors.accent : colors.red}
+                      strokeWidth="2.5"
+                    />
+                  </Svg>
+                </View>
+              </View>
+
+              {/* Trade Form Card */}
+              <Card style={styles.formCard}>
+                <View style={styles.tradeTabs}>
+                  <TouchableOpacity
+                    style={[
+                      styles.tradeTab,
+                      tradeType === 'BUY' ? styles.tradeTabBuyActive : styles.tradeTabInactive
+                    ]}
+                    onPress={() => {
+                      setTradeType('BUY');
+                      setAmountLKR('');
+                      setQuantityCoin('');
+                    }}
+                  >
+                    <Text style={[styles.tradeTabText, tradeType === 'BUY' && styles.tradeTabTextBuyActive]}>BUY</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.tradeTab,
+                      tradeType === 'SELL' ? styles.tradeTabSellActive : styles.tradeTabInactive
+                    ]}
+                    onPress={() => {
+                      setTradeType('SELL');
+                      setAmountLKR('');
+                      setQuantityCoin('');
+                    }}
+                  >
+                    <Text style={[styles.tradeTabText, tradeType === 'SELL' && styles.tradeTabTextSellActive]}>SELL</Text>
+                  </TouchableOpacity>
+                </View>
+
+                <Text style={styles.inputLabel}>ORDER TYPE</Text>
+                <View style={styles.dropdownInput}>
+                  <Text style={styles.inputText}>Market Order</Text>
+                  <MaterialIcons name="keyboard-arrow-down" size={20} color={colors.textSecondary} />
+                </View>
+
+                <View style={styles.inputRow}>
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.inputLabel}>AMOUNT ({selectedSymbol.replace('USDT', '')})</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={quantityCoin}
+                      onChangeText={handleQuantityCoinChange}
+                      placeholder="0.00"
+                      keyboardType="numeric"
+                      placeholderTextColor={colors.textSecondary}
+                    />
+                  </View>
+                  <View style={{ width: 16 }} />
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.inputLabel}>TOTAL (LKR)</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={amountLKR}
+                      onChangeText={handleAmountLKRChange}
+                      placeholder="0"
+                      keyboardType="numeric"
+                      placeholderTextColor={colors.textSecondary}
+                    />
+                  </View>
+                </View>
+
+                <View style={styles.balanceInfoRow}>
+                  <Text style={styles.availableText}>
+                    {tradeType === 'BUY'
+                      ? `Available: ${formatNumber(walletDetails?.availableBalance ?? 1000000, 0)} LKR`
+                      : `Holding: ${getOwnedQuantity().toFixed(6)} ${selectedSymbol.replace('USDT', '')}`
+                    }
+                  </Text>
+                  <TouchableOpacity onPress={() => {
+                    if (tradeType === 'BUY') {
+                      if (walletDetails) {
+                        handleAmountLKRChange((walletDetails.availableBalance ?? 0).toString());
+                      }
+                    } else {
+                      handleQuantityCoinChange(getOwnedQuantity().toString());
+                    }
+                  }}>
+                    <Text style={styles.maxBuyText}>{tradeType === 'BUY' ? 'Max Buy' : 'Max Sell'}</Text>
+                  </TouchableOpacity>
+                </View>
+
+                {tradeLoading ? (
+                  <ActivityIndicator color={colors.accent} size="large" style={{ marginVertical: 16 }} />
+                ) : (
+                  <PrimaryButton
+                    title={tradeType === 'BUY' ? 'EXECUTE VIRTUAL BUY ⚡' : 'EXECUTE VIRTUAL SELL ⚡'}
+                    onPress={handleOpenConfirmation}
+                    style={tradeType === 'SELL' && { backgroundColor: colors.red }}
+                  />
+                )}
+              </Card>
+
+              {/* Virtual History */}
+              <View style={styles.historySection}>
+                <View style={styles.sectionHeader}>
+                  <Text style={styles.sectionTitle}>VIRTUAL HISTORY</Text>
+                  <TouchableOpacity onPress={fetchTradingData}><Text style={styles.seeAllText}>Refresh</Text></TouchableOpacity>
+                </View>
+
+                {txHistory.length > 0 ? (
+                  txHistory.map((tx) => (
+                    <View key={tx.id} style={styles.txRow}>
+                      <View style={styles.txLeft}>
+                        <View style={[
+                          styles.txIconContainer,
+                          tx.action === 'BUY' || tx.action === 'DEPOSIT' ? styles.txBgGreen : styles.txBgRed
+                        ]}>
+                          <MaterialIcons
+                            name={tx.action === 'BUY' || tx.action === 'DEPOSIT' ? 'call-received' : 'call-made'}
+                            size={20}
+                            color={tx.action === 'BUY' || tx.action === 'DEPOSIT' ? colors.accent : colors.red}
+                          />
+                        </View>
+                        <View>
+                          <Text style={styles.txPair}>{tx.action} {tx.coin}</Text>
+                          <Text style={styles.txTime}>{tx.date ? new Date(tx.date).toLocaleDateString() : 'Recent'}</Text>
+                        </View>
+                      </View>
+                      <View style={styles.txRight}>
+                        <Text style={[
+                          styles.txAmount,
+                          tx.action === 'BUY' || tx.action === 'DEPOSIT' ? styles.txAmountGreen : styles.txAmountRed
+                        ]}>
+                          {tx.action === 'BUY' || tx.action === 'DEPOSIT' ? '+' : '-'}{Number(tx.quantity || 0).toFixed(4)} {tx.coin}
+                        </Text>
+                        <Text style={styles.txTotalVal}>LKR {formatNumber(tx.total, 0)}</Text>
+                      </View>
+                    </View>
+                  ))
+                ) : (
+                  <View style={styles.emptyHistory}>
+                    <Text style={styles.emptyText}>No virtual trading history yet.</Text>
+                  </View>
+                )}
+              </View>
+
+            </ScrollView>
+          </View>
+        )}
+      </KeyboardAvoidingView>
 
       {/* Confirmation Modal */}
       <Modal
@@ -492,14 +492,14 @@ export const DemoTradingScreen = () => {
               </Text>?
             </Text>
             <View style={styles.modalButtons}>
-              <TouchableOpacity 
-                style={styles.modalCancelBtn} 
+              <TouchableOpacity
+                style={styles.modalCancelBtn}
                 onPress={() => setConfirmModalVisible(false)}
               >
                 <Text style={styles.modalCancelText}>Cancel</Text>
               </TouchableOpacity>
-              <TouchableOpacity 
-                style={[styles.modalConfirmBtn, tradeType === 'SELL' && { backgroundColor: colors.red }]} 
+              <TouchableOpacity
+                style={[styles.modalConfirmBtn, tradeType === 'SELL' && { backgroundColor: colors.red }]}
                 onPress={handleExecuteTrade}
               >
                 <Text style={styles.modalConfirmText}>Confirm</Text>

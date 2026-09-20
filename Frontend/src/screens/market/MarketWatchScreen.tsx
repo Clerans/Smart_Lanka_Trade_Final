@@ -90,8 +90,8 @@ export const MarketWatchScreen = () => {
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Market Watch</Text>
         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-          <TouchableOpacity 
-            style={[styles.filterIconBtn, { marginRight: 8 }]} 
+          <TouchableOpacity
+            style={[styles.filterIconBtn, { marginRight: 8 }]}
             onPress={() => navigation.navigate('AIAnalytics')}
           >
             <MaterialIcons name="psychology" size={24} color={colors.accent} />
@@ -140,7 +140,7 @@ export const MarketWatchScreen = () => {
           <ActivityIndicator size="large" color={colors.accent} />
         </View>
       ) : (
-        <ScrollView 
+        <ScrollView
           contentContainerStyle={styles.listContainer}
           refreshControl={
             <RefreshControl

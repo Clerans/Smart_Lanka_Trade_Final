@@ -416,8 +416,8 @@ export const SecuritySettingsScreen = () => {
               onChangeText={setConfirmNewPassword}
             />
 
-            <TouchableOpacity 
-              style={[styles.modalButton, isChangingPassword && { opacity: 0.7 }]} 
+            <TouchableOpacity
+              style={[styles.modalButton, isChangingPassword && { opacity: 0.7 }]}
               onPress={handleChangePassword}
               disabled={isChangingPassword}
             >

@@ -41,13 +41,13 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
   if (!transaction) return null;
 
   const rawType = transaction.type || (transaction as any).TYPE || 'TRANSACTION';
-  const isIncoming = transaction.isIncoming !== undefined 
-    ? transaction.isIncoming 
+  const isIncoming = transaction.isIncoming !== undefined
+    ? transaction.isIncoming
     : ['DEPOSIT', 'TRANSFER_RECEIVED', 'SELL'].includes(rawType);
 
   const rawStatus = transaction.status || (transaction as any).STATUS || 'COMPLETED';
-  const rawAmount = transaction.amount !== undefined 
-    ? transaction.amount 
+  const rawAmount = transaction.amount !== undefined
+    ? transaction.amount
     : ((transaction as any).AMOUNT !== undefined ? (transaction as any).AMOUNT : ((transaction as any).total || 0));
 
   const getStatusColor = (st: string) => {
@@ -119,11 +119,11 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
   };
 
   const dateStr = transaction.createdAt || (transaction as any).CREATED_AT;
-  const formattedDate = dateStr 
+  const formattedDate = dateStr
     ? new Date(dateStr).toLocaleString(undefined, {
-        dateStyle: 'medium',
-        timeStyle: 'short'
-      })
+      dateStyle: 'medium',
+      timeStyle: 'short'
+    })
     : 'Recent';
 
   const txId = transaction.id || (transaction as any).ID || '---';

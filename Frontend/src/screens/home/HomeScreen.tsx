@@ -1,6 +1,15 @@
 import * as React from 'react';
 const { useEffect, useState } = React;
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  ActivityIndicator,
+  Image,
+  Platform
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -8,7 +17,7 @@ import Svg, { Path } from 'react-native-svg';
 import { colors, typography, layout } from '../../theme';
 import { Card } from '../../components';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { marketService, walletService, portfolioService } from '../../services/apiService';
+import { marketService, portfolioService } from '../../services/apiService';
 import { SetAlertModal } from '../../components/SetAlertModal';
 
 // Helper to generate SVG path for sparklines
@@ -22,7 +31,7 @@ const generateSparklinePath = (data: number[], width: number, height: number) =>
   return data.map((val, i) => {
     const x = i * stepX;
     const y = height - ((val - min) / range) * height;
-    return `${i === 0 ? 'M' : 'L'} ${x} ${y}`;
+    return `${i === 0 ? 'M' : 'L'} ${x.toFixed(1)} ${y.toFixed(1)}`;
   }).join(' ');
 };
 
@@ -38,8 +47,17 @@ export const HomeScreen = () => {
   const [portfolioValue, setPortfolioValue] = useState<number | null>(null);
   const [todaysProfit, setTodaysProfit] = useState<number | null>(null);
   const [pnlPercent, setPnlPercent] = useState<number | null>(null);
-  const [user, setUser] = useState<{ name: string } | null>(null);
+  const [user, setUser] = useState<{ name: string; profileImage?: string } | null>(null);
   const [isAlertModalVisible, setIsAlertModalVisible] = useState(false);
+
+  const getInitials = (name?: string) => {
+    if (!name) return 'SL';
+    const parts = name.trim().split(/\s+/);
+    if (parts.length >= 2) {
+      return (parts[0][0] + parts[1][0]).toUpperCase();
+    }
+    return name.substring(0, 2).toUpperCase();
+  };
 
   useEffect(() => {
     const fetchData = async () => {
@@ -69,7 +87,7 @@ export const HomeScreen = () => {
               : `Rs ${p.priceLKR.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`,
             rawPrice: p.priceLKR,
             color: p.changePercent >= 0 ? colors.accent : colors.red,
-            path: generateSparklinePath(p.sparkline, 100, 40),
+            path: generateSparklinePath(p.sparkline, 110, 42),
             sparkline: p.sparkline || []
           }));
           setWatchlist(formatted);
@@ -104,36 +122,71 @@ export const HomeScreen = () => {
   const activeTrend = trendTab === 'gainer' ? topGainer : topLoser;
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
+    <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
+      <ScrollView
+        contentContainerStyle={styles.container}
+        showsVerticalScrollIndicator={false}
+      >
 
-        {/* Header */}
+        {/* Top Header */}
         <View style={styles.header}>
-          <View style={styles.headerLeft}>
+          <TouchableOpacity
+            style={styles.headerLeft}
+            activeOpacity={0.8}
+            onPress={() => navigation.navigate('Profile')}
+          >
             <View style={styles.avatar}>
-              <MaterialIcons name="person" size={24} color={colors.accent} />
+              {user?.profileImage ? (
+                <Image source={{ uri: user.profileImage }} style={styles.avatarImage} />
+              ) : (
+                <Text style={styles.avatarText}>{getInitials(user?.name)}</Text>
+              )}
             </View>
             <View style={styles.headerTextContainer}>
               <Text style={styles.greetingText}>Ayubowan,</Text>
-              <Text style={styles.userName}>{user?.name || 'Friend'}</Text>
+              <Text style={styles.userName} numberOfLines={1}>{user?.name || 'Trader'}</Text>
             </View>
-          </View>
+          </TouchableOpacity>
+
           <View style={styles.headerIcons}>
-            <TouchableOpacity style={styles.iconButton}>
-              <MaterialIcons name="search" size={24} color={colors.textPrimary} />
+            <TouchableOpacity
+              style={styles.iconButton}
+              onPress={() => navigation.navigate('Markets')}
+              activeOpacity={0.7}
+            >
+              <MaterialIcons name="search" size={22} color={colors.textPrimary} />
             </TouchableOpacity>
-            <TouchableOpacity style={styles.iconButton}>
-              <MaterialIcons name="notifications-none" size={24} color={colors.textPrimary} />
+            <TouchableOpacity
+              style={styles.iconButton}
+              onPress={() => navigation.navigate('SecuritySettings')}
+              activeOpacity={0.7}
+            >
+              <MaterialIcons name="settings" size={22} color={colors.textPrimary} />
             </TouchableOpacity>
           </View>
         </View>
 
         {/* Balance Card */}
         <Card style={styles.balanceCard}>
-          <Text style={styles.balanceLabel}>Est. Total Value</Text>
-          <Text style={styles.balanceValue}>
-            LKR {portfolioValue !== null ? portfolioValue.toLocaleString(undefined, { minimumFractionDigits: 2 }) : '1,000,000.00'}
-          </Text>
+          <View style={styles.balanceHeaderRow}>
+            <Text style={styles.balanceLabel}>EST. TOTAL VALUE</Text>
+            <View style={styles.liveRateBadge}>
+              <View style={styles.liveRateDot} />
+              <Text style={styles.liveRateText}>
+                1 USDT ≈ Rs {lkrPriceData?.usdToLkr ? lkrPriceData.usdToLkr.toFixed(2) : '331.27'}
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.balanceMainRow}>
+            <Text style={styles.balanceCurrencyPrefix}>LKR</Text>
+            <Text style={styles.balanceValue}>
+              {portfolioValue !== null ? portfolioValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '1,030,000.00'}
+            </Text>
+          </View>
+
+          <View style={styles.balanceCardDivider} />
+
           <View style={styles.balanceFooterRow}>
             <View style={[
               styles.pnlPill,
@@ -141,7 +194,7 @@ export const HomeScreen = () => {
             ]}>
               <MaterialIcons
                 name={todaysProfit !== null && todaysProfit >= 0 ? "trending-up" : "trending-down"}
-                size={14}
+                size={16}
                 color={todaysProfit !== null && todaysProfit >= 0 ? colors.accent : colors.red}
               />
               <Text style={[
@@ -151,94 +204,109 @@ export const HomeScreen = () => {
                 {todaysProfit !== null && todaysProfit >= 0 ? '+' : ''}{pnlPercent !== null ? pnlPercent.toFixed(2) : '0.00'}% PNL
               </Text>
             </View>
+
             <View style={styles.walletBalanceContainer}>
               <Text style={styles.walletBalanceLabel}>Available: </Text>
-              <Text style={styles.walletBalanceValue}>LKR {balance !== null ? balance.toLocaleString(undefined, { maximumFractionDigits: 0 }) : '1,000,000'}</Text>
+              <Text style={styles.walletBalanceValue}>
+                LKR {balance !== null ? balance.toLocaleString(undefined, { maximumFractionDigits: 0 }) : '1,030,000'}
+              </Text>
             </View>
           </View>
-          <MaterialIcons
-            name="account-balance-wallet"
-            size={60}
-            color={colors.border}
-            style={styles.walletWatermark}
-          />
         </Card>
-
-        {lkrPriceData && (
-          <View style={{ marginHorizontal: 24, marginBottom: 16 }}>
-            <Text style={{ color: colors.textSecondary, fontSize: 12, textAlign: 'right' }}>
-              Live Rate: 1 USDT = <Text style={{ color: colors.accent, fontWeight: '700' }}>Rs {lkrPriceData.usdToLkr.toFixed(2)}</Text>
-            </Text>
-          </View>
-        )}
 
         {/* Quick Actions */}
         <View style={styles.quickActionsRow}>
           <TouchableOpacity
-            style={[styles.actionCard, styles.actionCardActive]}
-            onPress={() => navigation.navigate('Wallet', { screen: 'CurrencyConversion' })}
+            style={[styles.actionCard, styles.actionCardBuy]}
+            onPress={() => navigation.navigate('Trade')}
+            activeOpacity={0.8}
           >
-            <MaterialIcons name="shopping-cart" size={22} color="#000" />
-            <Text style={styles.actionCardActiveText}>Buy</Text>
+            <View style={styles.actionIconBoxBuy}>
+              <MaterialIcons name="shopping-cart" size={20} color="#000" />
+            </View>
+            <Text style={styles.actionCardBuyText}>Buy</Text>
           </TouchableOpacity>
+
           <TouchableOpacity
             style={styles.actionCard}
             onPress={() => navigation.navigate('AIAnalytics')}
+            activeOpacity={0.8}
           >
-            <MaterialIcons name="psychology" size={22} color={colors.accent} />
+            <View style={styles.actionIconBox}>
+              <MaterialIcons name="psychology" size={20} color={colors.accent} />
+            </View>
             <Text style={styles.actionCardText}>AI Signals</Text>
           </TouchableOpacity>
+
           <TouchableOpacity
             style={styles.actionCard}
             onPress={() => navigation.navigate('SOMIAIChat')}
+            activeOpacity={0.8}
           >
-            <MaterialIcons name="chat" size={22} color={colors.accent} />
+            <View style={styles.actionIconBox}>
+              <MaterialIcons name="chat" size={20} color={colors.accent} />
+            </View>
             <Text style={styles.actionCardText}>SOMI AI</Text>
           </TouchableOpacity>
+
           <TouchableOpacity
             style={styles.actionCard}
-            onPress={() => navigation.navigate('Wallet', { screen: 'WalletOverview' })}
+            onPress={() => navigation.navigate('Wallet')}
+            activeOpacity={0.8}
           >
-            <MaterialIcons name="pie-chart-outline" size={22} color={colors.accent} />
+            <View style={styles.actionIconBox}>
+              <MaterialIcons name="pie-chart-outline" size={20} color={colors.accent} />
+            </View>
             <Text style={styles.actionCardText}>Portfolio</Text>
           </TouchableOpacity>
         </View>
 
-        {/* Rate Banner */}
+        {/* USDT/LKR Rate Banner */}
         <Card style={styles.rateBanner}>
           <View style={styles.rateBannerLeft}>
             <View style={styles.iconStack}>
-              <View style={[styles.currencyIcon, { backgroundColor: '#26A17B', zIndex: 2 }]}><Text style={styles.currencyIconText}>USD</Text></View>
-              <View style={[styles.currencyIcon, { backgroundColor: '#1A5BFF', marginLeft: -12, zIndex: 1 }]}><Text style={styles.currencyIconText}>LKR</Text></View>
+              <View style={[styles.currencyIcon, { backgroundColor: '#26A17B', zIndex: 2 }]}>
+                <Text style={styles.currencyIconText}>USD</Text>
+              </View>
+              <View style={[styles.currencyIcon, { backgroundColor: '#1A5BFF', marginLeft: -10, zIndex: 1 }]}>
+                <Text style={styles.currencyIconText}>LKR</Text>
+              </View>
             </View>
-            <View style={styles.rateInfoRow}>
-              <Text style={styles.ratePairTitle}>USDT/LKR</Text>
+            <View style={styles.rateInfoCol}>
+              <Text style={styles.ratePairTitle}>USDT / LKR</Text>
               {loading ? (
                 <ActivityIndicator size="small" color={colors.accent} />
               ) : (
-                <Text style={styles.rateValue}>Rs {lkrPriceData?.usdToLkr?.toFixed(2) || '---'}</Text>
+                <Text style={styles.rateValue}>Rs {lkrPriceData?.usdToLkr?.toFixed(2) || '331.27'}</Text>
               )}
             </View>
           </View>
+
           <TouchableOpacity
             style={styles.alertBtn}
             onPress={() => setIsAlertModalVisible(true)}
+            activeOpacity={0.7}
           >
             <MaterialIcons name="notifications-active" size={14} color={colors.accent} />
             <Text style={styles.alertBtnText}>Set Alert</Text>
           </TouchableOpacity>
         </Card>
 
-        {/* Watchlist */}
+        {/* Watchlist Section */}
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Watchlist</Text>
-          <TouchableOpacity onPress={() => navigation.navigate('Markets')}>
-            <Text style={styles.seeAllText}>See All {'>'}</Text>
+          <TouchableOpacity onPress={() => navigation.navigate('Markets')} activeOpacity={0.7}>
+            <Text style={styles.seeAllText}>See All →</Text>
           </TouchableOpacity>
         </View>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.watchlistScroll}>
+
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.watchlistScroll}
+        >
           {loading ? (
-            <ActivityIndicator size="small" color={colors.accent} style={{ marginLeft: 24 }} />
+            <ActivityIndicator size="small" color={colors.accent} style={{ marginLeft: 16 }} />
           ) : (
             watchlist.map((item: any, index: number) => (
               <TouchableOpacity
@@ -247,38 +315,43 @@ export const HomeScreen = () => {
                 onPress={() => navigation.navigate('AssetDetails', { symbol: item.symbol, coin: item.symbol.replace('USDT', '') })}
               >
                 <Card style={styles.watchlistCard}>
-                  <Text style={styles.watchPair}>{item.pair} <Text style={{ color: item.color }}>{item.change}</Text></Text>
+                  <View style={styles.watchPairRow}>
+                    <Text style={styles.watchPair}>{item.pair}</Text>
+                    <Text style={[styles.watchChange, { color: item.color }]}>{item.change}</Text>
+                  </View>
                   <Text style={styles.watchPrice}>{item.price}</Text>
                   <View style={styles.sparklineContainer}>
-                    <Svg height="50" width="100" viewBox="0 0 100 50">
-                      <Path d={item.path} fill="none" stroke={item.color} strokeWidth="2" />
+                    <Svg height="42" width="110" viewBox="0 0 110 42">
+                      <Path d={item.path} fill="none" stroke={item.color} strokeWidth="2" strokeLinecap="round" />
                     </Svg>
                   </View>
                 </Card>
               </TouchableOpacity>
             ))
           )}
-          <View style={{ width: 24 }} />
         </ScrollView>
 
-        {/* Market Trends */}
+        {/* Market Trends Section */}
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Market Trends</Text>
-          <View style={{ flexDirection: 'row' }}>
+          <View style={styles.trendToggleContainer}>
             <TouchableOpacity
               style={[styles.trendTogglePill, trendTab === 'gainer' && styles.trendTogglePillActive]}
               onPress={() => setTrendTab('gainer')}
+              activeOpacity={0.8}
             >
               <Text style={[styles.trendToggleText, trendTab === 'gainer' && styles.trendToggleTextActive]}>Gainers</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.trendTogglePill, trendTab === 'loser' && styles.trendTogglePillActive, { marginLeft: 6 }]}
+              style={[styles.trendTogglePill, trendTab === 'loser' && styles.trendTogglePillActive]}
               onPress={() => setTrendTab('loser')}
+              activeOpacity={0.8}
             >
               <Text style={[styles.trendToggleText, trendTab === 'loser' && styles.trendToggleTextActive]}>Losers</Text>
             </TouchableOpacity>
           </View>
         </View>
+
         {activeTrend ? (
           <TouchableOpacity
             activeOpacity={0.85}
@@ -287,10 +360,10 @@ export const HomeScreen = () => {
             <Card style={styles.trendCard}>
               <View style={styles.trendHeader}>
                 <View style={styles.trendHeaderLeft}>
-                  <View style={[styles.trendIcon, activeTrend.changeVal < 0 && { backgroundColor: colors.red + '22' }]}>
+                  <View style={[styles.trendIcon, activeTrend.changeVal < 0 ? { backgroundColor: colors.red + '22' } : { backgroundColor: colors.accentMuted }]}>
                     <MaterialIcons
                       name={activeTrend.changeVal >= 0 ? "trending-up" : "trending-down"}
-                      size={18}
+                      size={20}
                       color={activeTrend.color}
                     />
                   </View>
@@ -305,22 +378,23 @@ export const HomeScreen = () => {
                 </View>
               </View>
 
-              {/* Dynamic Sparkline / Mini Candles */}
+              {/* Dynamic Sparkline Chart */}
               <View style={styles.candlestickPlaceholder}>
                 {activeTrend.sparkline?.length > 1 ? (
-                  <View style={{ width: '100%', height: 60, justifyContent: 'center' }}>
-                    <Svg height="60" width="100%" viewBox="0 0 300 60">
+                  <View style={{ width: '100%', height: 64, justifyContent: 'center' }}>
+                    <Svg height="64" width="100%" viewBox="0 0 300 64">
                       <Path
-                        d={generateSparklinePath(activeTrend.sparkline, 300, 50)}
+                        d={generateSparklinePath(activeTrend.sparkline, 300, 54)}
                         fill="none"
                         stroke={activeTrend.color}
                         strokeWidth="2.5"
+                        strokeLinecap="round"
                       />
                     </Svg>
                   </View>
                 ) : (
                   <Text style={{ color: colors.textSecondary, fontSize: 11, textAlign: 'center', marginVertical: 10 }}>
-                    Tap to view live candlestick chart →
+                    Tap to view live interactive chart →
                   </Text>
                 )}
               </View>
@@ -328,12 +402,16 @@ export const HomeScreen = () => {
           </TouchableOpacity>
         ) : null}
 
+        {/* Extra Bottom Padding so content is never covered by the floating tab bar */}
+        <View style={{ height: 110 }} />
+
       </ScrollView>
+
       {lkrPriceData && (
         <SetAlertModal
           visible={isAlertModalVisible}
           onClose={() => setIsAlertModalVisible(false)}
-          symbol="USDTUSDT" // We are setting alert for USDT in LKR
+          symbol="USDTUSDT"
           currentPrice={lkrPriceData.usdToLkr}
         />
       )}
@@ -347,141 +425,238 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bg,
   },
   container: {
-    paddingTop: 20,
-    paddingBottom: 40,
+    paddingTop: 12,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingHorizontal: 24,
-    marginBottom: 24,
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    marginBottom: 16,
   },
   headerLeft: {
     flexDirection: 'row',
     alignItems: 'center',
+    flex: 1,
   },
   avatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    borderWidth: 1,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    borderWidth: 1.5,
     borderColor: colors.accent,
+    backgroundColor: colors.accentMuted,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
+    overflow: 'hidden',
   },
-  headerTextContainer: {},
+  avatarImage: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+  },
+  avatarText: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: colors.accent,
+  },
+  headerTextContainer: {
+    flex: 1,
+  },
   greetingText: {
-    ...typography.label,
+    ...typography.bodySmall,
+    color: colors.textSecondary,
+    fontSize: 12,
   },
   userName: {
     ...typography.h3,
+    fontSize: 17,
+    fontWeight: '800',
+    color: colors.textPrimary,
   },
   headerIcons: {
     flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   iconButton: {
-    marginLeft: 16,
+    width: 38,
+    height: 38,
+    borderRadius: layout.borderRadiusSmall,
+    backgroundColor: colors.bgCard,
     justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   balanceCard: {
-    marginHorizontal: 24,
-    marginBottom: 20,
-    backgroundColor: '#161616',  // slightly distinct
-    padding: 24,
+    marginHorizontal: 16,
+    marginBottom: 16,
+    backgroundColor: colors.bgCard,
+    padding: 20,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  balanceHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
   },
   balanceLabel: {
-    ...typography.label,
-    marginBottom: 8,
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 0.8,
+    color: colors.accent,
   },
-  balanceValue: {
-    ...typography.price,
-    marginBottom: 16,
-  },
-  pnlPill: {
+  liveRateBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    alignSelf: 'flex-start',
+    backgroundColor: colors.bgElevated,
     paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingVertical: 5,
     borderRadius: 20,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
-  pnlPillGreen: {
-    backgroundColor: colors.accentMuted,
+  liveRateDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: colors.accent,
+    marginRight: 6,
   },
-  pnlPillRed: {
-    backgroundColor: colors.red + '22',
-  },
-  pnlText: {
-    fontWeight: '600',
+  liveRateText: {
     fontSize: 12,
-    marginLeft: 4,
+    fontWeight: '600',
+    color: colors.textSecondary,
+  },
+  balanceMainRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    marginBottom: 16,
+  },
+  balanceCurrencyPrefix: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: colors.textSecondary,
+    marginRight: 8,
+  },
+  balanceValue: {
+    fontSize: 34,
+    fontWeight: '900',
+    color: colors.textPrimary,
+    letterSpacing: -0.5,
+  },
+  balanceCardDivider: {
+    height: 1,
+    backgroundColor: colors.border,
+    marginBottom: 14,
   },
   balanceFooterRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
+  pnlPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 10,
+  },
+  pnlPillGreen: {
+    backgroundColor: colors.accentMuted,
+    borderWidth: 1,
+    borderColor: colors.accentDark,
+  },
+  pnlPillRed: {
+    backgroundColor: 'rgba(255, 68, 68, 0.15)',
+    borderWidth: 1,
+    borderColor: colors.red,
+  },
+  pnlText: {
+    fontWeight: '800',
+    fontSize: 12,
+    marginLeft: 5,
+  },
   walletBalanceContainer: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   walletBalanceLabel: {
-    ...typography.bodySmall,
     color: colors.textSecondary,
-    fontSize: 11,
+    fontSize: 12,
+    fontWeight: '500',
   },
   walletBalanceValue: {
-    ...typography.bodySmall,
+    fontSize: 12.5,
     color: colors.textPrimary,
-    fontWeight: '700',
-    fontSize: 11,
-  },
-  walletWatermark: {
-    position: 'absolute',
-    top: 20,
-    right: 20,
-    opacity: 0.1,
+    fontWeight: '800',
   },
   quickActionsRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingHorizontal: 24,
-    marginBottom: 24,
+    paddingHorizontal: 16,
+    marginBottom: 16,
+    gap: 8,
   },
   actionCard: {
     flex: 1,
     backgroundColor: colors.bgCard,
-    borderRadius: layout.borderRadius,
+    borderRadius: 14,
     alignItems: 'center',
-    paddingVertical: 16,
-    marginHorizontal: 4,
+    justifyContent: 'center',
+    paddingVertical: 12,
     borderWidth: 1,
     borderColor: colors.border,
   },
-  actionCardActive: {
+  actionIconBox: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: colors.bgInput,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  actionCardBuy: {
     backgroundColor: colors.accent,
     borderColor: colors.accent,
   },
+  actionIconBoxBuy: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: '#00C853',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
   actionCardText: {
-    ...typography.bodySmall,
-    marginTop: 8,
-    color: '#FFF',
+    fontSize: 11,
+    color: '#FFFFFF',
     fontWeight: '600',
   },
-  actionCardActiveText: {
-    ...typography.bodySmall,
-    marginTop: 8,
-    color: '#000',
-    fontWeight: '700',
+  actionCardBuyText: {
+    fontSize: 11,
+    color: '#000000',
+    fontWeight: '800',
   },
   rateBanner: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginHorizontal: 24,
-    marginBottom: 32,
-    padding: 16,
+    marginHorizontal: 16,
+    marginBottom: 20,
+    padding: 14,
+    borderRadius: 16,
+    backgroundColor: colors.bgCard,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   rateBannerLeft: {
     flexDirection: 'row',
@@ -492,120 +667,118 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   currencyIcon: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 2,
+    borderWidth: 1.5,
     borderColor: colors.bgCard,
   },
   currencyIconText: {
-    fontSize: 8,
+    fontSize: 7.5,
     color: '#FFF',
-    fontWeight: '700',
+    fontWeight: '800',
   },
-  rateInfoRow: {
+  rateInfoCol: {
     justifyContent: 'center',
   },
   ratePairTitle: {
-    ...typography.bodySmall,
+    fontSize: 12,
     fontWeight: '700',
-    color: '#FFF',
+    color: colors.textSecondary,
+    marginBottom: 2,
   },
   rateValue: {
-    ...typography.label,
-    fontSize: 14,
+    fontSize: 15,
+    fontWeight: '800',
+    color: colors.accent,
   },
   alertBtn: {
     flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: colors.accentMuted,
     borderWidth: 1,
-    borderColor: colors.accent,
+    borderColor: colors.accent + '44',
     paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 20,
+    borderRadius: 10,
   },
   alertBtnText: {
     color: colors.accent,
-    fontSize: 12,
-    fontWeight: '600',
+    fontSize: 11,
+    fontWeight: '700',
     marginLeft: 4,
   },
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 24,
-    marginBottom: 16,
+    paddingHorizontal: 16,
+    marginBottom: 12,
   },
   sectionTitle: {
-    ...typography.h3,
+    fontSize: 17,
+    fontWeight: '800',
+    color: colors.textPrimary,
   },
   seeAllText: {
     color: colors.accent,
-    fontWeight: '600',
+    fontSize: 12,
+    fontWeight: '700',
   },
   watchlistScroll: {
-    paddingLeft: 24,
-    marginBottom: 32,
-  },
-  watchlistCard: {
-    width: 160,
-    marginRight: 16,
-    padding: 16,
-  },
-  watchPair: {
-    ...typography.bodySmall,
-    color: colors.textSecondary,
-    fontWeight: '700',
-    marginBottom: 8,
-  },
-  watchPrice: {
-    ...typography.body,
-    fontWeight: '700',
-    marginBottom: 8,
-  },
-  sparklineContainer: {
-    height: 50,
-    width: 100,
-    marginTop: 8,
-  },
-  trendCard: {
-    marginHorizontal: 24,
-    padding: 20,
-  },
-  trendHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    gap: 12,
+    paddingBottom: 4,
     marginBottom: 20,
   },
-  trendHeaderLeft: {
+  watchlistCard: {
+    width: 148,
+    padding: 14,
+    borderRadius: 16,
+    backgroundColor: colors.bgCard,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  watchPairRow: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
+    marginBottom: 6,
   },
-  trendIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: colors.accentMuted,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  trendTitle: {
-    ...typography.body,
+  watchPair: {
+    fontSize: 12,
+    color: colors.textPrimary,
     fontWeight: '700',
   },
-  trendSubtitle: {
-    ...typography.bodySmall,
-    color: colors.textSecondary,
+  watchChange: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  watchPrice: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    marginBottom: 6,
+  },
+  sparklineContainer: {
+    height: 42,
+    width: 110,
+    justifyContent: 'center',
+  },
+  trendToggleContainer: {
+    flexDirection: 'row',
+    backgroundColor: colors.bgInput,
+    borderRadius: 10,
+    padding: 2,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   trendTogglePill: {
     paddingHorizontal: 10,
     paddingVertical: 4,
-    borderRadius: 12,
-    backgroundColor: colors.bgInput,
+    borderRadius: 8,
   },
   trendTogglePillActive: {
     backgroundColor: colors.accent,
@@ -616,24 +789,61 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
   },
   trendToggleTextActive: {
-    color: '#000',
+    color: '#000000',
+    fontWeight: '700',
+  },
+  trendCard: {
+    marginHorizontal: 16,
+    padding: 16,
+    borderRadius: 18,
+    backgroundColor: colors.bgCard,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  trendHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  trendHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  trendIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  trendTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.textPrimary,
+  },
+  trendSubtitle: {
+    fontSize: 11,
+    color: colors.textSecondary,
+    marginTop: 2,
   },
   trendHeaderRight: {
     alignItems: 'flex-end',
   },
   trendPrice: {
-    ...typography.body,
-    fontWeight: '700',
+    fontSize: 14,
+    fontWeight: '800',
+    color: colors.textPrimary,
   },
   trendChange: {
-    ...typography.bodySmall,
-    color: colors.accent,
+    fontSize: 12,
     fontWeight: '700',
+    marginTop: 2,
   },
   candlestickPlaceholder: {
-    minHeight: 60,
+    minHeight: 64,
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 8,
   },
 });
