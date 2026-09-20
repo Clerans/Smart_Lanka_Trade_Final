@@ -1,208 +1,223 @@
-const { Resend } = require('resend');
 require('dotenv').config({ quiet: true });
 
-// Get configured sender address
-const getFromAddress = () => {
-  return process.env.EMAIL_FROM || 'SmartLanka Trade <onboarding@resend.dev>';
+/**
+ * Get configured Brevo sender details
+ */
+const getSender = () => {
+  return {
+    name: 'SmartLanka Trade',
+    email: process.env.BREVO_SENDER || 'no-reply@smartlankatrade.com'
+  };
 };
 
-// Resend Client Instance (Singleton / Reusable)
-let resendClient = null;
-const getResendClient = () => {
-  if (!resendClient) {
-    const apiKey = process.env.RESEND_API_KEY;
-    if (!apiKey) {
-      const err = new Error('RESEND_API_KEY environment variable is not configured.');
-      err.code = 'EMAIL_CONFIG_MISSING';
-      throw err;
-    }
-    resendClient = new Resend(apiKey);
-  }
-  return resendClient;
-};
-
-// Safe Startup Diagnostics (Validates configuration without logging secrets or keys)
+/**
+ * Diagnostic check on startup to verify Brevo configuration
+ */
 const verifyEmailService = async () => {
-  const provider = (process.env.EMAIL_PROVIDER || 'resend').toLowerCase();
   console.log('🔍 [Email Service Diagnostics]');
-  console.log(`- Email provider: ${provider}`);
+  console.log('- Provider: Brevo Transactional Email HTTP API (Native Fetch)');
 
-  const hasApiKey = !!process.env.RESEND_API_KEY;
-  const fromAddress = getFromAddress();
-  const hasSender = !!fromAddress;
+  const apiKey = process.env.BREVO_API_KEY;
+  const senderEmail = process.env.BREVO_SENDER;
 
-  console.log(`- Resend API key configured: ${hasApiKey ? 'yes' : 'no'}`);
-  console.log(`- Email sender configured: ${hasSender ? 'yes' : 'no'}`);
+  const hasApiKey = !!apiKey && apiKey.length > 5;
+  const hasSender = !!senderEmail;
+
+  console.log(`- Brevo API key configured: ${hasApiKey ? 'yes' : 'no'}`);
+  console.log(`- Brevo Sender configured: ${hasSender ? `yes (${senderEmail})` : 'no'}`);
 
   if (!hasApiKey) {
-    console.warn('⚠️ RESEND_API_KEY missing in environment variables.');
+    console.warn('⚠️ BREVO_API_KEY is missing in environment variables.');
+    return false;
+  }
+  if (!hasSender) {
+    console.warn('⚠️ BREVO_SENDER is missing in environment variables.');
     return false;
   }
 
   return true;
 };
 
-// Generic internal dispatch function via Resend REST API (HTTPS / Port 443)
-const dispatchEmail = async ({ to, subject, html, logLabel }) => {
-  const fromAddress = getFromAddress();
-  const resend = getResendClient();
+/**
+ * Core email dispatch using Node.js built-in fetch calling Brevo API v3
+ * Never logs the API key or OTP values in plaintext
+ */
+const dispatchBrevoEmail = async ({ to, subject, htmlContent, logLabel = 'Email' }) => {
+  const apiKey = process.env.BREVO_API_KEY;
+  if (!apiKey) {
+    const configErr = new Error('BREVO_API_KEY environment variable is not configured.');
+    configErr.code = 'EMAIL_CONFIG_MISSING';
+    configErr.status = 503;
+    throw configErr;
+  }
 
-  const recipient = Array.isArray(to) ? to : [to];
+  const sender = getSender();
+  const recipients = Array.isArray(to) ? to.map(e => ({ email: e })) : [{ email: to }];
+
+  const payload = {
+    sender,
+    to: recipients,
+    subject,
+    htmlContent
+  };
 
   try {
-    const { data, error } = await resend.emails.send({
-      from: fromAddress,
-      to: recipient,
-      subject,
-      html
+    const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+      method: 'POST',
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+        'api-key': apiKey
+      },
+      body: JSON.stringify(payload)
     });
 
-    if (error) {
-      console.error(`❌ Resend REST API ${logLabel} failed:`, {
-        name: error.name,
-        message: error.message
-      });
-      const dispatchErr = new Error(`Email delivery failed via Resend REST API: ${error.message}`);
+    if (!response.ok) {
+      const errorBody = await response.text();
+      // Log the HTTP status code and response body, NEVER logging the API key or OTP
+      console.error(`❌ [Brevo API Error] ${logLabel} failed with HTTP status ${response.status}:`, errorBody);
+      
+      const dispatchErr = new Error(`Email delivery failed via Brevo API (HTTP ${response.status})`);
       dispatchErr.code = 'EMAIL_SEND_FAILED';
       dispatchErr.status = 503;
+      dispatchErr.brevoStatus = response.status;
       throw dispatchErr;
     }
 
-    console.log(`✅ ${logLabel} sent successfully via Resend REST API to ${Array.isArray(to) ? to.join(', ') : to} (ID: ${data?.id || 'delivered'})`);
-    return { id: data?.id || 'delivered', success: true };
+    const data = await response.json();
+    console.log(`✅ [Brevo API] ${logLabel} delivered successfully to ${recipients.map(r => r.email).join(', ')} (Message ID: ${data?.messageId || 'sent'})`);
+    return { success: true, messageId: data?.messageId || 'sent' };
   } catch (error) {
     if (error.code === 'EMAIL_CONFIG_MISSING' || error.code === 'EMAIL_SEND_FAILED') {
       throw error;
     }
-    console.error(`❌ Resend REST API dispatch exception:`, {
-      name: error.name,
-      message: error.message
-    });
-    const customErr = new Error('Email delivery could not be completed at this time.');
-    customErr.code = 'EMAIL_SEND_FAILED';
-    customErr.status = 503;
-    throw customErr;
+    console.error(`❌ [Brevo Exception] ${logLabel} network or parse exception:`, error.message);
+    const genericErr = new Error('Email delivery could not be completed at this time.');
+    genericErr.code = 'EMAIL_SEND_FAILED';
+    genericErr.status = 503;
+    throw genericErr;
   }
 };
 
-// 1. Send OTP for Email Verification (Primary Verification Mechanism)
+/**
+ * 1. Send OTP for Email Verification (Registration & Verification Flow)
+ */
 const sendVerificationOTPEmail = async (email, otp) => {
-  const html = `
-    <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 25px; border: 1px solid #e0e0e0; border-radius: 12px; background-color: #ffffff;">
+  const htmlContent = `
+    <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; padding: 30px; border: 1px solid #e2e8f0; border-radius: 12px; background-color: #ffffff; color: #1a202c;">
       <div style="text-align: center; margin-bottom: 25px;">
-        <h1 style="color: #00C853; margin: 0; font-size: 26px;">SmartLanka Trade</h1>
-        <p style="color: #666; font-size: 14px; margin-top: 5px;">Your Trusted Crypto & Trading Platform</p>
+        <h1 style="color: #00C853; margin: 0; font-size: 28px; font-weight: 800; letter-spacing: -0.5px;">SmartLanka Trade</h1>
+        <p style="color: #718096; font-size: 14px; margin-top: 6px;">Institutional-Grade Crypto & Financial Asset Platform</p>
       </div>
-      <div style="background: #f8fafc; border-radius: 8px; padding: 20px; text-align: center; margin-bottom: 25px;">
-        <p style="font-size: 15px; color: #333; margin: 0 0 15px 0;">Use the verification code below to complete your registration:</p>
-        <div style="font-size: 32px; font-weight: 700; letter-spacing: 6px; color: #00C853; padding: 12px 24px; background: #e8f5e9; border-radius: 8px; display: inline-block;">
+      <div style="background: #f7fafc; border-radius: 10px; padding: 24px; text-align: center; margin-bottom: 25px; border: 1px solid #edf2f7;">
+        <p style="font-size: 15px; color: #4a5568; margin: 0 0 16px 0;">Use the 6-digit verification code below to complete your registration:</p>
+        <div style="font-size: 34px; font-weight: 800; letter-spacing: 8px; color: #00C853; padding: 14px 28px; background: #e8f5e9; border: 1px solid #c8e6c9; border-radius: 8px; display: inline-block; font-family: monospace;">
           ${otp}
         </div>
-        <p style="font-size: 13px; color: #888; margin-top: 15px;">⏱️ This code is valid for <strong>5 minutes</strong>.</p>
+        <p style="font-size: 13px; color: #718096; margin-top: 16px;">⏱️ This code is valid for <strong>10 minutes</strong>.</p>
       </div>
-      <p style="font-size: 13px; color: #777; line-height: 1.5;">If you did not request this verification code, please ignore this email or contact support if you suspect unauthorized activity.</p>
-      <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
-      <p style="font-size: 12px; color: #aaa; text-align: center;">&copy; ${new Date().getFullYear()} SmartLanka Trade. All rights reserved.</p>
+      <p style="font-size: 13px; color: #718096; line-height: 1.6;">If you did not request this verification code, you can safely disregard this email or contact our security center.</p>
+      <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0;">
+      <p style="font-size: 12px; color: #a0aec0; text-align: center;">&copy; ${new Date().getFullYear()} SmartLanka Trade. All rights reserved.</p>
     </div>
   `;
 
-  return await dispatchEmail({
+  return await dispatchBrevoEmail({
     to: email,
-    subject: 'SmartLanka - Email Verification Code',
-    html,
-    logLabel: 'Verification OTP email'
+    subject: 'SmartLanka Trade - Email Verification Code',
+    htmlContent,
+    logLabel: 'Verification OTP Email'
   });
 };
 
-// 2. Send OTP for Password Reset
+/**
+ * 2. Send OTP for Password Reset
+ */
 const sendPasswordResetOTPEmail = async (email, otp) => {
-  const html = `
-    <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 25px; border: 1px solid #e0e0e0; border-radius: 12px; background-color: #ffffff;">
+  const htmlContent = `
+    <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; padding: 30px; border: 1px solid #e2e8f0; border-radius: 12px; background-color: #ffffff; color: #1a202c;">
       <div style="text-align: center; margin-bottom: 25px;">
-        <h1 style="color: #00C853; margin: 0; font-size: 26px;">SmartLanka Trade</h1>
-        <p style="color: #666; font-size: 14px; margin-top: 5px;">Security Verification</p>
+        <h1 style="color: #00C853; margin: 0; font-size: 28px; font-weight: 800; letter-spacing: -0.5px;">SmartLanka Trade</h1>
+        <p style="color: #718096; font-size: 14px; margin-top: 6px;">Security & Account Recovery</p>
       </div>
-      <div style="background: #f8fafc; border-radius: 8px; padding: 20px; text-align: center; margin-bottom: 25px;">
-        <p style="font-size: 15px; color: #333; margin: 0 0 15px 0;">You requested to reset your password. Use the code below:</p>
-        <div style="font-size: 32px; font-weight: 700; letter-spacing: 6px; color: #FF5722; padding: 12px 24px; background: #fbe9e7; border-radius: 8px; display: inline-block;">
+      <div style="background: #fff5f5; border-radius: 10px; padding: 24px; text-align: center; margin-bottom: 25px; border: 1px solid #fed7d7;">
+        <p style="font-size: 15px; color: #742a2a; margin: 0 0 16px 0;">You requested to reset your password. Use the code below:</p>
+        <div style="font-size: 34px; font-weight: 800; letter-spacing: 8px; color: #e53e3e; padding: 14px 28px; background: #ffe3e3; border: 1px solid #feb2b2; border-radius: 8px; display: inline-block; font-family: monospace;">
           ${otp}
         </div>
-        <p style="font-size: 13px; color: #888; margin-top: 15px;">⏱️ This code will expire in <strong>5 minutes</strong>.</p>
+        <p style="font-size: 13px; color: #718096; margin-top: 16px;">⏱️ This recovery code expires in <strong>10 minutes</strong>.</p>
       </div>
-      <p style="font-size: 13px; color: #777; line-height: 1.5;">If you did not request a password reset, please secure your account immediately.</p>
-      <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
-      <p style="font-size: 12px; color: #aaa; text-align: center;">&copy; ${new Date().getFullYear()} SmartLanka Trade. All rights reserved.</p>
+      <p style="font-size: 13px; color: #718096; line-height: 1.6;">If you did not request a password reset, please secure your account immediately.</p>
+      <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0;">
+      <p style="font-size: 12px; color: #a0aec0; text-align: center;">&copy; ${new Date().getFullYear()} SmartLanka Trade. All rights reserved.</p>
     </div>
   `;
 
-  return await dispatchEmail({
+  return await dispatchBrevoEmail({
     to: email,
-    subject: 'SmartLanka - Password Reset Code',
-    html,
-    logLabel: 'Password Reset OTP email'
+    subject: 'SmartLanka Trade - Password Reset Code',
+    htmlContent,
+    logLabel: 'Password Reset OTP Email'
   });
 };
 
-// 3. Send Verification Email (Link based fallback)
+/**
+ * 3. Send Verification Link Email (Fallback Link mechanism)
+ */
 const sendVerificationEmail = async (email, token) => {
   const baseUrl = process.env.BASE_URL || 'https://smart-lanka-trade-final.onrender.com';
   const url = `${baseUrl}/api/auth/verify/${token}`;
-  const html = `
-    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #eee; border-radius: 10px;">
-      <h2 style="color: #4CAF50; text-align: center;">Welcome to SmartLanka!</h2>
-      <p>Hi there,</p>
-      <p>Thank you for signing up. Please click the button below to verify your email address and activate your account:</p>
+  const htmlContent = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 25px; border: 1px solid #eee; border-radius: 10px;">
+      <h2 style="color: #00C853; text-align: center;">Welcome to SmartLanka Trade!</h2>
+      <p>Thank you for signing up. Please click the button below to verify your email address:</p>
       <div style="text-align: center; margin: 30px 0;">
-        <a href="${url}" style="padding: 15px 30px; background-color: #4CAF50; color: white; text-decoration: none; border-radius: 5px; font-weight: bold; font-size: 16px;">Verify My Account</a>
+        <a href="${url}" style="padding: 14px 28px; background-color: #00C853; color: white; text-decoration: none; border-radius: 6px; font-weight: bold; font-size: 16px; display: inline-block;">Verify My Account</a>
       </div>
-      <p>If the button doesn't work, copy and paste this link into your browser:</p>
-      <p style="word-break: break-all; color: #888;">${url}</p>
-      <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
-      <p style="font-size: 12px; color: #aaa; text-align: center;">If you did not create an account, you can safely ignore this email.</p>
+      <p style="font-size: 12px; color: #888;">If the button does not work, copy and paste this URL into your browser:<br>${url}</p>
     </div>
   `;
 
-  return await dispatchEmail({
+  return await dispatchBrevoEmail({
     to: email,
     subject: 'Verify Your SmartLanka Account',
-    html,
-    logLabel: 'Verification link email'
+    htmlContent,
+    logLabel: 'Verification Link Email'
   });
 };
 
-// 4. Send Price Alert Email
+/**
+ * 4. Send Price Alert Email
+ */
 const sendPriceAlertEmail = async (email, symbol, targetPrice, currentPrice, alertType) => {
-  const html = `
-    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #eee; border-radius: 10px;">
-      <h2 style="color: #4CAF50; text-align: center;">Price Alert Triggered!</h2>
-      <p>Hi there,</p>
-      <p>Your alert for <strong>${symbol}</strong> has been triggered.</p>
-      <div style="background-color: #f9f9f9; padding: 20px; border-radius: 5px; margin: 20px 0;">
-        <p style="margin: 5px 0;"><strong>Symbol:</strong> ${symbol}</p>
-        <p style="margin: 5px 0;"><strong>Target Price:</strong> ${targetPrice}</p>
-        <p style="margin: 5px 0;"><strong>Current Price:</strong> ${currentPrice}</p>
-        <p style="margin: 5px 0;"><strong>Alert Type:</strong> ${alertType === 'ABOVE' ? 'Price went above' : 'Price went below'}</p>
+  const htmlContent = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 25px; border: 1px solid #eee; border-radius: 10px;">
+      <h2 style="color: #00C853; text-align: center;">🚀 Price Alert Triggered!</h2>
+      <p>Your target alert for <strong>${symbol}</strong> has been triggered.</p>
+      <div style="background-color: #f8fafc; padding: 20px; border-radius: 8px; margin: 20px 0;">
+        <p style="margin: 6px 0;"><strong>Symbol:</strong> ${symbol}</p>
+        <p style="margin: 6px 0;"><strong>Target Price:</strong> ${targetPrice}</p>
+        <p style="margin: 6px 0;"><strong>Current Price:</strong> ${currentPrice}</p>
+        <p style="margin: 6px 0;"><strong>Condition:</strong> ${alertType === 'ABOVE' ? 'Price went above target' : 'Price dropped below target'}</p>
       </div>
-      <p>Log in to the app to take action!</p>
-      <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
-      <p style="font-size: 12px; color: #aaa; text-align: center;">SmartLanka Trading Platform</p>
+      <p>Log in to your SmartLanka Trade account to manage positions.</p>
     </div>
   `;
 
-  return await dispatchEmail({
+  return await dispatchBrevoEmail({
     to: email,
     subject: `🚀 Price Alert: ${symbol} hit ${targetPrice}`,
-    html,
-    logLabel: 'Price alert email'
+    htmlContent,
+    logLabel: 'Price Alert Email'
   });
 };
 
-module.exports = { 
+module.exports = {
   verifyEmailService,
   verifyTransporter: verifyEmailService,
-  sendVerificationOTPEmail, 
-  sendPasswordResetOTPEmail, 
-  sendVerificationEmail, 
-  sendPriceAlertEmail 
+  dispatchBrevoEmail,
+  sendVerificationOTPEmail,
+  sendPasswordResetOTPEmail,
+  sendVerificationEmail,
+  sendPriceAlertEmail
 };
-

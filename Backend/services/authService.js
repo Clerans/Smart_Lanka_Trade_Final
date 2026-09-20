@@ -3,10 +3,10 @@ const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const { OAuth2Client } = require('google-auth-library');
 const userModel = require('../models/userModel');
+const otpModel = require('../models/otpModel');
 const verificationModel = require('../models/verificationModel');
 const { sendVerificationEmail, sendVerificationOTPEmail, sendPasswordResetOTPEmail } = require('./emailService');
-const { validatePassword } = require('../utils/validator');
-
+const { validatePassword, validateEmail } = require('../utils/validator');
 
 const createError = (code, message, status = 400) => {
   const err = new Error(message);
@@ -15,9 +15,159 @@ const createError = (code, message, status = 400) => {
   return err;
 };
 
+/**
+ * Send 6-digit OTP to user's email with HMAC-SHA256 hashing, 10-minute expiry, and 60-second cooldown
+ */
+exports.sendOtp = async (email) => {
+  const cleanEmail = (email || '').trim().toLowerCase();
+  if (!cleanEmail || !validateEmail(cleanEmail)) {
+    throw createError('INVALID_EMAIL', 'Please provide a valid email address.', 422);
+  }
+
+  // 1. Check 60-second cooldown per email
+  const existingOtp = await otpModel.findOtpByEmail(cleanEmail);
+  if (existingOtp && existingOtp.CREATED_AT) {
+    const elapsedMs = Date.now() - new Date(existingOtp.CREATED_AT).getTime();
+    if (elapsedMs < 60 * 1000) {
+      const waitSec = Math.ceil((60 * 1000 - elapsedMs) / 1000);
+      throw createError(
+        'COOLDOWN_ACTIVE',
+        `Please wait ${waitSec} second(s) before requesting another verification code.`,
+        429
+      );
+    }
+  }
+
+  // 2. Generate secure 6-digit numeric OTP
+  const otpCode = crypto.randomInt(100000, 1000000).toString();
+  // 3. Expire after 10 minutes
+  const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+
+  // 4. Store only HMAC-SHA256 hash (never plain code), replacing previous OTP rows
+  await otpModel.createOrReplaceOtp(cleanEmail, otpCode, expiresAt);
+
+  // 5. Send branded verification email via Brevo transactional HTTP API
+  try {
+    await sendVerificationOTPEmail(cleanEmail, otpCode);
+  } catch (emailErr) {
+    console.error('Brevo email dispatch failed during sendOtp:', emailErr.message);
+    throw createError(
+      'EMAIL_SEND_FAILED',
+      'Unable to deliver verification code email at this time. Please try again later.',
+      503
+    );
+  }
+
+  return {
+    success: true,
+    message: 'Verification code sent successfully.'
+  };
+};
+
+// Aliases for compatibility
+exports.sendVerificationOTP = exports.sendOtp;
+exports.resendVerificationOTP = exports.sendOtp;
+
+/**
+ * Verify 6-digit OTP code using crypto.timingSafeEqual against HMAC-SHA256 hash
+ */
+exports.verifyOtp = async (email, otp, firebaseUid = null) => {
+  const cleanEmail = (email || '').trim().toLowerCase();
+  const cleanOtp = (otp || '').toString().trim();
+
+  if (!cleanEmail || !validateEmail(cleanEmail)) {
+    throw createError('INVALID_EMAIL', 'Please provide a valid email address.', 422);
+  }
+
+  if (!cleanOtp || cleanOtp.length !== 6 || !/^\d{6}$/.test(cleanOtp)) {
+    throw createError('INVALID_OTP_FORMAT', 'Verification code must be exactly 6 digits.', 422);
+  }
+
+  const record = await otpModel.findOtpByEmail(cleanEmail);
+  if (!record) {
+    throw createError('OTP_INVALID', 'Invalid or expired verification code.', 422);
+  }
+
+  // Check attempt limit (max 5 attempts)
+  if (record.ATTEMPTS >= 5) {
+    await otpModel.deleteOtpByEmail(cleanEmail);
+    throw createError(
+      'OTP_MAX_ATTEMPTS',
+      'Maximum verification attempts exceeded. Please request a new verification code.',
+      429
+    );
+  }
+
+  // Check expiration (10 minutes)
+  if (new Date(record.EXPIRES_AT) < new Date()) {
+    await otpModel.deleteOtpByEmail(cleanEmail);
+    throw createError(
+      'OTP_EXPIRED',
+      'Your verification code has expired. Please request a new code.',
+      422
+    );
+  }
+
+  // Timing-safe HMAC-SHA256 comparison
+  const isValid = otpModel.verifyOtpHash(cleanOtp, record.OTP_HASH);
+
+  if (!isValid) {
+    await otpModel.incrementAttempts(record.ID);
+    const remainingAttempts = Math.max(0, 5 - (record.ATTEMPTS + 1));
+    if (remainingAttempts === 0) {
+      await otpModel.deleteOtpByEmail(cleanEmail);
+      throw createError(
+        'OTP_MAX_ATTEMPTS',
+        'Maximum verification attempts exceeded. Please request a new verification code.',
+        429
+      );
+    }
+    throw createError(
+      'OTP_INVALID',
+      `Invalid verification code. ${remainingAttempts} attempt(s) remaining.`,
+      422
+    );
+  }
+
+  // 1. Success: Delete OTP row from EMAIL_OTPS
+  await otpModel.deleteOtpByEmail(cleanEmail);
+
+  // 2. Mark user's email as verified in Oracle (EMAIL_VERIFIED = 1, IS_VERIFIED = 1)
+  await otpModel.markUserEmailVerified(cleanEmail);
+
+  // 3. Synchronize with Firebase Authentication if UID is present
+  const user = await userModel.findByEmail(cleanEmail);
+  const targetFirebaseUid = firebaseUid || user?.FIREBASE_UID;
+  if (targetFirebaseUid) {
+    try {
+      const { admin } = require('../config/firebaseAdmin');
+      if (admin && admin.apps && admin.apps.length > 0) {
+        await admin.auth().updateUser(targetFirebaseUid, { emailVerified: true });
+        console.log(`✅ [Firebase Admin] Set emailVerified=true for Firebase UID: ${targetFirebaseUid}`);
+      }
+    } catch (fbAdminErr) {
+      console.warn(`⚠️ [Firebase Admin] Could not update emailVerified for ${targetFirebaseUid}:`, fbAdminErr.message);
+    }
+  }
+
+  return {
+    success: true,
+    message: 'Email verified successfully!'
+  };
+};
+
+// Aliases for compatibility
+exports.verifyEmailOTP = exports.verifyOtp;
+
+/**
+ * Register User: creates unverified user and automatically triggers sendOtp
+ */
 exports.registerUser = async (name, email, password) => {
+  const cleanEmail = (email || '').trim().toLowerCase();
+  const cleanName = (name || '').trim();
+
   // Check if email already exists
-  const existingUser = await userModel.findByEmail(email);
+  const existingUser = await userModel.findByEmail(cleanEmail);
   if (existingUser) {
     throw createError('EMAIL_ALREADY_EXISTS', 'Email address is already registered.', 409);
   }
@@ -27,40 +177,27 @@ exports.registerUser = async (name, email, password) => {
     throw createError('PASSWORD_TOO_WEAK', 'Password is too weak. Must be at least 8 characters, and contain uppercase, lowercase, numbers, and special characters.', 422);
   }
 
-  // Generate random token for legacy / email link support if needed
   const token = crypto.randomBytes(32).toString('hex');
   const hashedPassword = await bcrypt.hash(password, 10);
-  const userId = await userModel.createUser(name, email, hashedPassword, token);
+  
+  // Creates user with IS_VERIFIED = 0 and EMAIL_VERIFIED = 0
+  const userId = await userModel.createUser(cleanName, cleanEmail, hashedPassword, token);
 
-  // Generate 6-digit OTP for email verification
-  const otp = crypto.randomInt(100000, 1000000).toString();
-  const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes expiry
-  await verificationModel.createEmailVerificationOTP(userId, otp, expiresAt);
-
-  if (process.env.NODE_ENV !== 'production') {
-    console.log(`📧 Generated email verification OTP for ${email} (dispatching via Resend)`);
-  }
-
-  // Send verification OTP email (awaited)
+  // Trigger sendOtp (HMAC-SHA256 hashed code sent via Brevo)
   try {
-    await sendVerificationOTPEmail(email, otp);
-  } catch (emailErr) {
-    const err = createError(
-      'EMAIL_SEND_FAILED',
-      'Your account was created, but we could not send the verification email. Please try resending the OTP.',
-      503
-    );
-    err.userId = userId;
-    throw err;
+    await exports.sendOtp(cleanEmail);
+  } catch (otpErr) {
+    console.warn(`⚠️ sendOtp warning on registration for ${cleanEmail}:`, otpErr.message);
   }
 
-  return { userId };
+  return { userId, email: cleanEmail };
 };
 
 exports.loginUser = async (email, password) => {
-  const user = await userModel.findByEmail(email);
+  const cleanEmail = (email || '').trim().toLowerCase();
+  const user = await userModel.findByEmail(cleanEmail);
   if (!user) {
-    throw createError('USER_NOT_FOUND', 'User with this email does not exist.', 404);
+    throw createError('INVALID_CREDENTIALS', 'Invalid email or password.', 401);
   }
 
   // Check if account is locked
@@ -92,7 +229,7 @@ exports.loginUser = async (email, password) => {
       await userModel.updateFailedAttempts(user.ID, newAttempts);
       const remaining = 5 - newAttempts;
       throw createError(
-        'INVALID_PASSWORD',
+        'INVALID_CREDENTIALS',
         `Incorrect password. ${remaining} attempt(s) remaining before account lockout.`,
         401
       );
@@ -100,8 +237,8 @@ exports.loginUser = async (email, password) => {
   }
 
   // Check if email is verified
-  if (user.IS_VERIFIED === 0) {
-    throw createError('EMAIL_NOT_VERIFIED', 'Please verify your email before logging in.', 403);
+  if (user.IS_VERIFIED === 0 || user.EMAIL_VERIFIED === 0) {
+    throw createError('EMAIL_NOT_VERIFIED', 'Please verify your email address before logging in.', 403);
   }
 
   // Reset attempts and log login timestamp
@@ -128,89 +265,6 @@ exports.loginUser = async (email, password) => {
   };
 };
 
-exports.sendVerificationOTP = async (email) => {
-  const cleanEmail = (email || '').trim().toLowerCase();
-  const user = await userModel.findByEmail(cleanEmail);
-  if (!user) {
-    throw createError('USER_NOT_FOUND', 'User with this email does not exist.', 404);
-  }
-
-  // Cryptographically secure 6-digit numeric OTP
-  const otp = crypto.randomInt(100000, 1000000).toString();
-  const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes validity
-  await verificationModel.createEmailVerificationOTP(user.ID, otp, expiresAt);
-
-  // Send branded verification OTP email via Resend
-  await sendVerificationOTPEmail(cleanEmail, otp);
-
-  return { success: true, message: 'Verification code sent successfully.' };
-};
-
-exports.verifyEmailOTP = async (email, otp, firebaseUid = null) => {
-  const cleanEmail = (email || '').trim().toLowerCase();
-  const cleanOtp = (otp || '').toString().trim();
-
-  const user = await userModel.findByEmail(cleanEmail);
-  if (!user) {
-    throw createError('USER_NOT_FOUND', 'User with this email does not exist.', 404);
-  }
-
-  const record = await verificationModel.findEmailVerificationOTP(cleanEmail, cleanOtp);
-  if (!record) {
-    throw createError('OTP_INVALID', 'Invalid verification code. Please check the 6-digit code and try again.', 422);
-  }
-
-  if (new Date(record.EXPIRES_AT) < new Date()) {
-    throw createError('OTP_EXPIRED', 'Your verification code has expired. Please request a new code.', 422);
-  }
-
-  // 1. Mark OTP as verified (single-use enforcement)
-  await verificationModel.markEmailVerificationOTPVerified(record.ID);
-
-  // 2. Update Oracle user verification state (IS_VERIFIED = 1)
-  await userModel.verifyUser(user.ID);
-
-  // 3. Synchronize with Firebase Authentication (emailVerified = true) via Firebase Admin SDK
-  const targetFirebaseUid = firebaseUid || user.FIREBASE_UID;
-  if (targetFirebaseUid) {
-    try {
-      const { admin } = require('../config/firebaseAdmin');
-      if (admin.apps.length > 0) {
-        await admin.auth().updateUser(targetFirebaseUid, { emailVerified: true });
-        console.log(`✅ [Firebase Admin] Set emailVerified=true for Firebase UID: ${targetFirebaseUid}`);
-      }
-    } catch (fbAdminErr) {
-      console.warn(`⚠️ [Firebase Admin] Could not update emailVerified for ${targetFirebaseUid}:`, fbAdminErr.message);
-    }
-  }
-
-  return { 
-    success: true, 
-    message: 'Email verified successfully!' 
-  };
-};
-
-exports.resendVerificationOTP = async (email) => {
-  const cleanEmail = (email || '').trim().toLowerCase();
-  const user = await userModel.findByEmail(cleanEmail);
-  if (!user) {
-    throw createError('USER_NOT_FOUND', 'User with this email does not exist.', 404);
-  }
-
-  if (user.IS_VERIFIED === 1) {
-    throw createError('EMAIL_ALREADY_VERIFIED', 'This email is already verified.', 409);
-  }
-
-  // Cryptographically secure 6-digit numeric OTP
-  const otp = crypto.randomInt(100000, 1000000).toString();
-  const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes validity
-  await verificationModel.createEmailVerificationOTP(user.ID, otp, expiresAt);
-
-  // Send branded verification OTP email via Resend
-  await sendVerificationOTPEmail(cleanEmail, otp);
-
-  return { success: true, message: 'Verification code resent successfully.' };
-};
 
 exports.forgotPassword = async (email) => {
   const user = await userModel.findByEmail(email);

@@ -81,9 +81,24 @@ const protect = async (req, res, next) => {
   });
 };
 
+/**
+ * Middleware to require that the user's email is verified before proceeding
+ */
+const requireVerifiedEmail = (req, res, next) => {
+  if (!req.user || (!req.user.isVerified && !req.user.emailVerified)) {
+    return res.status(403).json({
+      success: false,
+      code: 'EMAIL_NOT_VERIFIED',
+      message: 'Please verify your email address to access trading and wallet features.'
+    });
+  }
+  next();
+};
+
 module.exports = {
   protect,
-  firebaseAuth: protect // Backward compatibility alias
+  firebaseAuth: protect, // Backward compatibility alias
+  requireVerifiedEmail
 };
 
 

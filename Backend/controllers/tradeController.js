@@ -5,6 +5,14 @@ const buyOrder = async (req, res) => {
     const { symbol, amountLKR } = req.body;
     const userId = req.user.id;
 
+    if (!req.user.isVerified && !req.user.emailVerified) {
+      return res.status(403).json({
+        success: false,
+        code: 'EMAIL_NOT_VERIFIED',
+        message: 'Please verify your email before executing trades.'
+      });
+    }
+
     if (!symbol) {
       return res.status(422).json({
         success: false,
@@ -37,6 +45,14 @@ const sellOrder = async (req, res) => {
   try {
     const { symbol, quantity } = req.body;
     const userId = req.user.id;
+
+    if (!req.user.isVerified && !req.user.emailVerified) {
+      return res.status(403).json({
+        success: false,
+        code: 'EMAIL_NOT_VERIFIED',
+        message: 'Please verify your email before executing trades.'
+      });
+    }
 
     if (!symbol) {
       return res.status(422).json({

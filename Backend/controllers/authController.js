@@ -70,31 +70,77 @@ exports.login = async (req, res) => {
   }
 };
 
-exports.verifyEmail = async (req, res) => {
+exports.sendOtp = async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) {
+      return res.status(422).json({
+        success: false,
+        code: 'MISSING_FIELDS',
+        message: 'Email address is required.'
+      });
+    }
+
+    if (!validateEmail(email)) {
+      return res.status(422).json({
+        success: false,
+        code: 'INVALID_EMAIL',
+        message: 'Invalid email address format.'
+      });
+    }
+
+    const result = await authService.sendOtp(email);
+    res.json({
+      success: true,
+      message: result.message || 'Verification code sent successfully.'
+    });
+  } catch (err) {
+    res.status(err.status || 500).json({
+      success: false,
+      code: err.code || 'SERVER_ERROR',
+      message: err.message || 'Unable to send verification code.'
+    });
+  }
+};
+
+exports.verifyOtp = async (req, res) => {
   try {
     const { email, otp } = req.body;
     if (!email || !otp) {
       return res.status(422).json({
         success: false,
         code: 'MISSING_FIELDS',
-        message: 'Email and 6-digit OTP code are required.'
+        message: 'Email address and 6-digit verification code are required.'
+      });
+    }
+
+    if (!validateEmail(email)) {
+      return res.status(422).json({
+        success: false,
+        code: 'INVALID_EMAIL',
+        message: 'Invalid email address format.'
       });
     }
 
     const firebaseUid = req.user?.firebaseUid || req.firebaseUser?.uid || null;
-    const result = await authService.verifyEmailOTP(email, otp, firebaseUid);
+    const result = await authService.verifyOtp(email, otp, firebaseUid);
     res.json({
       success: true,
-      message: result.message
+      message: result.message || 'Email verified successfully!'
     });
   } catch (err) {
     res.status(err.status || 500).json({
       success: false,
       code: err.code || 'SERVER_ERROR',
-      message: err.message
+      message: err.message || 'Verification failed.'
     });
   }
 };
+
+// Aliases for backward compatibility
+exports.verifyEmail = exports.verifyOtp;
+exports.sendVerification = exports.sendOtp;
+exports.resendVerification = exports.sendOtp;
 
 exports.verifyEmailToken = async (req, res) => {
   try {
@@ -103,56 +149,6 @@ exports.verifyEmailToken = async (req, res) => {
     res.send(`<h1>Verification Successful</h1><p>${result.message}</p>`);
   } catch (err) {
     res.status(err.status || 400).send(`<h1>Verification Failed</h1><p>${err.message}</p>`);
-  }
-};
-
-exports.sendVerification = async (req, res) => {
-  try {
-    const { email } = req.body;
-    if (!email) {
-      return res.status(422).json({
-        success: false,
-        code: 'MISSING_FIELDS',
-        message: 'Email is required.'
-      });
-    }
-
-    const result = await authService.sendVerificationOTP(email);
-    res.json({
-      success: true,
-      message: 'Verification OTP sent successfully.'
-    });
-  } catch (err) {
-    res.status(err.status || 500).json({
-      success: false,
-      code: err.code || 'SERVER_ERROR',
-      message: err.message
-    });
-  }
-};
-
-exports.resendVerification = async (req, res) => {
-  try {
-    const { email } = req.body;
-    if (!email) {
-      return res.status(422).json({
-        success: false,
-        code: 'MISSING_FIELDS',
-        message: 'Email is required.'
-      });
-    }
-
-    const result = await authService.resendVerificationOTP(email);
-    res.json({
-      success: true,
-      message: 'Verification OTP resent successfully.'
-    });
-  } catch (err) {
-    res.status(err.status || 500).json({
-      success: false,
-      code: err.code || 'SERVER_ERROR',
-      message: err.message
-    });
   }
 };
 
