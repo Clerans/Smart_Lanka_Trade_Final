@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -9,14 +9,15 @@ import {
   Alert,
   Modal,
   TextInput,
-  ActivityIndicator
+  ActivityIndicator,
+  RefreshControl
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { MaterialIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as LocalAuthentication from 'expo-local-authentication';
-import { colors, typography, layout } from '../../theme';
+import { colors, typography, layout, SCREEN_PADDING, TAB_BAR_BOTTOM_OFFSET } from '../../theme';
 import { authService } from '../../services/apiService';
 import { storageService } from '../../services/storageService';
 
@@ -37,6 +38,7 @@ export const SecuritySettingsScreen = () => {
   const [pin, setPin] = useState('');
   const [confirmPin, setConfirmPin] = useState('');
   const [savedPin, setSavedPin] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
   // Password Form
   const [currentPassword, setCurrentPassword] = useState('');
@@ -51,28 +53,34 @@ export const SecuritySettingsScreen = () => {
     { id: '1', name: 'Mobile App (This Device)', location: 'Current Session', ip: 'Encrypted Hardware Session', activeNow: true, lastActive: 'Active Now', icon: 'smartphone' }
   ]);
 
+  const loadPreferences = useCallback(async () => {
+    try {
+      const bio = await AsyncStorage.getItem('@pref_biometric');
+      if (bio !== null) setBiometricEnabled(bio === 'true');
 
-  // Load preferences on mount
-  useEffect(() => {
-    const loadPreferences = async () => {
-      try {
-        const bio = await AsyncStorage.getItem('@pref_biometric');
-        if (bio !== null) setBiometricEnabled(bio === 'true');
+      const tfa = await AsyncStorage.getItem('@pref_2fa');
+      if (tfa !== null) setTwoFactorEnabled(tfa === 'true');
 
-        const tfa = await AsyncStorage.getItem('@pref_2fa');
-        if (tfa !== null) setTwoFactorEnabled(tfa === 'true');
+      const face = await AsyncStorage.getItem('@pref_face_id');
+      if (face !== null) setFaceIdEnabled(face === 'true');
 
-        const face = await AsyncStorage.getItem('@pref_face_id');
-        if (face !== null) setFaceIdEnabled(face === 'true');
-
-        const storedPin = await storageService.getPin();
-        if (storedPin) setSavedPin(storedPin);
-      } catch {
-        // ignore load errors
-      }
-    };
-    loadPreferences();
+      const storedPin = await storageService.getPin();
+      if (storedPin) setSavedPin(storedPin);
+    } catch {
+      // ignore load errors
+    } finally {
+      setRefreshing(false);
+    }
   }, []);
+
+  useEffect(() => {
+    loadPreferences();
+  }, [loadPreferences]);
+
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    loadPreferences();
+  }, [loadPreferences]);
 
   // Handlers for toggles
   const handleBiometricToggle = async (val: boolean) => {
@@ -235,7 +243,18 @@ export const SecuritySettingsScreen = () => {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <ScrollView contentContainerStyle={styles.container}>
+      <ScrollView
+        contentContainerStyle={styles.container}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={colors.accent}
+            colors={[colors.accent]}
+          />
+        }
+      >
 
         {/* Header */}
         <View style={styles.header}>
@@ -548,15 +567,15 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bg,
   },
   container: {
-    paddingBottom: 40,
+    paddingBottom: TAB_BAR_BOTTOM_OFFSET,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 24,
-    paddingTop: 20,
-    marginBottom: 32,
+    paddingHorizontal: SCREEN_PADDING,
+    paddingTop: 16,
+    marginBottom: 20,
   },
   backButton: {
     padding: 8,
@@ -571,16 +590,18 @@ const styles = StyleSheet.create({
   sectionHeading: {
     ...typography.label,
     color: colors.textSecondary,
-    marginLeft: 24,
-    marginBottom: 12,
+    marginLeft: SCREEN_PADDING,
+    marginBottom: 10,
     letterSpacing: 1.5,
   },
   settingsGroup: {
-    marginHorizontal: 24,
+    marginHorizontal: SCREEN_PADDING,
     backgroundColor: colors.bgCard,
     borderRadius: layout.borderRadius,
-    marginBottom: 32,
-    paddingVertical: 8,
+    marginBottom: 24,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   settingRow: {
     flexDirection: 'row',

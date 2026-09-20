@@ -2,12 +2,12 @@ import * as React from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
-import { colors, typography, layout } from '../../theme';
+import { colors, typography, layout, SCREEN_PADDING, TAB_BAR_BOTTOM_OFFSET } from '../../theme';
 import { marketService } from '../../services/apiService';
 import { formatLKR } from '../../utils/formatters';
 
 import { useNavigation } from '@react-navigation/native';
-const { useState, useEffect } = React;
+const { useState, useEffect, useCallback } = React;
 
 const filters = ['All Assets', 'Crypto', 'Stocks', 'Indices'];
 
@@ -156,6 +156,7 @@ export const MarketWatchScreen = () => {
               <View key={asset.id}>
                 <TouchableOpacity
                   style={styles.assetRow}
+                  activeOpacity={0.7}
                   onPress={() => navigation.navigate('AssetDetails', {
                     symbol: asset.ticker + 'USDT',
                     coin: asset.ticker
@@ -164,16 +165,16 @@ export const MarketWatchScreen = () => {
 
                   <View style={styles.assetRowLeft}>
                     <View style={[styles.assetIcon, { backgroundColor: asset.color + '22' }]}>
-                      <FontAwesome5 name={asset.icon} size={20} color={asset.color} />
+                      <FontAwesome5 name={asset.icon} size={18} color={asset.color} />
                     </View>
-                    <View>
-                      <Text style={styles.assetName}>{asset.name}</Text>
+                    <View style={{ flexShrink: 1 }}>
+                      <Text style={styles.assetName} numberOfLines={1}>{asset.name}</Text>
                       <Text style={styles.assetTicker}>{asset.ticker}</Text>
                     </View>
                   </View>
 
                   <View style={styles.assetRowRight}>
-                    <Text style={styles.assetPrice}>Rs {asset.price}</Text>
+                    <Text style={styles.assetPrice} numberOfLines={1}>Rs {asset.price}</Text>
                     <View style={[styles.changePill, asset.isPositive ? styles.changePositiveBg : styles.changeNegativeBg]}>
                       <Text style={[styles.assetChange, asset.isPositive ? styles.changePositiveTxt : styles.changeNegativeTxt]}>
                         {asset.change}
@@ -187,12 +188,10 @@ export const MarketWatchScreen = () => {
             ))
           ) : (
             <View style={styles.emptyContainer}>
-              <MaterialIcons name="search-off" size={64} color={colors.textMuted} />
+              <MaterialIcons name="search-off" size={56} color={colors.textSecondary} />
               <Text style={styles.emptyText}>No assets found in this category.</Text>
             </View>
           )}
-          {/* Fill bottom space corresponding to tab bar */}
-          <View style={{ height: 80 }} />
         </ScrollView>
       )}
 
@@ -209,95 +208,109 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 24,
-    paddingTop: 20,
-    marginBottom: 24,
+    paddingHorizontal: SCREEN_PADDING,
+    paddingTop: 16,
+    marginBottom: 16,
   },
   headerTitle: {
     ...typography.h1,
+    fontSize: 28,
   },
   filterIconBtn: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     backgroundColor: colors.bgInput,
     justifyContent: 'center',
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   searchContainer: {
-    marginHorizontal: 24,
-    marginBottom: 24,
+    marginHorizontal: SCREEN_PADDING,
+    marginBottom: 16,
     position: 'relative',
     justifyContent: 'center',
   },
   searchIcon: {
     position: 'absolute',
-    left: 16,
+    left: 14,
     zIndex: 1,
   },
   searchInput: {
     ...typography.body,
-    height: 50,
+    height: 46,
     backgroundColor: colors.bgInput,
     borderRadius: layout.borderRadiusPill,
-    paddingLeft: 48,
+    paddingLeft: 44,
     paddingRight: 16,
     color: colors.textPrimary,
+    fontSize: 14,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   filtersWrapper: {
-    marginBottom: 16,
+    marginBottom: 14,
   },
   filtersScroll: {
-    paddingHorizontal: 24,
+    paddingHorizontal: SCREEN_PADDING,
   },
   filterPill: {
-    paddingHorizontal: 20,
-    paddingVertical: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
     borderRadius: layout.borderRadiusPill,
     backgroundColor: colors.bgInput,
-    marginRight: 12,
+    marginRight: 8,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   filterPillActive: {
     backgroundColor: colors.accent,
+    borderColor: colors.accent,
   },
   filterText: {
     ...typography.bodySmall,
     color: colors.textSecondary,
     fontWeight: '600',
+    fontSize: 13,
   },
   filterTextActive: {
-    color: '#000',
-    fontWeight: '700',
+    color: '#000000',
+    fontWeight: '800',
   },
   listContainer: {
-    paddingHorizontal: 24,
+    paddingHorizontal: SCREEN_PADDING,
+    paddingBottom: TAB_BAR_BOTTOM_OFFSET,
   },
   assetRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 16,
+    paddingVertical: 14,
   },
   assetRowLeft: {
     flexDirection: 'row',
     alignItems: 'center',
+    flex: 1,
+    marginRight: 12,
   },
   assetIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 16,
+    marginRight: 12,
   },
   assetName: {
     ...typography.body,
     fontWeight: '700',
-    marginBottom: 4,
+    fontSize: 15,
+    marginBottom: 2,
   },
   assetTicker: {
     ...typography.label,
-    fontSize: 10,
+    fontSize: 11,
     color: colors.accent,
   },
   assetRowRight: {
@@ -305,13 +318,15 @@ const styles = StyleSheet.create({
   },
   assetPrice: {
     ...typography.body,
-    fontWeight: '700',
-    marginBottom: 6,
+    fontWeight: '800',
+    fontSize: 15,
+    marginBottom: 4,
+    fontVariant: ['tabular-nums'] as any,
   },
   changePill: {
     paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
+    paddingVertical: 3,
+    borderRadius: 8,
   },
   changePositiveBg: {
     backgroundColor: colors.accentMuted,
@@ -320,9 +335,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.red + '22',
   },
   assetChange: {
-    ...typography.bodySmall,
-    fontSize: 12,
-    fontWeight: '700',
+    fontSize: 11.5,
+    fontWeight: '800',
   },
   changePositiveTxt: {
     color: colors.accent,
@@ -337,12 +351,12 @@ const styles = StyleSheet.create({
   emptyContainer: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingTop: 100,
+    paddingTop: 80,
   },
   emptyText: {
     ...typography.body,
-    color: colors.textMuted,
-    marginTop: 16,
+    color: colors.textSecondary,
+    marginTop: 12,
     textAlign: 'center',
   },
 });

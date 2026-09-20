@@ -1,4 +1,4 @@
-import * as React from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -10,18 +10,18 @@ import {
   ActivityIndicator,
   ScrollView,
   RefreshControl,
-  Alert
+  Alert,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { MaterialIcons } from '@expo/vector-icons';
-import { colors, layout } from '../../theme';
+import { colors, layout, typography, SCREEN_PADDING, spacing } from '../../theme';
 import { PrimaryButton, Card } from '../../components';
 import { marketService } from '../../services/apiService';
 import { formatNumber } from '../../utils/formatters';
-const { useState, useEffect, useCallback } = React;
 
 export const CurrencyConversionScreen = () => {
+  const insets = useSafeAreaInsets();
   const navigation = useNavigation<any>();
   const [fromAmount, setFromAmount] = useState('150000');
   const [toAmount, setToAmount] = useState('0');
@@ -37,7 +37,7 @@ export const CurrencyConversionScreen = () => {
       if (response.success && response.data.usdToLkr) {
         const liveRate = response.data.usdToLkr;
         setRate(liveRate);
-        setFromAmount(currentFrom => {
+        setFromAmount((currentFrom) => {
           const num = parseFloat(currentFrom) || 0;
           setToAmount(isLkrToUsd ? (num / liveRate).toFixed(2) : (num * liveRate).toFixed(2));
           return currentFrom;
@@ -98,8 +98,7 @@ export const CurrencyConversionScreen = () => {
 
     try {
       setConverting(true);
-      // Simulate conversion process
-      await new Promise(r => setTimeout(r, 800));
+      await new Promise((r) => setTimeout(r, 800));
       Alert.alert(
         'Conversion Successful',
         `Successfully converted ${formatNumber(fromAmount, 2)} ${isLkrToUsd ? 'LKR' : 'USD'} to ${formatNumber(toAmount, 2)} ${isLkrToUsd ? 'USD' : 'LKR'}.`,
@@ -113,19 +112,34 @@ export const CurrencyConversionScreen = () => {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
       <KeyboardAvoidingView
         style={styles.keyboardAvoiding}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton} activeOpacity={0.7}>
+          <TouchableOpacity
+            onPress={() => navigation.goBack()}
+            style={styles.backButton}
+            activeOpacity={0.7}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+          >
             <MaterialIcons name="arrow-back" size={24} color="#FFF" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Currency Converter</Text>
-          <TouchableOpacity style={styles.iconBtn} activeOpacity={0.7} onPress={() => Alert.alert('FX Settings', 'SmartLanka Live Central Bank & Binance CEFTS rate sync enabled.')}>
-            <MaterialIcons name="settings" size={24} color={colors.textPrimary} />
+          <TouchableOpacity
+            style={styles.iconBtn}
+            activeOpacity={0.7}
+            onPress={() =>
+              Alert.alert(
+                'FX Settings',
+                'SmartLanka Live Central Bank & Binance CEFTS rate sync enabled.'
+              )
+            }
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <MaterialIcons name="settings" size={22} color={colors.textPrimary} />
           </TouchableOpacity>
         </View>
 
@@ -135,7 +149,10 @@ export const CurrencyConversionScreen = () => {
           </View>
         ) : (
           <ScrollView
-            contentContainerStyle={styles.scrollContent}
+            contentContainerStyle={[
+              styles.scrollContent,
+              { paddingBottom: Math.max(insets.bottom, 24) + 20 },
+            ]}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
             refreshControl={
@@ -153,8 +170,17 @@ export const CurrencyConversionScreen = () => {
               <View style={styles.converterCard}>
                 <View style={styles.cardTopRow}>
                   <Text style={styles.label}>FROM</Text>
-                  <TouchableOpacity style={styles.currencyPill} onPress={toggleDirection} activeOpacity={0.8}>
-                    <View style={[styles.flagCircle, { backgroundColor: isLkrToUsd ? '#1A5BFF' : '#26A17B' }]} />
+                  <TouchableOpacity
+                    style={styles.currencyPill}
+                    onPress={toggleDirection}
+                    activeOpacity={0.8}
+                  >
+                    <View
+                      style={[
+                        styles.flagCircle,
+                        { backgroundColor: isLkrToUsd ? '#1A5BFF' : '#26A17B' },
+                      ]}
+                    />
                     <Text style={styles.currencyCode}>{isLkrToUsd ? 'LKR' : 'USD'}</Text>
                     <MaterialIcons name="arrow-drop-down" size={20} color="#FFF" />
                   </TouchableOpacity>
@@ -174,7 +200,11 @@ export const CurrencyConversionScreen = () => {
 
               {/* Symmetrical Floating Swap Button */}
               <View style={styles.swapButtonWrapper}>
-                <TouchableOpacity style={styles.swapButton} onPress={toggleDirection} activeOpacity={0.85}>
+                <TouchableOpacity
+                  style={styles.swapButton}
+                  onPress={toggleDirection}
+                  activeOpacity={0.85}
+                >
                   <MaterialIcons name="swap-vert" size={24} color="#000000" />
                 </TouchableOpacity>
               </View>
@@ -183,17 +213,34 @@ export const CurrencyConversionScreen = () => {
               <View style={[styles.converterCard, styles.toCard]}>
                 <View style={styles.cardTopRow}>
                   <Text style={styles.label}>TO</Text>
-                  <TouchableOpacity style={styles.currencyPill} onPress={toggleDirection} activeOpacity={0.8}>
-                    <View style={[styles.flagCircle, { backgroundColor: isLkrToUsd ? '#26A17B' : '#1A5BFF' }]} />
+                  <TouchableOpacity
+                    style={styles.currencyPill}
+                    onPress={toggleDirection}
+                    activeOpacity={0.8}
+                  >
+                    <View
+                      style={[
+                        styles.flagCircle,
+                        { backgroundColor: isLkrToUsd ? '#26A17B' : '#1A5BFF' },
+                      ]}
+                    />
                     <Text style={styles.currencyCode}>{isLkrToUsd ? 'USD' : 'LKR'}</Text>
                     <MaterialIcons name="arrow-drop-down" size={20} color="#FFF" />
                   </TouchableOpacity>
                 </View>
-                <Text style={[styles.amountInput, styles.amountInputGreen]} numberOfLines={1}>
+                <Text
+                  style={[styles.amountInput, styles.amountInputGreen]}
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                >
                   {toAmount}
                 </Text>
                 <Text style={styles.balanceText}>
-                  1 {isLkrToUsd ? 'LKR' : 'USD'} ≈ {isLkrToUsd ? (1 / (rate || 328)).toFixed(6) : rate.toFixed(2)} {isLkrToUsd ? 'USD' : 'LKR'}
+                  1 {isLkrToUsd ? 'LKR' : 'USD'} ≈{' '}
+                  {isLkrToUsd
+                    ? (1 / (rate || 328)).toFixed(6)
+                    : rate.toFixed(2)}{' '}
+                  {isLkrToUsd ? 'USD' : 'LKR'}
                 </Text>
               </View>
             </View>
@@ -216,12 +263,13 @@ export const CurrencyConversionScreen = () => {
                   <Text style={styles.confirmTitle}>Conversion Ready</Text>
                 </View>
                 <Text style={styles.confirmDesc}>
-                  Convert {formatNumber(fromAmount || '0', 2)} {isLkrToUsd ? 'LKR' : 'USD'} to your {isLkrToUsd ? 'USD' : 'LKR'} wallet instantly.
+                  Convert {formatNumber(fromAmount || '0', 2)}{' '}
+                  {isLkrToUsd ? 'LKR' : 'USD'} to your {isLkrToUsd ? 'USD' : 'LKR'} wallet instantly.
                 </Text>
               </Card>
 
               <PrimaryButton
-                title={converting ? "Converting..." : "Convert Now"}
+                title={converting ? 'Converting...' : 'Convert Now'}
                 onPress={handleConvertNow}
                 loading={converting}
               />
@@ -250,39 +298,37 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
+    paddingHorizontal: SCREEN_PADDING,
     paddingTop: 12,
-    paddingBottom: 16,
+    marginBottom: spacing.m,
   },
   backButton: {
-    padding: 8,
+    padding: 6,
     borderRadius: 8,
   },
   headerTitle: {
+    ...typography.h3,
     fontSize: 18,
-    fontWeight: '700',
-    color: colors.textPrimary,
     textAlign: 'center',
   },
   iconBtn: {
-    padding: 8,
+    padding: 6,
     borderRadius: 8,
   },
   scrollContent: {
-    paddingHorizontal: 20,
-    paddingBottom: 40,
+    paddingHorizontal: SCREEN_PADDING,
   },
   converterContainer: {
     position: 'relative',
-    marginTop: 8,
-    marginBottom: 20,
+    marginTop: 4,
+    marginBottom: spacing.m,
   },
   converterCard: {
     backgroundColor: colors.bgCard,
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 20,
-    padding: 20,
+    borderRadius: 18,
+    padding: spacing.m,
   },
   toCard: {
     backgroundColor: colors.bgInput,
@@ -292,10 +338,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 10,
   },
   label: {
-    fontSize: 12,
+    ...typography.label,
+    fontSize: 11,
     fontWeight: '800',
     letterSpacing: 1,
     color: colors.textSecondary,
@@ -317,26 +364,30 @@ const styles = StyleSheet.create({
     marginRight: 6,
   },
   currencyCode: {
-    fontSize: 14,
+    ...typography.body,
+    fontSize: 13,
     fontWeight: '700',
     color: colors.textPrimary,
     marginRight: 2,
   },
   amountInput: {
-    fontSize: 34,
+    fontSize: 32,
     fontWeight: '800',
     color: colors.textPrimary,
     padding: 0,
-    marginVertical: 6,
+    marginVertical: 4,
+    fontVariant: ['tabular-nums'],
   },
   amountInputGreen: {
     color: colors.accent,
   },
   balanceText: {
-    fontSize: 13,
+    ...typography.bodySmall,
+    fontSize: 12,
     color: colors.textSecondary,
     fontWeight: '500',
     marginTop: 4,
+    fontVariant: ['tabular-nums'],
   },
   swapButtonWrapper: {
     position: 'absolute',
@@ -369,7 +420,7 @@ const styles = StyleSheet.create({
   },
   ratePillContainer: {
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: spacing.m,
   },
   ratePill: {
     flexDirection: 'row',
@@ -382,38 +433,42 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bgCard,
   },
   ratePillText: {
-    fontSize: 12,
+    ...typography.label,
+    fontSize: 11,
     fontWeight: '700',
     color: colors.textSecondary,
     marginLeft: 8,
     letterSpacing: 0.5,
+    fontVariant: ['tabular-nums'],
   },
   bottomSection: {
-    marginTop: 10,
+    marginTop: 6,
   },
   confirmCard: {
-    marginBottom: 20,
+    marginBottom: spacing.m,
     backgroundColor: colors.bgCard,
     borderWidth: 1,
     borderColor: colors.border,
-    padding: 16,
-    borderRadius: 16,
+    padding: spacing.m,
+    borderRadius: 14,
   },
   confirmHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 6,
   },
   confirmTitle: {
+    ...typography.body,
     fontSize: 15,
     fontWeight: '700',
     color: colors.accent,
     marginLeft: 8,
   },
   confirmDesc: {
+    ...typography.bodySmall,
     fontSize: 13,
     color: colors.textSecondary,
-    lineHeight: 20,
+    lineHeight: 18,
   },
 });
 

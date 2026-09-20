@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -8,13 +8,14 @@ import {
   Image,
   ActivityIndicator,
   Alert,
-  TextInput
+  TextInput,
+  RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
-import { colors, typography, layout } from '../../theme';
+import { colors, typography, layout, SCREEN_PADDING, spacing } from '../../theme';
 import { PrimaryButton, Card } from '../../components';
 import { kycService } from '../../services/apiService';
 
@@ -23,33 +24,41 @@ export const KYCVerificationScreen = () => {
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [manualNIC, setManualNIC] = useState('');
   const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [verificationResult, setVerificationResult] = useState<any>(null);
 
-  useEffect(() => {
-    // Check if user already has a KYC record
-    async function checkStatus() {
-      try {
-        const res = await kycService.getKYCStatus();
-        if (res?.data?.document) {
-          setVerificationResult({
-            verificationStatus: res.data.document.VERIFICATION_STATUS || res.data.status,
-            extractedData: {
-              documentType: res.data.document.DOCUMENT_TYPE || 'NIC',
-              nicNumber: res.data.document.DOCUMENT_NUMBER,
-              name: res.data.document.EXTRACTED_NAME,
-              dateOfBirth: res.data.document.EXTRACTED_DOB,
-              gender: res.data.document.EXTRACTED_GENDER,
-              ocrConfidence: `${res.data.document.OCR_CONFIDENCE || 0}%`
-            },
-            rejectionReason: res.data.document.REJECTION_REASON
-          });
-        }
-      } catch {
-        // User not logged in yet or no prior KYC
+  const checkStatus = useCallback(async () => {
+    try {
+      const res = await kycService.getKYCStatus();
+      if (res?.data?.document) {
+        setVerificationResult({
+          verificationStatus: res.data.document.VERIFICATION_STATUS || res.data.status,
+          extractedData: {
+            documentType: res.data.document.DOCUMENT_TYPE || 'NIC',
+            nicNumber: res.data.document.DOCUMENT_NUMBER,
+            name: res.data.document.EXTRACTED_NAME,
+            dateOfBirth: res.data.document.EXTRACTED_DOB,
+            gender: res.data.document.EXTRACTED_GENDER,
+            ocrConfidence: `${res.data.document.OCR_CONFIDENCE || 0}%`,
+          },
+          rejectionReason: res.data.document.REJECTION_REASON,
+        });
       }
+    } catch {
+      // User not logged in yet or no prior KYC
+    } finally {
+      setRefreshing(false);
     }
-    checkStatus();
   }, []);
+
+  useEffect(() => {
+    checkStatus();
+  }, [checkStatus]);
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    checkStatus();
+  };
 
   const takePhoto = async () => {
     try {
@@ -143,12 +152,26 @@ export const KYCVerificationScreen = () => {
   const isRejected = status === 'REJECTED';
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
-
+    <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
+      <ScrollView
+        contentContainerStyle={styles.container}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={colors.accent}
+            colors={[colors.accent]}
+          />
+        }
+      >
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+          <TouchableOpacity
+            onPress={() => navigation.goBack()}
+            style={styles.backButton}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+          >
             <MaterialIcons name="arrow-back" size={24} color="#FFF" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Identity Verification (KYC)</Text>
@@ -159,15 +182,23 @@ export const KYCVerificationScreen = () => {
         <View style={styles.trackerContainer}>
           <Text style={styles.stepText}>Sri Lankan NIC OCR Pipeline</Text>
           <View style={styles.progressBarBg}>
-            <View style={[
-              styles.progressBarFill,
-              isVerified ? { width: '100%', backgroundColor: colors.accent } :
-                isPending ? { width: '66%', backgroundColor: colors.yellow } :
-                  { width: '33%', backgroundColor: colors.accent }
-            ]} />
+            <View
+              style={[
+                styles.progressBarFill,
+                isVerified
+                  ? { width: '100%', backgroundColor: colors.accent }
+                  : isPending
+                  ? { width: '66%', backgroundColor: colors.yellow }
+                  : { width: '33%', backgroundColor: colors.accent },
+              ]}
+            />
           </View>
           <Text style={styles.stepLabel}>
-            {isVerified ? 'Verification Complete' : isPending ? 'Pending Review' : 'Document Capture & OCR'}
+            {isVerified
+              ? 'Verification Complete'
+              : isPending
+              ? 'Pending Review'
+              : 'Document Capture & OCR'}
           </Text>
         </View>
 
@@ -176,7 +207,11 @@ export const KYCVerificationScreen = () => {
           {selectedImage ? (
             <View style={styles.imagePreviewContainer}>
               <Image source={{ uri: selectedImage }} style={styles.previewImage} resizeMode="cover" />
-              <TouchableOpacity style={styles.retakePill} onPress={() => setSelectedImage(null)}>
+              <TouchableOpacity
+                style={styles.retakePill}
+                onPress={() => setSelectedImage(null)}
+                activeOpacity={0.8}
+              >
                 <MaterialIcons name="refresh" size={16} color="#FFF" />
                 <Text style={styles.retakeText}>Retake Photo</Text>
               </TouchableOpacity>
@@ -188,8 +223,15 @@ export const KYCVerificationScreen = () => {
                 <View style={[styles.corner, styles.topRight]} />
                 <View style={[styles.corner, styles.bottomLeft]} />
                 <View style={[styles.corner, styles.bottomRight]} />
-                <FontAwesome5 name="id-card" size={40} color={colors.accent} style={{ marginBottom: 12 }} />
-                <Text style={styles.frameText}>Position your Sri Lankan NIC (Old or New format) within the frame</Text>
+                <FontAwesome5
+                  name="id-card"
+                  size={38}
+                  color={colors.accent}
+                  style={{ marginBottom: 10 }}
+                />
+                <Text style={styles.frameText}>
+                  Position your Sri Lankan NIC (Old or New format) within the frame
+                </Text>
               </View>
             </View>
           )}
@@ -198,13 +240,13 @@ export const KYCVerificationScreen = () => {
         {/* Camera & Gallery Action Buttons */}
         {!selectedImage && (
           <View style={styles.actionRow}>
-            <TouchableOpacity style={styles.captureOptionBtn} onPress={takePhoto}>
-              <MaterialIcons name="camera-alt" size={24} color={colors.accent} />
+            <TouchableOpacity style={styles.captureOptionBtn} onPress={takePhoto} activeOpacity={0.8}>
+              <MaterialIcons name="camera-alt" size={22} color={colors.accent} />
               <Text style={styles.captureOptionText}>Take Photo</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.captureOptionBtn} onPress={pickImage}>
-              <MaterialIcons name="photo-library" size={24} color={colors.accent} />
+            <TouchableOpacity style={styles.captureOptionBtn} onPress={pickImage} activeOpacity={0.8}>
+              <MaterialIcons name="photo-library" size={22} color={colors.accent} />
               <Text style={styles.captureOptionText}>From Gallery</Text>
             </TouchableOpacity>
           </View>
@@ -230,7 +272,9 @@ export const KYCVerificationScreen = () => {
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={colors.accent} />
             <Text style={styles.loadingTitle}>Processing Tesseract OCR...</Text>
-            <Text style={styles.loadingSubtitle}>Extracting NIC digits, Date of Birth, and Name</Text>
+            <Text style={styles.loadingSubtitle}>
+              Extracting NIC digits, Date of Birth, and Name
+            </Text>
           </View>
         )}
 
@@ -239,23 +283,31 @@ export const KYCVerificationScreen = () => {
           <Card style={styles.extractionCard}>
             <View style={styles.cardHeader}>
               <Text style={styles.cardTitle}>OCR Extraction Results</Text>
-              <View style={[
-                styles.statusBadge,
-                isVerified ? { backgroundColor: colors.accentMuted } :
-                  isRejected ? { backgroundColor: colors.red + '33' } :
-                    { backgroundColor: colors.yellow + '33' }
-              ]}>
+              <View
+                style={[
+                  styles.statusBadge,
+                  isVerified
+                    ? { backgroundColor: colors.accentMuted }
+                    : isRejected
+                    ? { backgroundColor: colors.red + '33' }
+                    : { backgroundColor: colors.yellow + '33' },
+                ]}
+              >
                 <MaterialIcons
-                  name={isVerified ? "verified" : isRejected ? "cancel" : "pending-actions"}
+                  name={isVerified ? 'verified' : isRejected ? 'cancel' : 'pending-actions'}
                   size={14}
                   color={isVerified ? colors.accent : isRejected ? colors.red : colors.yellow}
                 />
-                <Text style={[
-                  styles.statusText,
-                  isVerified ? { color: colors.accent } :
-                    isRejected ? { color: colors.red } :
-                      { color: colors.yellow }
-                ]}>
+                <Text
+                  style={[
+                    styles.statusText,
+                    isVerified
+                      ? { color: colors.accent }
+                      : isRejected
+                      ? { color: colors.red }
+                      : { color: colors.yellow },
+                  ]}
+                >
                   {status}
                 </Text>
               </View>
@@ -305,8 +357,17 @@ export const KYCVerificationScreen = () => {
 
             {verificationResult.rejectionReason && (
               <View style={styles.rejectionBox}>
-                <MaterialIcons name="info" size={16} color={isRejected ? colors.red : colors.yellow} />
-                <Text style={[styles.rejectionText, isRejected ? { color: colors.red } : { color: colors.yellow }]}>
+                <MaterialIcons
+                  name="info"
+                  size={16}
+                  color={isRejected ? colors.red : colors.yellow}
+                />
+                <Text
+                  style={[
+                    styles.rejectionText,
+                    isRejected ? { color: colors.red } : { color: colors.yellow },
+                  ]}
+                >
                   {verificationResult.rejectionReason}
                 </Text>
               </View>
@@ -325,7 +386,7 @@ export const KYCVerificationScreen = () => {
 
         {verificationResult && (
           <PrimaryButton
-            title={isVerified ? "Continue to Trading Dashboard →" : "Done"}
+            title={isVerified ? 'Continue to Trading Dashboard →' : 'Done'}
             onPress={() => navigation.navigate('MainApp')}
             style={{ marginTop: 8 }}
           />
@@ -356,26 +417,26 @@ const styles = StyleSheet.create({
   },
   container: {
     flexGrow: 1,
-    paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingHorizontal: SCREEN_PADDING,
+    paddingVertical: 12,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: spacing.m,
   },
   backButton: {
-    padding: 8,
-    marginLeft: -8,
+    padding: 6,
+    marginLeft: -6,
   },
   headerTitle: {
-    ...typography.body,
-    fontWeight: '700',
+    ...typography.h3,
+    fontSize: 18,
     color: '#FFF',
   },
   trackerContainer: {
-    marginBottom: 20,
+    marginBottom: spacing.m,
   },
   stepText: {
     ...typography.label,
@@ -403,9 +464,9 @@ const styles = StyleSheet.create({
   viewfinderContainer: {
     height: 220,
     width: '100%',
-    borderRadius: 20,
+    borderRadius: 18,
     overflow: 'hidden',
-    marginBottom: 16,
+    marginBottom: spacing.m,
     borderWidth: 1,
     borderColor: colors.border,
   },
@@ -451,8 +512,8 @@ const styles = StyleSheet.create({
   },
   corner: {
     position: 'absolute',
-    width: 28,
-    height: 28,
+    width: 26,
+    height: 26,
     borderColor: colors.accent,
   },
   topLeft: {
@@ -460,41 +521,41 @@ const styles = StyleSheet.create({
     left: 0,
     borderTopWidth: 3,
     borderLeftWidth: 3,
-    borderTopLeftRadius: 12,
+    borderTopLeftRadius: 10,
   },
   topRight: {
     top: 0,
     right: 0,
     borderTopWidth: 3,
     borderRightWidth: 3,
-    borderTopRightRadius: 12,
+    borderTopRightRadius: 10,
   },
   bottomLeft: {
     bottom: 0,
     left: 0,
     borderBottomWidth: 3,
     borderLeftWidth: 3,
-    borderBottomLeftRadius: 12,
+    borderBottomLeftRadius: 10,
   },
   bottomRight: {
     bottom: 0,
     right: 0,
     borderBottomWidth: 3,
     borderRightWidth: 3,
-    borderBottomRightRadius: 12,
+    borderBottomRightRadius: 10,
   },
   frameText: {
     ...typography.bodySmall,
     color: colors.textSecondary,
     textAlign: 'center',
-    maxWidth: '80%',
+    maxWidth: '85%',
     fontSize: 11,
     lineHeight: 16,
   },
   actionRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 20,
+    marginBottom: spacing.m,
   },
   captureOptionBtn: {
     flex: 1,
@@ -502,7 +563,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.bgInput,
-    paddingVertical: 14,
+    paddingVertical: 12,
     borderRadius: layout.borderRadius,
     marginHorizontal: 4,
     borderWidth: 1,
@@ -515,7 +576,7 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
   inputContainer: {
-    marginBottom: 16,
+    marginBottom: spacing.m,
   },
   inputLabel: {
     ...typography.label,
@@ -535,16 +596,16 @@ const styles = StyleSheet.create({
   },
   loadingContainer: {
     alignItems: 'center',
-    padding: 24,
+    padding: spacing.l,
     backgroundColor: colors.bgCard,
     borderRadius: layout.borderRadius,
-    marginBottom: 16,
+    marginBottom: spacing.m,
   },
   loadingTitle: {
     ...typography.body,
     fontWeight: '700',
     color: colors.accent,
-    marginTop: 12,
+    marginTop: 10,
   },
   loadingSubtitle: {
     ...typography.bodySmall,
@@ -553,17 +614,17 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   extractionCard: {
-    marginBottom: 20,
-    padding: 16,
+    marginBottom: spacing.m,
+    padding: spacing.m,
   },
   cardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 14,
+    marginBottom: 12,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
-    paddingBottom: 10,
+    paddingBottom: 8,
   },
   cardTitle: {
     ...typography.body,
@@ -586,7 +647,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 10,
+    marginBottom: 8,
   },
   dataLabel: {
     ...typography.label,
@@ -625,3 +686,4 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 });
+

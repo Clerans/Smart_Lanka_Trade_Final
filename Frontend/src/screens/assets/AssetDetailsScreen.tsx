@@ -1,14 +1,15 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, RefreshControl } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
-import { colors, typography } from '../../theme';
+import { colors, typography, SCREEN_PADDING, spacing } from '../../theme';
 import { PrimaryButton, Card, CandlestickChart } from '../../components';
 import { aiService, marketService } from '../../services/apiService';
 import { formatLKR, formatNumber } from '../../utils/formatters';
 
 export const AssetDetailsScreen = () => {
+  const insets = useSafeAreaInsets();
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
 
@@ -70,9 +71,9 @@ export const AssetDetailsScreen = () => {
   const isPositive = changePercent >= 0;
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
       <ScrollView
-        contentContainerStyle={styles.container}
+        contentContainerStyle={[styles.container, { paddingBottom: 110 + insets.bottom }]}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
@@ -86,7 +87,7 @@ export const AssetDetailsScreen = () => {
 
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
             <MaterialIcons name="arrow-back" size={24} color="#FFF" />
           </TouchableOpacity>
           <View style={styles.headerTitles}>
@@ -94,7 +95,7 @@ export const AssetDetailsScreen = () => {
             <Text style={styles.headerSubtitle}>{coin} / SRI LANKAN RUPEE ({symbol})</Text>
           </View>
           <View style={styles.headerIcons}>
-            <TouchableOpacity style={styles.iconBtn} onPress={() => navigation.navigate('AIAnalytics')}>
+            <TouchableOpacity style={styles.iconBtn} onPress={() => navigation.navigate('AIAnalytics')} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
               <FontAwesome5 name="robot" size={20} color={colors.accent} />
             </TouchableOpacity>
           </View>
@@ -102,7 +103,7 @@ export const AssetDetailsScreen = () => {
 
         {/* Price Display */}
         <View style={styles.priceSection}>
-          <Text style={styles.priceValue}>
+          <Text style={styles.priceValue} numberOfLines={1} adjustsFontSizeToFit>
             {priceLKR > 0 ? `රු ${formatLKR(priceLKR, 2)}` : 'Loading...'}
           </Text>
           <View style={[styles.changePill, !isPositive && { backgroundColor: colors.red + '22' }]}>
@@ -129,13 +130,13 @@ export const AssetDetailsScreen = () => {
         <View style={styles.statsGrid}>
           <View style={styles.statBox}>
             <Text style={styles.statLabel}>24H HIGH</Text>
-            <Text style={styles.statValue}>
+            <Text style={styles.statValue} numberOfLines={1}>
               {priceLKR > 0 ? `රු ${formatNumber(priceLKR * 1.025, 0)}` : '---'}
             </Text>
           </View>
           <View style={styles.statBox}>
             <Text style={styles.statLabel}>24H LOW</Text>
-            <Text style={styles.statValue}>
+            <Text style={styles.statValue} numberOfLines={1}>
               {priceLKR > 0 ? `රු ${formatNumber(priceLKR * 0.975, 0)}` : '---'}
             </Text>
           </View>
@@ -204,13 +205,13 @@ export const AssetDetailsScreen = () => {
       </ScrollView>
 
       {/* Fixed Bottom CTA Row */}
-      <View style={styles.bottomCtaRow}>
+      <View style={[styles.bottomCtaRow, { paddingBottom: Math.max(insets.bottom, 14) }]}>
         <PrimaryButton
           title="SELL"
           style={styles.sellBtn}
           onPress={() => navigation.navigate('Trade', { symbol, action: 'SELL' })}
         />
-        <View style={{ width: 16 }} />
+        <View style={{ width: 14 }} />
         <PrimaryButton
           title={`BUY ${coin}`}
           style={styles.buyBtn}
@@ -227,18 +228,18 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bg,
   },
   container: {
-    paddingBottom: 100,
+    paddingBottom: 120,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    marginBottom: 20,
+    paddingHorizontal: SCREEN_PADDING,
+    paddingTop: 12,
+    marginBottom: spacing.m,
   },
   backButton: {
-    padding: 8,
-    marginLeft: -8,
+    padding: 6,
+    marginLeft: -6,
   },
   headerTitles: {
     flex: 1,
@@ -257,18 +258,20 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
   },
   iconBtn: {
-    marginLeft: 16,
-    padding: 8,
+    marginLeft: 12,
+    padding: 6,
   },
   priceSection: {
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: spacing.m,
+    paddingHorizontal: SCREEN_PADDING,
   },
   priceValue: {
     fontSize: 32,
     fontWeight: '700',
     color: '#FFF',
     marginBottom: 8,
+    fontVariant: ['tabular-nums'],
   },
   changePill: {
     flexDirection: 'row',
@@ -283,16 +286,18 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     fontSize: 14,
     marginLeft: 6,
+    fontVariant: ['tabular-nums'],
   },
   statsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    paddingHorizontal: 24,
-    marginBottom: 20,
+    paddingHorizontal: SCREEN_PADDING,
+    marginBottom: spacing.m,
   },
   statBox: {
     width: '50%',
-    marginBottom: 14,
+    marginBottom: 12,
+    paddingRight: 8,
   },
   statLabel: {
     ...typography.label,
@@ -303,12 +308,13 @@ const styles = StyleSheet.create({
   statValue: {
     ...typography.body,
     fontWeight: '600',
+    fontVariant: ['tabular-nums'],
   },
   aiCard: {
-    marginHorizontal: 20,
+    marginHorizontal: SCREEN_PADDING,
     borderColor: colors.accent,
     backgroundColor: colors.accentMuted + '33',
-    padding: 16,
+    padding: spacing.m,
   },
   aiHeaderRow: {
     flexDirection: 'row',
@@ -408,8 +414,8 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     flexDirection: 'row',
-    paddingHorizontal: 20,
-    paddingVertical: 14,
+    paddingHorizontal: SCREEN_PADDING,
+    paddingTop: 12,
     backgroundColor: colors.bg,
     borderTopWidth: 1,
     borderTopColor: colors.border,
@@ -422,3 +428,4 @@ const styles = StyleSheet.create({
     flex: 1,
   },
 });
+

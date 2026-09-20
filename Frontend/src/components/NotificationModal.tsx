@@ -7,7 +7,8 @@ import {
   TouchableOpacity,
   ScrollView,
   ActivityIndicator,
-  Dimensions
+  Dimensions,
+  RefreshControl,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { colors, typography, layout } from '../theme';
@@ -191,7 +192,18 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
               <Text style={styles.loadingText}>Fetching alerts & market updates...</Text>
             </View>
           ) : (
-            <ScrollView style={styles.listScroll} showsVerticalScrollIndicator={false}>
+            <ScrollView
+              style={styles.listScroll}
+              showsVerticalScrollIndicator={false}
+              refreshControl={
+                <RefreshControl
+                  refreshing={loading}
+                  onRefresh={fetchAlerts}
+                  tintColor={colors.accent}
+                  colors={[colors.accent]}
+                />
+              }
+            >
               {items.length > 0 ? (
                 items.map((item: any) => (
                   <TouchableOpacity
@@ -221,6 +233,7 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
                       <TouchableOpacity
                         style={styles.deleteAlertBtn}
                         onPress={() => handleDeleteAlert(item.rawId)}
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                       >
                         <MaterialIcons name="delete-outline" size={20} color={colors.red} />
                       </TouchableOpacity>

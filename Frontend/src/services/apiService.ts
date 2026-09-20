@@ -328,7 +328,38 @@ export const marketService = {
   },
 };
 
+// In-flight request cache for getOverview
+let inFlightOverviewPromise: Promise<any> | null = null;
+let cachedOverviewData: any = null;
+let cachedOverviewTime = 0;
+
 export const walletService = {
+  getOverview: async (forceRefresh: boolean = false) => {
+    try {
+      const now = Date.now();
+      // Return cached data if fresh (within 3 seconds) unless forced
+      if (!forceRefresh && cachedOverviewData && (now - cachedOverviewTime < 3000)) {
+        return cachedOverviewData;
+      }
+      if (inFlightOverviewPromise) {
+        return await inFlightOverviewPromise;
+      }
+
+      inFlightOverviewPromise = (async () => {
+        const response = await api.get('/wallet/overview');
+        cachedOverviewData = response.data;
+        cachedOverviewTime = Date.now();
+        return response.data;
+      })();
+
+      return await inFlightOverviewPromise;
+    } catch (error) {
+      console.error('Error fetching consolidated wallet overview:', error);
+      throw error;
+    } finally {
+      inFlightOverviewPromise = null;
+    }
+  },
   getBalance: async () => {
     try {
       const response = await api.get('/wallet/balance');
