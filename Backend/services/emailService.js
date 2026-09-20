@@ -100,26 +100,118 @@ const dispatchBrevoEmail = async ({ to, subject, htmlContent, logLabel = 'Email'
 };
 
 /**
- * 1. Send OTP for Email Verification (Registration & Verification Flow)
+ * 1. Send OTP for Email Verification (Ultra-Premium Fintech Design)
  */
 const sendVerificationOTPEmail = async (email, otp) => {
   const htmlContent = `
-    <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; padding: 30px; border: 1px solid #e2e8f0; border-radius: 12px; background-color: #ffffff; color: #1a202c;">
-      <div style="text-align: center; margin-bottom: 25px;">
-        <h1 style="color: #00C853; margin: 0; font-size: 28px; font-weight: 800; letter-spacing: -0.5px;">SmartLanka Trade</h1>
-        <p style="color: #718096; font-size: 14px; margin-top: 6px;">Institutional-Grade Crypto & Financial Asset Platform</p>
-      </div>
-      <div style="background: #f7fafc; border-radius: 10px; padding: 24px; text-align: center; margin-bottom: 25px; border: 1px solid #edf2f7;">
-        <p style="font-size: 15px; color: #4a5568; margin: 0 0 16px 0;">Use the 6-digit verification code below to complete your registration:</p>
-        <div style="font-size: 34px; font-weight: 800; letter-spacing: 8px; color: #00C853; padding: 14px 28px; background: #e8f5e9; border: 1px solid #c8e6c9; border-radius: 8px; display: inline-block; font-family: monospace;">
-          ${otp}
-        </div>
-        <p style="font-size: 13px; color: #718096; margin-top: 16px;">⏱️ This code is valid for <strong>10 minutes</strong>.</p>
-      </div>
-      <p style="font-size: 13px; color: #718096; line-height: 1.6;">If you did not request this verification code, you can safely disregard this email or contact our security center.</p>
-      <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0;">
-      <p style="font-size: 12px; color: #a0aec0; text-align: center;">&copy; ${new Date().getFullYear()} SmartLanka Trade. All rights reserved.</p>
-    </div>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SmartLanka Trade - Verification Code</title>
+</head>
+<body style="margin: 0; padding: 0; background-color: #07090E; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; -webkit-font-smoothing: antialiased; color: #FFFFFF;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color: #07090E; padding: 40px 15px;">
+    <tr>
+      <td align="center">
+        <!-- Main Card Container -->
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width: 540px; background-color: #0F141E; border-radius: 16px; border: 1px solid #1E2838; overflow: hidden; box-shadow: 0 20px 40px rgba(0,0,0,0.6);">
+          
+          <!-- Top Gradient Accent Bar -->
+          <tr>
+            <td height="5" style="background: linear-gradient(90deg, #00C853 0%, #00E5FF 50%, #00C853 100%);"></td>
+          </tr>
+
+          <!-- Header Section -->
+          <tr>
+            <td style="padding: 35px 35px 20px 35px; text-align: center;">
+              <!-- Brand Badge -->
+              <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" style="margin: 0 auto 15px auto;">
+                <tr>
+                  <td style="background-color: rgba(0, 229, 255, 0.08); border: 1px solid rgba(0, 229, 255, 0.25); border-radius: 30px; padding: 6px 16px;">
+                    <span style="font-size: 11px; font-weight: 700; color: #00E5FF; letter-spacing: 1.5px; text-transform: uppercase;">
+                      ⚡ Institutional Asset Security
+                    </span>
+                  </td>
+                </tr>
+              </table>
+
+              <h1 style="margin: 0 0 6px 0; font-size: 26px; font-weight: 800; color: #FFFFFF; letter-spacing: -0.5px;">
+                SmartLanka <span style="color: #00E5FF;">Trade</span>
+              </h1>
+              <p style="margin: 0; font-size: 13px; color: #7E8B9F;">
+                Digital Asset & High-Performance Trading Platform
+              </p>
+            </td>
+          </tr>
+
+          <!-- Content Section -->
+          <tr>
+            <td style="padding: 10px 35px 30px 35px; text-align: center;">
+              
+              <div style="background-color: #141B28; border-radius: 12px; border: 1px solid #232E42; padding: 25px 20px; margin-bottom: 25px;">
+                <p style="margin: 0 0 16px 0; font-size: 14px; color: #94A3B8; line-height: 1.5;">
+                  Use the following one-time verification code to activate and secure your trading account:
+                </p>
+
+                <!-- OTP Code Display Card -->
+                <div style="background: linear-gradient(180deg, #0A0E17 0%, #060910 100%); border: 1px solid #00E5FF; border-radius: 12px; padding: 18px 24px; margin: 0 auto 16px auto; display: inline-block; box-shadow: 0 0 25px rgba(0, 229, 255, 0.15);">
+                  <span style="font-family: 'SF Pro Display', -apple-system, 'SF Mono', Consolas, 'Courier New', monospace; font-size: 38px; font-weight: 800; letter-spacing: 10px; color: #00E5FF; padding-left: 10px; text-shadow: 0 0 15px rgba(0, 229, 255, 0.4);">
+                    ${otp}
+                  </span>
+                </div>
+
+                <!-- Expiry Pill -->
+                <div style="margin-top: 10px;">
+                  <span style="display: inline-block; font-size: 12px; font-weight: 600; color: #00C853; background-color: rgba(0, 200, 83, 0.1); border: 1px solid rgba(0, 200, 83, 0.25); border-radius: 20px; padding: 4px 12px;">
+                    ⏱️ Valid for 10 minutes
+                  </span>
+                </div>
+              </div>
+
+              <!-- Security Advice Box -->
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color: rgba(239, 68, 68, 0.05); border: 1px solid rgba(239, 68, 68, 0.2); border-radius: 8px; margin-bottom: 25px;">
+                <tr>
+                  <td style="padding: 12px 16px; text-align: left;">
+                    <p style="margin: 0; font-size: 12px; color: #FCA5A5; line-height: 1.5;">
+                      <strong>🔒 Security Tip:</strong> Never share this code with anyone. SmartLanka Trade staff will never request your verification code or credentials.
+                    </p>
+                  </td>
+                </tr>
+              </table>
+
+              <p style="margin: 0; font-size: 12px; color: #64748B; line-height: 1.5;">
+                If you did not initiate this request, you can safely ignore this email.
+              </p>
+            </td>
+          </tr>
+
+          <!-- Divider -->
+          <tr>
+            <td style="padding: 0 35px;">
+              <div style="height: 1px; background-color: #1E2838; width: 100%;"></div>
+            </td>
+          </tr>
+
+          <!-- Footer Section -->
+          <tr>
+            <td style="padding: 25px 35px; text-align: center;">
+              <p style="margin: 0 0 8px 0; font-size: 12px; color: #64748B;">
+                SmartLanka Trade &bull; Colombo, Sri Lanka
+              </p>
+              <p style="margin: 0; font-size: 11px; color: #475569;">
+                &copy; ${new Date().getFullYear()} SmartLanka Trade Inc. All rights reserved.
+              </p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
   `;
 
   return await dispatchBrevoEmail({
@@ -131,26 +223,107 @@ const sendVerificationOTPEmail = async (email, otp) => {
 };
 
 /**
- * 2. Send OTP for Password Reset
+ * 2. Send OTP for Password Reset (Ultra-Premium Fintech Design)
  */
 const sendPasswordResetOTPEmail = async (email, otp) => {
   const htmlContent = `
-    <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; padding: 30px; border: 1px solid #e2e8f0; border-radius: 12px; background-color: #ffffff; color: #1a202c;">
-      <div style="text-align: center; margin-bottom: 25px;">
-        <h1 style="color: #00C853; margin: 0; font-size: 28px; font-weight: 800; letter-spacing: -0.5px;">SmartLanka Trade</h1>
-        <p style="color: #718096; font-size: 14px; margin-top: 6px;">Security & Account Recovery</p>
-      </div>
-      <div style="background: #fff5f5; border-radius: 10px; padding: 24px; text-align: center; margin-bottom: 25px; border: 1px solid #fed7d7;">
-        <p style="font-size: 15px; color: #742a2a; margin: 0 0 16px 0;">You requested to reset your password. Use the code below:</p>
-        <div style="font-size: 34px; font-weight: 800; letter-spacing: 8px; color: #e53e3e; padding: 14px 28px; background: #ffe3e3; border: 1px solid #feb2b2; border-radius: 8px; display: inline-block; font-family: monospace;">
-          ${otp}
-        </div>
-        <p style="font-size: 13px; color: #718096; margin-top: 16px;">⏱️ This recovery code expires in <strong>10 minutes</strong>.</p>
-      </div>
-      <p style="font-size: 13px; color: #718096; line-height: 1.6;">If you did not request a password reset, please secure your account immediately.</p>
-      <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0;">
-      <p style="font-size: 12px; color: #a0aec0; text-align: center;">&copy; ${new Date().getFullYear()} SmartLanka Trade. All rights reserved.</p>
-    </div>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SmartLanka Trade - Password Reset</title>
+</head>
+<body style="margin: 0; padding: 0; background-color: #07090E; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; -webkit-font-smoothing: antialiased; color: #FFFFFF;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color: #07090E; padding: 40px 15px;">
+    <tr>
+      <td align="center">
+        <!-- Main Card Container -->
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width: 540px; background-color: #0F141E; border-radius: 16px; border: 1px solid #1E2838; overflow: hidden; box-shadow: 0 20px 40px rgba(0,0,0,0.6);">
+          
+          <!-- Top Gradient Accent Bar (Amber/Red for security alert) -->
+          <tr>
+            <td height="5" style="background: linear-gradient(90deg, #FF5722 0%, #FF9800 50%, #FF5722 100%);"></td>
+          </tr>
+
+          <!-- Header Section -->
+          <tr>
+            <td style="padding: 35px 35px 20px 35px; text-align: center;">
+              <!-- Brand Badge -->
+              <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" style="margin: 0 auto 15px auto;">
+                <tr>
+                  <td style="background-color: rgba(255, 87, 34, 0.1); border: 1px solid rgba(255, 87, 34, 0.3); border-radius: 30px; padding: 6px 16px;">
+                    <span style="font-size: 11px; font-weight: 700; color: #FF5722; letter-spacing: 1.5px; text-transform: uppercase;">
+                      🛡️ Password Recovery Request
+                    </span>
+                  </td>
+                </tr>
+              </table>
+
+              <h1 style="margin: 0 0 6px 0; font-size: 26px; font-weight: 800; color: #FFFFFF; letter-spacing: -0.5px;">
+                SmartLanka <span style="color: #FF5722;">Trade</span>
+              </h1>
+              <p style="margin: 0; font-size: 13px; color: #7E8B9F;">
+                Account Recovery & Security Authentication
+              </p>
+            </td>
+          </tr>
+
+          <!-- Content Section -->
+          <tr>
+            <td style="padding: 10px 35px 30px 35px; text-align: center;">
+              
+              <div style="background-color: #141B28; border-radius: 12px; border: 1px solid #232E42; padding: 25px 20px; margin-bottom: 25px;">
+                <p style="margin: 0 0 16px 0; font-size: 14px; color: #94A3B8; line-height: 1.5;">
+                  You requested to reset your password. Use the verification code below:
+                </p>
+
+                <!-- OTP Code Display Card -->
+                <div style="background: linear-gradient(180deg, #0A0E17 0%, #060910 100%); border: 1px solid #FF5722; border-radius: 12px; padding: 18px 24px; margin: 0 auto 16px auto; display: inline-block; box-shadow: 0 0 25px rgba(255, 87, 34, 0.15);">
+                  <span style="font-family: 'SF Pro Display', -apple-system, 'SF Mono', Consolas, 'Courier New', monospace; font-size: 38px; font-weight: 800; letter-spacing: 10px; color: #FF5722; padding-left: 10px; text-shadow: 0 0 15px rgba(255, 87, 34, 0.4);">
+                    ${otp}
+                  </span>
+                </div>
+
+                <!-- Expiry Pill -->
+                <div style="margin-top: 10px;">
+                  <span style="display: inline-block; font-size: 12px; font-weight: 600; color: #FF9800; background-color: rgba(255, 152, 0, 0.1); border: 1px solid rgba(255, 152, 0, 0.25); border-radius: 20px; padding: 4px 12px;">
+                    ⏱️ Valid for 10 minutes
+                  </span>
+                </div>
+              </div>
+
+              <!-- Security Advice Box -->
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color: rgba(239, 68, 68, 0.05); border: 1px solid rgba(239, 68, 68, 0.2); border-radius: 8px; margin-bottom: 25px;">
+                <tr>
+                  <td style="padding: 12px 16px; text-align: left;">
+                    <p style="margin: 0; font-size: 12px; color: #FCA5A5; line-height: 1.5;">
+                      <strong>⚠️ Security Notice:</strong> If you did NOT request a password reset, someone may be attempting to access your account. Please change your password immediately.
+                    </p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Footer Section -->
+          <tr>
+            <td style="padding: 25px 35px; text-align: center; border-top: 1px solid #1E2838;">
+              <p style="margin: 0 0 8px 0; font-size: 12px; color: #64748B;">
+                SmartLanka Trade &bull; Security Operations Center
+              </p>
+              <p style="margin: 0; font-size: 11px; color: #475569;">
+                &copy; ${new Date().getFullYear()} SmartLanka Trade Inc. All rights reserved.
+              </p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
   `;
 
   return await dispatchBrevoEmail({
@@ -168,14 +341,32 @@ const sendVerificationEmail = async (email, token) => {
   const baseUrl = process.env.BASE_URL || 'https://smart-lanka-trade-final.onrender.com';
   const url = `${baseUrl}/api/auth/verify/${token}`;
   const htmlContent = `
-    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 25px; border: 1px solid #eee; border-radius: 10px;">
-      <h2 style="color: #00C853; text-align: center;">Welcome to SmartLanka Trade!</h2>
-      <p>Thank you for signing up. Please click the button below to verify your email address:</p>
-      <div style="text-align: center; margin: 30px 0;">
-        <a href="${url}" style="padding: 14px 28px; background-color: #00C853; color: white; text-decoration: none; border-radius: 6px; font-weight: bold; font-size: 16px; display: inline-block;">Verify My Account</a>
-      </div>
-      <p style="font-size: 12px; color: #888;">If the button does not work, copy and paste this URL into your browser:<br>${url}</p>
-    </div>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Verify Your SmartLanka Account</title>
+</head>
+<body style="margin: 0; padding: 0; background-color: #07090E; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #FFFFFF;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color: #07090E; padding: 40px 15px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width: 540px; background-color: #0F141E; border-radius: 16px; border: 1px solid #1E2838; overflow: hidden;">
+          <tr><td height="5" style="background: linear-gradient(90deg, #00C853, #00E5FF);"></td></tr>
+          <tr>
+            <td style="padding: 35px; text-align: center;">
+              <h1 style="margin: 0 0 10px 0; font-size: 24px; color: #FFFFFF;">Welcome to SmartLanka <span style="color:#00E5FF;">Trade</span></h1>
+              <p style="font-size: 14px; color: #94A3B8; margin-bottom: 25px;">Please confirm your email address by clicking the activation button below:</p>
+              <a href="${url}" style="padding: 14px 32px; background: linear-gradient(135deg, #00C853 0%, #00E5FF 100%); color: #07090E; text-decoration: none; border-radius: 8px; font-weight: 700; font-size: 15px; display: inline-block;">Verify My Account &rarr;</a>
+              <p style="font-size: 11px; color: #64748B; margin-top: 25px; word-break: break-all;">Link: ${url}</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
   `;
 
   return await dispatchBrevoEmail({
@@ -190,18 +381,42 @@ const sendVerificationEmail = async (email, token) => {
  * 4. Send Price Alert Email
  */
 const sendPriceAlertEmail = async (email, symbol, targetPrice, currentPrice, alertType) => {
+  const isAbove = alertType === 'ABOVE';
   const htmlContent = `
-    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 25px; border: 1px solid #eee; border-radius: 10px;">
-      <h2 style="color: #00C853; text-align: center;">🚀 Price Alert Triggered!</h2>
-      <p>Your target alert for <strong>${symbol}</strong> has been triggered.</p>
-      <div style="background-color: #f8fafc; padding: 20px; border-radius: 8px; margin: 20px 0;">
-        <p style="margin: 6px 0;"><strong>Symbol:</strong> ${symbol}</p>
-        <p style="margin: 6px 0;"><strong>Target Price:</strong> ${targetPrice}</p>
-        <p style="margin: 6px 0;"><strong>Current Price:</strong> ${currentPrice}</p>
-        <p style="margin: 6px 0;"><strong>Condition:</strong> ${alertType === 'ABOVE' ? 'Price went above target' : 'Price dropped below target'}</p>
-      </div>
-      <p>Log in to your SmartLanka Trade account to manage positions.</p>
-    </div>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>SmartLanka Trade Price Alert</title>
+</head>
+<body style="margin: 0; padding: 0; background-color: #07090E; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #FFFFFF;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color: #07090E; padding: 40px 15px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width: 540px; background-color: #0F141E; border-radius: 16px; border: 1px solid #1E2838; overflow: hidden;">
+          <tr><td height="5" style="background: linear-gradient(90deg, #00C853, #00E5FF);"></td></tr>
+          <tr>
+            <td style="padding: 35px; text-align: center;">
+              <span style="font-size: 32px;">🚀</span>
+              <h2 style="margin: 10px 0 5px 0; font-size: 22px; color: #FFFFFF;">Price Alert Triggered!</h2>
+              <p style="font-size: 14px; color: #94A3B8; margin-bottom: 20px;">Your market trigger for <strong>${symbol}</strong> has been reached.</p>
+              
+              <div style="background-color: #141B28; border-radius: 10px; border: 1px solid #232E42; padding: 20px; text-align: left; margin-bottom: 20px;">
+                <p style="margin: 6px 0; font-size: 14px; color: #94A3B8;">Symbol: <strong style="color: #FFFFFF;">${symbol}</strong></p>
+                <p style="margin: 6px 0; font-size: 14px; color: #94A3B8;">Target Price: <strong style="color: #00E5FF;">${targetPrice}</strong></p>
+                <p style="margin: 6px 0; font-size: 14px; color: #94A3B8;">Current Price: <strong style="color: ${isAbove ? '#00C853' : '#FF5722'};">${currentPrice}</strong></p>
+                <p style="margin: 6px 0; font-size: 14px; color: #94A3B8;">Condition: <strong style="color: #FFFFFF;">${isAbove ? 'Price rose above target' : 'Price fell below target'}</strong></p>
+              </div>
+
+              <p style="font-size: 12px; color: #64748B;">Log in to SmartLanka Trade to manage active positions.</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
   `;
 
   return await dispatchBrevoEmail({
