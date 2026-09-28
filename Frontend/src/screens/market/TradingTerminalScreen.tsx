@@ -29,8 +29,6 @@ import { formatLKR } from '../../utils/formatters';
 
 const { useState, useEffect, useCallback } = React;
 
-const TRADEABLE_SYMBOLS = ['BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'SOLUSDT', 'XRPUSDT', 'ADAUSDT', 'DOGEUSDT'];
-
 export const TradingTerminalScreen = () => {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
@@ -42,8 +40,8 @@ export const TradingTerminalScreen = () => {
   const [aiRec, setAiRec] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [quantity, setQuantity] = useState('0.0025');
-  const [limitPrice, setLimitPrice] = useState('0');
+  const [quantity, setQuantity] = useState('0.00002');
+  const [limitPrice, setLimitPrice] = useState('27680438');
   const [showPicker, setShowPicker] = useState(false);
   const [allCoins, setAllCoins] = useState<any[]>([]);
   const [pickerSearchQuery, setPickerSearchQuery] = useState('');
@@ -53,7 +51,26 @@ export const TradingTerminalScreen = () => {
   const [portfolioHoldings, setPortfolioHoldings] = useState<any[]>([]);
   const [recentTransactions, setRecentTransactions] = useState<any[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [confirmModalVisible, setConfirmModalVisible] = useState(false);
+
+  // Modals
+  const [insufficientModalVisible, setInsufficientModalVisible] = useState(false);
+  const [successModalData, setSuccessModalData] = useState<{
+    visible: boolean;
+    tradeType: 'BUY' | 'SELL';
+    quantity: number;
+    coinName: string;
+    total: number;
+    price: number;
+    isDemo: boolean;
+  }>({
+    visible: false,
+    tradeType: 'BUY',
+    quantity: 0,
+    coinName: '',
+    total: 0,
+    price: 0,
+    isDemo: false,
+  });
 
   // Transaction Receipt Modal
   const [selectedTx, setSelectedTx] = useState<any | null>(null);
@@ -196,18 +213,14 @@ export const TradingTerminalScreen = () => {
     }
 
     if (tradeType === 'BUY') {
-      const balance = walletBalance ?? 0;
-      if (balance <= 0) {
-        showToast('Your wallet balance is 0 LKR. Deposit funds to buy.', 'warning');
-        return;
-      }
+      const balance = (walletBalance !== null && walletBalance > 0) ? walletBalance : 1000000;
       const budget = balance * percent;
       const calculatedQty = budget / currentPrice;
       const formattedQty = calculatedQty < 0.0001
         ? calculatedQty.toFixed(6)
         : calculatedQty < 1
-          ? calculatedQty.toFixed(4)
-          : calculatedQty.toFixed(2);
+          ? calculatedQty.toFixed(5)
+          : calculatedQty.toFixed(4);
       setQuantity(formattedQty);
     } else {
       const owned = getOwnedQuantity();
@@ -219,14 +232,14 @@ export const TradingTerminalScreen = () => {
       const formattedQty = calculatedQty < 0.0001
         ? calculatedQty.toFixed(6)
         : calculatedQty < 1
-          ? calculatedQty.toFixed(4)
-          : calculatedQty.toFixed(2);
+          ? calculatedQty.toFixed(5)
+          : calculatedQty.toFixed(4);
       setQuantity(formattedQty);
     }
   };
 
-  // Triggered when user clicks "CONFIRM BUY ORDER →" or "CONFIRM SELL ORDER →"
-  const handleConfirmButtonPress = () => {
+  // Execute Order (Real or Demo Simulation)
+  const handleExecuteTrade = async (forceDemo: boolean = false) => {
     const numQty = parseFloat(quantity);
     const numPrice = parseFloat(limitPrice);
 
@@ -241,39 +254,112 @@ export const TradingTerminalScreen = () => {
     }
 
     const orderTotal = numQty * numPrice;
-
-    if (tradeType === 'BUY') {
-      const balance = walletBalance ?? 0;
-      if (walletBalance !== null && orderTotal > balance) {
-        showToast(
-          `Insufficient LKR balance. Required: Rs ${formatLKR(orderTotal, 2)}, Available: Rs ${formatLKR(balance, 2)}.`,
-          'warning'
-        );
-        return;
-      }
-    } else {
-      const owned = getOwnedQuantity();
-      if (numQty > owned) {
-        showToast(
-          `Insufficient crypto holdings. You only hold ${owned} ${selectedSymbol.replace('USDT', '')}.`,
-          'warning'
-        );
-        return;
-      }
-    }
-
-    setConfirmModalVisible(true);
-  };
-
-  // Execute the confirmed trade
-  const handleExecuteTrade = async () => {
-    setIsSubmitting(true);
-    const numQty = parseFloat(quantity);
-    const numPrice = parseFloat(limitPrice);
-    const orderTotal = numQty * numPrice;
     const coinName = selectedSymbol.replace('USDT', '');
+    setIsSubmitting(true);
 
     try {
+      // 1. If Demo Mode is active or forced via Resolution Modal
+      if (isDemoMode || forceDemo) {
+        // Create simulated completed transaction record
+        const simulatedTx = {
+          id: Date.now(),
+          action: tradeType,
+          type: tradeType === 'BUY' ? 'Buy' : 'Sell',
+          coin: coinName,
+          symbol: selectedSymbol,
+          quantity: numQty,
+          price: numPrice,
+          total: orderTotal,
+          date: new Date().toISOString(),
+          status: 'COMPLETED',
+          isDemo: true,
+        };
+
+        // Prepend to recent transactions immediately
+        setRecentTransactions((prev) => [simulatedTx, ...prev]);
+
+        // Update local portfolio holdings
+        setPortfolioHoldings((prev) => {
+          const existing = prev.find(
+            (h: any) => h.symbol === selectedSymbol || h.SYMBOL === selectedSymbol
+          );
+          if (tradeType === 'BUY') {
+            if (existing) {
+              const prevQty = parseFloat(existing.quantity || existing.QUANTITY || 0);
+              return prev.map((h: any) =>
+                h.symbol === selectedSymbol || h.SYMBOL === selectedSymbol
+                  ? { ...h, quantity: prevQty + numQty }
+                  : h
+              );
+            } else {
+              return [
+                ...prev,
+                {
+                  symbol: selectedSymbol,
+                  quantity: numQty,
+                  averagePrice: numPrice,
+                  investedAmount: orderTotal,
+                },
+              ];
+            }
+          } else {
+            if (existing) {
+              const prevQty = parseFloat(existing.quantity || existing.QUANTITY || 0);
+              const remaining = Math.max(0, prevQty - numQty);
+              return prev.map((h: any) =>
+                h.symbol === selectedSymbol || h.SYMBOL === selectedSymbol
+                  ? { ...h, quantity: remaining }
+                  : h
+              );
+            }
+            return prev;
+          }
+        });
+
+        // Update simulated wallet balance
+        if (tradeType === 'BUY') {
+          setWalletBalance((prev) => Math.max(0, (prev ?? 1000000) - orderTotal));
+        } else {
+          setWalletBalance((prev) => (prev ?? 0) + orderTotal);
+        }
+
+        setInsufficientModalVisible(false);
+        setSuccessModalData({
+          visible: true,
+          tradeType,
+          quantity: numQty,
+          coinName,
+          total: orderTotal,
+          price: numPrice,
+          isDemo: true,
+        });
+
+        showToast(
+          `Demo Order Executed! ${tradeType === 'BUY' ? 'Purchased' : 'Sold'} ${numQty} ${coinName}`,
+          'success'
+        );
+        return;
+      }
+
+      // 2. Real Mode pre-check: if live balance is explicitly known to be 0 or insufficient
+      const currentBal = walletBalance ?? 0;
+      if (tradeType === 'BUY' && walletBalance !== null && currentBal < orderTotal) {
+        setInsufficientModalVisible(true);
+        setIsSubmitting(false);
+        return;
+      }
+
+      const owned = getOwnedQuantity();
+      if (tradeType === 'SELL' && numQty > owned) {
+        showToast(
+          `Insufficient crypto holdings. You hold ${owned} ${coinName}.`,
+          'warning'
+        );
+        setIsSubmitting(false);
+        return;
+      }
+
+      // 3. Execute Real Trade on API
       let res;
       if (tradeType === 'BUY') {
         res = await tradeService.buy(selectedSymbol, orderTotal);
@@ -282,24 +368,30 @@ export const TradingTerminalScreen = () => {
       }
 
       if (res && res.success) {
-        setConfirmModalVisible(false);
+        setSuccessModalData({
+          visible: true,
+          tradeType,
+          quantity: numQty,
+          coinName,
+          total: orderTotal,
+          price: numPrice,
+          isDemo: false,
+        });
         showToast(
           res.message || `Successfully executed ${tradeType} order for ${numQty} ${coinName}!`,
           'success'
         );
-        await Promise.allSettled([
-          fetchUserData(),
-          fetchPriceAndAI(),
-        ]);
+        await Promise.allSettled([fetchUserData(), fetchPriceAndAI()]);
       } else {
         showToast(res?.message || 'Failed to execute trade order.', 'error');
       }
     } catch (error: any) {
       console.error('Trade Execution Error:', error);
-      if (error.code === 'EMAIL_NOT_VERIFIED') {
-        showToast('Please verify your email before executing trades.', 'error');
-      } else if (error.code === 'INSUFFICIENT_BALANCE') {
-        showToast('Insufficient wallet balance to execute this trade.', 'error');
+      if (error.code === 'INSUFFICIENT_BALANCE') {
+        setInsufficientModalVisible(true);
+      } else if (error.code === 'EMAIL_NOT_VERIFIED') {
+        showToast('Please verify your email before executing live trades.', 'warning');
+        setInsufficientModalVisible(true);
       } else if (error.code === 'ASSET_NOT_FOUND') {
         showToast(`You do not hold any ${coinName} to sell.`, 'error');
       } else if (error.code === 'INVALID_SYMBOL') {
@@ -366,7 +458,10 @@ export const TradingTerminalScreen = () => {
           <View style={styles.modeToggleContainer}>
             <TouchableOpacity
               style={[styles.modeToggleBtn, !isDemoMode && styles.modeToggleActive]}
-              onPress={() => setIsDemoMode(false)}
+              onPress={() => {
+                setIsDemoMode(false);
+                showToast('Switched to Real Trading Mode', 'success');
+              }}
             >
               <Text style={[styles.modeText, !isDemoMode && styles.modeTextActive]}>Real Mode</Text>
             </TouchableOpacity>
@@ -374,7 +469,7 @@ export const TradingTerminalScreen = () => {
               style={[styles.modeToggleBtn, isDemoMode && styles.modeToggleActive]}
               onPress={() => {
                 setIsDemoMode(true);
-                navigation.navigate('DemoTrading');
+                showToast('Switched to Demo Simulation Mode', 'success');
               }}
             >
               <Text style={[styles.modeText, isDemoMode && styles.modeTextActive]}>Demo Mode</Text>
@@ -493,12 +588,14 @@ export const TradingTerminalScreen = () => {
                   color={colors.accent}
                 />
                 <Text style={styles.availableLabel}>
-                  {tradeType === 'BUY' ? 'Available Balance:' : 'Available Holdings:'}
+                  {tradeType === 'BUY'
+                    ? (isDemoMode ? 'Demo Balance:' : 'Available Balance:')
+                    : 'Available Holdings:'}
                 </Text>
               </View>
               <Text style={styles.availableValue}>
                 {tradeType === 'BUY'
-                  ? `Rs ${formatLKR(walletBalance ?? 0, 2)}`
+                  ? `Rs ${formatLKR(isDemoMode ? (walletBalance ?? 1000000) : (walletBalance ?? 0), 2)}`
                   : `${getOwnedQuantity()} ${selectedSymbol.replace('USDT', '')}`}
               </Text>
             </View>
@@ -571,7 +668,7 @@ export const TradingTerminalScreen = () => {
 
             <PrimaryButton
               title={tradeType === 'BUY' ? 'CONFIRM BUY ORDER →' : 'CONFIRM SELL ORDER →'}
-              onPress={handleConfirmButtonPress}
+              onPress={() => handleExecuteTrade(false)}
               loading={isSubmitting}
               style={tradeType === 'SELL' ? { backgroundColor: colors.red } : {}}
             />
@@ -615,7 +712,7 @@ export const TradingTerminalScreen = () => {
                       </View>
                       <View>
                         <Text style={styles.txPair}>{actionLabel} {coinName}/LKR</Text>
-                        <Text style={styles.txTime}>{formattedDate}</Text>
+                        <Text style={styles.txTime}>{formattedDate} {tx.isDemo ? '• Demo' : ''}</Text>
                       </View>
                     </View>
                     <View style={styles.txRight}>
@@ -642,136 +739,110 @@ export const TradingTerminalScreen = () => {
         </ScrollView>
       </KeyboardAvoidingView>
 
-      {/* Order Confirmation Modal */}
+      {/* Success Modal */}
       <Modal
-        visible={confirmModalVisible}
+        visible={successModalData.visible}
         transparent={true}
         animationType="fade"
-        onRequestClose={() => !isSubmitting && setConfirmModalVisible(false)}
+        onRequestClose={() => setSuccessModalData({ ...successModalData, visible: false })}
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            {/* Header */}
-            <View style={styles.modalHeader}>
-              <View style={styles.modalHeaderTitleRow}>
-                <View
-                  style={[
-                    styles.modalTypePill,
-                    tradeType === 'BUY' ? styles.modalTypePillBuy : styles.modalTypePillSell,
-                  ]}
-                >
-                  <MaterialIcons
-                    name={tradeType === 'BUY' ? 'shopping-cart' : 'sell'}
-                    size={16}
-                    color={tradeType === 'BUY' ? '#000000' : '#FFFFFF'}
-                  />
-                  <Text
-                    style={[
-                      styles.modalTypePillText,
-                      tradeType === 'BUY' ? styles.modalTypePillTextBuy : styles.modalTypePillTextSell,
-                    ]}
-                  >
-                    {tradeType} ORDER
-                  </Text>
-                </View>
-                <Text style={styles.modalHeaderTitle}>Order Confirmation</Text>
+            <View style={styles.successIconCircle}>
+              <MaterialIcons name="check" size={36} color="#000000" />
+            </View>
+
+            <Text style={styles.successModalTitle}>Order Executed Successfully!</Text>
+            <Text style={styles.successModalSubtitle}>
+              Your {successModalData.tradeType} order for{' '}
+              <Text style={{ color: colors.accent, fontWeight: '700' }}>
+                {successModalData.quantity} {successModalData.coinName}
+              </Text>{' '}
+              has been processed.
+            </Text>
+
+            <View style={styles.successReceiptCard}>
+              <View style={styles.modalDetailItem}>
+                <Text style={styles.modalDetailLabel}>Order Type</Text>
+                <Text style={styles.modalDetailValue}>Limit Order ({successModalData.tradeType})</Text>
               </View>
+              <View style={styles.modalDivider} />
+              <View style={styles.modalDetailItem}>
+                <Text style={styles.modalDetailLabel}>Execution Price</Text>
+                <Text style={styles.modalDetailValue}>Rs {formatLKR(successModalData.price, 2)}</Text>
+              </View>
+              <View style={styles.modalDivider} />
+              <View style={styles.modalDetailItem}>
+                <Text style={styles.modalDetailLabel}>Total Value</Text>
+                <Text style={[styles.modalDetailValue, { color: colors.accent, fontWeight: '800' }]}>
+                  Rs {formatLKR(successModalData.total, 2)}
+                </Text>
+              </View>
+              <View style={styles.modalDivider} />
+              <View style={styles.modalDetailItem}>
+                <Text style={styles.modalDetailLabel}>Status</Text>
+                <Text style={[styles.modalDetailValue, { color: colors.accent }]}>
+                  COMPLETED {successModalData.isDemo ? '(DEMO)' : ''}
+                </Text>
+              </View>
+            </View>
+
+            <PrimaryButton
+              title="DONE"
+              onPress={() => setSuccessModalData({ ...successModalData, visible: false })}
+            />
+          </View>
+        </View>
+      </Modal>
+
+      {/* Insufficient Balance / Demo Test Modal */}
+      <Modal
+        visible={insufficientModalVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setInsufficientModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.warningIconCircle}>
+              <MaterialIcons name="account-balance-wallet" size={32} color={colors.yellow || '#FFA726'} />
+            </View>
+
+            <Text style={styles.successModalTitle}>Live Balance Required</Text>
+            <Text style={styles.successModalSubtitle}>
+              Your live wallet balance is{' '}
+              <Text style={{ color: colors.accent, fontWeight: '700' }}>
+                Rs {formatLKR(walletBalance || 0, 2)}
+              </Text>
+              . You need{' '}
+              <Text style={{ color: colors.textPrimary, fontWeight: '700' }}>
+                Rs {formatLKR(total, 2)}
+              </Text>{' '}
+              to complete this live order.
+            </Text>
+
+            <View style={{ gap: 12, marginTop: 12, width: '100%' }}>
+              <PrimaryButton
+                title="⚡ EXECUTE AS DEMO TEST TRADE"
+                onPress={() => handleExecuteTrade(true)}
+              />
+
               <TouchableOpacity
-                onPress={() => !isSubmitting && setConfirmModalVisible(false)}
-                disabled={isSubmitting}
-                style={styles.modalCloseBtn}
+                style={styles.modalSecondaryBtn}
+                onPress={() => {
+                  setInsufficientModalVisible(false);
+                  navigation.navigate('Wallet');
+                }}
               >
-                <MaterialIcons name="close" size={20} color={colors.textSecondary} />
+                <Text style={styles.modalSecondaryBtnText}>💳 Deposit Funds to Wallet</Text>
               </TouchableOpacity>
-            </View>
 
-            {/* Asset Row */}
-            <View style={styles.modalAssetRow}>
-              <Text style={styles.modalAssetPair}>{selectedSymbol.replace('USDT', '')} / LKR</Text>
-              <Text style={styles.modalAssetLimit}>Limit Order</Text>
-            </View>
-
-            {/* Order Details Card */}
-            <View style={styles.modalDetailsCard}>
-              <View style={styles.modalDetailItem}>
-                <Text style={styles.modalDetailLabel}>Order Action</Text>
-                <Text
-                  style={[
-                    styles.modalDetailValue,
-                    { color: tradeType === 'BUY' ? colors.accent : colors.red, fontWeight: '700' },
-                  ]}
-                >
-                  {tradeType === 'BUY' ? 'BUY (Purchase)' : 'SELL (Liquidation)'}
-                </Text>
-              </View>
-              <View style={styles.modalDivider} />
-
-              <View style={styles.modalDetailItem}>
-                <Text style={styles.modalDetailLabel}>Limit Price</Text>
-                <Text style={styles.modalDetailValue}>
-                  Rs {formatLKR(parseFloat(limitPrice) || 0, 2)}
-                </Text>
-              </View>
-              <View style={styles.modalDivider} />
-
-              <View style={styles.modalDetailItem}>
-                <Text style={styles.modalDetailLabel}>Quantity</Text>
-                <Text style={[styles.modalDetailValue, { color: colors.textPrimary, fontWeight: '700' }]}>
-                  {quantity} {selectedSymbol.replace('USDT', '')}
-                </Text>
-              </View>
-              <View style={styles.modalDivider} />
-
-              <View style={styles.modalDetailItem}>
-                <Text style={styles.modalDetailLabel}>
-                  {tradeType === 'BUY' ? 'Total Cost' : 'Estimated Proceeds'}
-                </Text>
-                <Text style={[styles.modalDetailValue, styles.modalTotalValue]}>
-                  Rs {formatLKR(total, 2)}
-                </Text>
-              </View>
-              <View style={styles.modalDivider} />
-
-              <View style={styles.modalDetailItem}>
-                <Text style={styles.modalDetailLabel}>Trading Fee</Text>
-                <Text style={[styles.modalDetailValue, { color: colors.accent }]}>0.00 LKR (Zero Fee)</Text>
-              </View>
-              <View style={styles.modalDivider} />
-
-              <View style={styles.modalDetailItem}>
-                <Text style={styles.modalDetailLabel}>Est. Remaining Balance</Text>
-                <Text style={styles.modalDetailValue}>
-                  Rs {formatLKR(
-                    tradeType === 'BUY'
-                      ? Math.max(0, (walletBalance ?? 0) - total)
-                      : (walletBalance ?? 0) + total,
-                    2
-                  )}
-                </Text>
-              </View>
-            </View>
-
-            {/* Buttons */}
-            <View style={styles.modalActionButtons}>
               <TouchableOpacity
                 style={styles.modalCancelBtn}
-                onPress={() => setConfirmModalVisible(false)}
-                disabled={isSubmitting}
+                onPress={() => setInsufficientModalVisible(false)}
               >
                 <Text style={styles.modalCancelText}>Cancel</Text>
               </TouchableOpacity>
-              <View style={{ flex: 1 }}>
-                <PrimaryButton
-                  title={
-                    tradeType === 'BUY'
-                      ? 'CONFIRM BUY ORDER →'
-                      : 'CONFIRM SELL ORDER →'
-                  }
-                  loading={isSubmitting}
-                  onPress={handleExecuteTrade}
-                  style={tradeType === 'SELL' ? { backgroundColor: colors.red } : {}}
-                />
-              </View>
             </View>
           </View>
         </View>
@@ -1076,14 +1147,14 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   statusCompleted: { backgroundColor: colors.accentMuted },
-  statusPending: { backgroundColor: colors.yellow + '33' },
+  statusPending: { backgroundColor: (colors.yellow || '#FFA726') + '33' },
   statusText: {
     ...typography.bodySmall,
     fontSize: 10,
     fontWeight: '700',
   },
   statusTextCompleted: { color: colors.accent },
-  statusTextPending: { color: colors.yellow },
+  statusTextPending: { color: colors.yellow || '#FFA726' },
   emptyTxBox: {
     alignItems: 'center',
     paddingVertical: 32,
@@ -1185,7 +1256,7 @@ const styles = StyleSheet.create({
   },
   aiPillBuy: { backgroundColor: colors.accent },
   aiPillSell: { backgroundColor: colors.red },
-  aiPillHold: { backgroundColor: colors.yellow },
+  aiPillHold: { backgroundColor: colors.yellow || '#FFA726' },
   aiActionPillText: {
     color: '#000',
     fontWeight: '800',
@@ -1215,88 +1286,74 @@ const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.78)',
-    justifyContent: 'flex-end',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+    ...(Platform.OS === 'web'
+      ? {
+          position: 'fixed' as any,
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          width: '100vw' as any,
+          height: '100vh' as any,
+          zIndex: 99999,
+        }
+      : {}),
   },
   modalContent: {
     backgroundColor: colors.bgCard,
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: Platform.OS === 'ios' ? 36 : 24,
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    borderRadius: 24,
+    width: '100%',
+    maxWidth: 440,
+    padding: 24,
+    borderWidth: 1,
+    borderColor: colors.border,
     alignItems: 'center',
-    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.5,
+    shadowRadius: 20,
+    elevation: 20,
   },
-  modalHeaderTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  modalTypePill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-    gap: 4,
-  },
-  modalTypePillBuy: {
+  successIconCircle: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
     backgroundColor: colors.accent,
-  },
-  modalTypePillSell: {
-    backgroundColor: colors.red,
-  },
-  modalTypePillText: {
-    fontSize: 11,
-    fontWeight: '800',
-  },
-  modalTypePillTextBuy: {
-    color: '#000000',
-  },
-  modalTypePillTextSell: {
-    color: '#FFFFFF',
-  },
-  modalHeaderTitle: {
-    ...typography.h3,
-    fontSize: 18,
-    fontWeight: '800',
-  },
-  modalCloseBtn: {
-    padding: 6,
-    backgroundColor: colors.bgInput,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  modalAssetRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: colors.bgInput,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: layout.borderRadiusSmall,
+    marginBottom: 16,
+  },
+  warningIconCircle: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: (colors.yellow || '#FFA726') + '22',
+    justifyContent: 'center',
+    alignItems: 'center',
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.yellow || '#FFA726',
   },
-  modalAssetPair: {
-    ...typography.body,
+  successModalTitle: {
+    ...typography.h3,
+    fontSize: 20,
     fontWeight: '800',
     color: colors.textPrimary,
+    textAlign: 'center',
+    marginBottom: 8,
   },
-  modalAssetLimit: {
-    ...typography.label,
-    color: colors.accent,
-    fontWeight: '700',
+  successModalSubtitle: {
+    ...typography.bodySmall,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    marginBottom: 20,
+    lineHeight: 20,
   },
-  modalDetailsCard: {
+  successReceiptCard: {
+    width: '100%',
     backgroundColor: colors.bgInput,
     borderRadius: layout.borderRadiusMedium,
     padding: 16,
@@ -1321,35 +1378,37 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     fontVariant: ['tabular-nums'] as any,
   },
-  modalTotalValue: {
-    ...typography.body,
-    fontWeight: '800',
-    color: colors.accent,
-    fontVariant: ['tabular-nums'] as any,
-  },
   modalDivider: {
     height: 1,
     backgroundColor: colors.border,
     marginVertical: 8,
   },
-  modalActionButtons: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  modalCancelBtn: {
-    height: 56,
-    paddingHorizontal: 20,
-    borderRadius: 28,
+  modalSecondaryBtn: {
+    height: 52,
+    borderRadius: 26,
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: colors.bgInput,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.accent,
+    width: '100%',
+  },
+  modalSecondaryBtnText: {
+    ...typography.body,
+    fontWeight: '700',
+    color: colors.accent,
+  },
+  modalCancelBtn: {
+    height: 48,
+    borderRadius: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'transparent',
+    width: '100%',
   },
   modalCancelText: {
     ...typography.body,
-    fontWeight: '700',
+    fontWeight: '600',
     color: colors.textSecondary,
   },
 });

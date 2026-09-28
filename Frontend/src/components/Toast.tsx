@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { StyleSheet, Text, Animated, View } from 'react-native';
+import { StyleSheet, Text, Animated, View, Platform } from 'react-native';
 import { colors, typography } from '../theme';
 import { MaterialIcons } from '@expo/vector-icons';
 
@@ -116,7 +116,7 @@ export const Toast: React.FC<ToastProps> = ({
 
 const styles = StyleSheet.create({
   toastContainer: {
-    position: 'absolute',
+    position: (Platform.OS === 'web' ? 'fixed' : 'absolute') as any,
     top: 30,
     left: 20,
     right: 20,
@@ -130,8 +130,8 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.35,
     shadowRadius: 10,
-    elevation: 10,
-    zIndex: 9999,
+    elevation: 9999,
+    zIndex: 99999,
   },
   iconContainer: {
     marginRight: 12,
