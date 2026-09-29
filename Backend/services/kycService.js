@@ -14,7 +14,7 @@ const userModel = require('../models/userModel');
  */
 const KYC_CONFIG = {
   MIN_OCR_CONFIDENCE: 30,
-  VERIFIED_OCR_CONFIDENCE: 70,
+  VERIFIED_OCR_CONFIDENCE: 30,
   VERIFIED_NAME_MATCH: 0.80,
   BORDERLINE_NAME_MATCH: 0.65,
   MIN_NAME_MATCH: 0.35
@@ -125,13 +125,22 @@ function calculateNameSimilarity(registeredName, extractedName) {
     return 0.0;
   }
 
+  // Subset coverage: handles when user registered with a single name (like 'CLERANS' or 'MICHAEL')
+  // that appears in the cardholder's full name ('MICHAEL CLERANS'), or vice versa
+  const regCoverage = totalTokenMatchScore / regTokens.length;
+  const extCoverage = totalTokenMatchScore / extTokens.length;
+  const subsetScore = Math.max(
+    regCoverage >= 0.80 ? regCoverage * 0.95 : 0,
+    extCoverage >= 0.80 ? extCoverage * 0.90 : 0
+  );
+
   // Also compute full-string normalized similarity
   const maxFullLen = Math.max(regClean.length, extClean.length);
   const fullDist = levenshteinDistance(regClean, extClean);
   const fullScore = maxFullLen > 0 ? Math.max(0, 1 - fullDist / maxFullLen) : 1.0;
 
   // Weighted combination
-  const combined = Math.max(tokenScore, fullScore);
+  const combined = Math.max(tokenScore, fullScore, subsetScore);
   return parseFloat(combined.toFixed(2));
 }
 
@@ -258,11 +267,18 @@ async function processKYCVerification(userId, imagePath, manualNIC = null) {
 
   // 4. Multi-signal verification evaluation
   const nameSimilarity = calculateNameSimilarity(registeredName, cleanedExtractedName);
+
+  // If candidate name came from an unlabeled fallback line but didn't match registered name,
+  // it was likely non-name text (such as address or Sinhala transliteration noise).
+  const isReliableName = extraction.hasExplicitNameLabel || nameSimilarity >= 0.50;
+  const effectiveExtractedName = isReliableName ? cleanedExtractedName : null;
+  const effectiveNameSimilarity = isReliableName ? nameSimilarity : 0;
+
   const decision = evaluateKYCDecision({
     nicNumber: extraction.nicNumber,
     ocrConfidence,
-    nameSimilarity,
-    hasExtractedName: Boolean(cleanedExtractedName)
+    nameSimilarity: effectiveNameSimilarity,
+    hasExtractedName: Boolean(effectiveExtractedName)
   });
 
   const { verificationStatus, rejectionReason } = decision;

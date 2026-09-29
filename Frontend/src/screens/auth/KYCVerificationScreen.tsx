@@ -31,17 +31,18 @@ export const KYCVerificationScreen = () => {
       try {
         const res = await kycService.getKYCStatus();
         if (res?.data?.document) {
+          const doc = res.data.document;
           setVerificationResult({
-            verificationStatus: res.data.document.VERIFICATION_STATUS || res.data.status,
+            verificationStatus: doc.VERIFICATION_STATUS || doc.verificationStatus || res.data.status,
             extractedData: {
-              documentType: res.data.document.DOCUMENT_TYPE || 'NIC',
-              nicNumber: res.data.document.DOCUMENT_NUMBER,
-              name: res.data.document.EXTRACTED_NAME,
-              dateOfBirth: res.data.document.EXTRACTED_DOB,
-              gender: res.data.document.EXTRACTED_GENDER,
-              ocrConfidence: `${res.data.document.OCR_CONFIDENCE || 0}%`
+              documentType: doc.DOCUMENT_TYPE || doc.documentType || 'NIC',
+              nicNumber: doc.DOCUMENT_NUMBER || doc.documentNumber,
+              name: doc.EXTRACTED_NAME || doc.extractedName,
+              dateOfBirth: doc.EXTRACTED_DOB || doc.extractedDob,
+              gender: doc.EXTRACTED_GENDER || doc.extractedGender,
+              ocrConfidence: `${doc.OCR_CONFIDENCE || doc.confidence || 0}%`
             },
-            rejectionReason: res.data.document.REJECTION_REASON
+            rejectionReason: doc.REJECTION_REASON || doc.rejectionReason
           });
         }
       } catch {

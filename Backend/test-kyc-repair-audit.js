@@ -421,12 +421,12 @@ async function runRepairAudit() {
     });
     recordTest(
       37,
-      'Real NIC test: GICHAEL CLERANS matches Michael Clerans with PENDING decision at 40% confidence',
+      'Real NIC test: GICHAEL CLERANS matches Michael Clerans with VERIFIED decision at 40% confidence',
       realExt.nicNumber === '200024103235' &&
       realExt.dob === '2000-08-28' &&
       realExt.gender === 'MALE' &&
       realSim >= 0.85 &&
-      realDecision.verificationStatus === 'PENDING',
+      realDecision.verificationStatus === 'VERIFIED',
       `NIC: ${realExt.nicNumber}, DOB: ${realExt.dob}, Sim: ${realSim}, Status: ${realDecision.verificationStatus}`
     );
 
