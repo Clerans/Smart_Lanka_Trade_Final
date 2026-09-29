@@ -227,10 +227,10 @@ async function getLivePrices() {
              USING (SELECT :symbol AS symbol FROM dual) src
              ON (m.symbol = src.symbol)
              WHEN MATCHED THEN
-               UPDATE SET m.price_usd = :priceUSD, m.price_lkr = :priceLKR, m.change_percent = :change24h, m.volume = :volume, m.last_updated = CURRENT_TIMESTAMP
+               UPDATE SET m.price_usd = :priceUSD, m.price_lkr = :priceLKR, m.last_updated = CURRENT_TIMESTAMP
              WHEN NOT MATCHED THEN
-               INSERT (SYMBOL, PRICE_USD, PRICE_LKR, CHANGE_PERCENT, VOLUME, LAST_UPDATED) VALUES (:symbol, :priceUSD, :priceLKR, :change24h, :volume, CURRENT_TIMESTAMP)`,
-            { symbol: item.symbol, priceUSD: item.priceUSD, priceLKR: item.priceLKR, change24h: item.change24h, volume: item.volume }
+               INSERT (SYMBOL, PRICE_USD, PRICE_LKR, LAST_UPDATED) VALUES (:symbol, :priceUSD, :priceLKR, CURRENT_TIMESTAMP)`,
+            { symbol: item.symbol, priceUSD: item.priceUSD, priceLKR: item.priceLKR }
           );
         }
         await connection.commit();
@@ -251,7 +251,7 @@ async function getLivePrices() {
   try {
     connection = await oracledb.getConnection();
     const cacheResult = await connection.execute(
-      `SELECT SYMBOL, PRICE_USD, PRICE_LKR, CHANGE_PERCENT, VOLUME FROM MARKET_CACHE`,
+      `SELECT SYMBOL, PRICE_USD, PRICE_LKR FROM MARKET_CACHE`,
       [],
       { outFormat: oracledb.OUT_FORMAT_OBJECT }
     );
@@ -261,8 +261,8 @@ async function getLivePrices() {
         symbol: r.SYMBOL,
         priceUSD: parseFloat(r.PRICE_USD || 0),
         priceLKR: parseFloat(r.PRICE_LKR || 0),
-        change24h: parseFloat(r.CHANGE_PERCENT || 0),
-        volume: parseFloat(r.VOLUME || 0)
+        change24h: 0.0,
+        volume: 0.0
       }));
     }
   } catch (dbErr) {

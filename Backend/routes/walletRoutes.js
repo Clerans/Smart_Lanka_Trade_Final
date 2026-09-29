@@ -12,6 +12,7 @@ const {
   getTransactions,
   getTransactionDetails
 } = require('../controllers/walletController');
+const { getWalletOverview } = require('../controllers/walletOverviewController');
 const { protect } = require('../middleware/authMiddleware');
 const { rateLimit } = require('express-rate-limit');
 
@@ -27,6 +28,9 @@ const transferLimiter = rateLimit({
     message: 'Too many transfer/lookup attempts from this IP, please try again later.'
   }
 });
+
+// High-performance aggregated Wallet Overview endpoint
+router.get('/overview', protect, getWalletOverview);
 
 // Wallet Balance & Details
 router.get('/', protect, getWalletDetails);

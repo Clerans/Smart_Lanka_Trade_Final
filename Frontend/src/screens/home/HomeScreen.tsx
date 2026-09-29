@@ -1,5 +1,5 @@
 import * as React from 'react';
-const { useEffect, useState } = React;
+const { useEffect, useState, useCallback } = React;
 import {
   View,
   Text,
@@ -8,13 +8,14 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Image,
-  Platform
+  Platform,
+  RefreshControl
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { MaterialIcons } from '@expo/vector-icons';
 import Svg, { Path } from 'react-native-svg';
-import { colors, typography, layout } from '../../theme';
+import { colors, typography, layout, TAB_BAR_BOTTOM_OFFSET } from '../../theme';
 import { Card } from '../../components';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { marketService, portfolioService } from '../../services/apiService';
@@ -43,6 +44,7 @@ export const HomeScreen = () => {
   const [topLoser, setTopLoser] = useState<any>(null);
   const [trendTab, setTrendTab] = useState<'gainer' | 'loser'>('gainer');
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [balance, setBalance] = useState<number | null>(null);
   const [portfolioValue, setPortfolioValue] = useState<number | null>(null);
   const [todaysProfit, setTodaysProfit] = useState<number | null>(null);
@@ -59,65 +61,73 @@ export const HomeScreen = () => {
     return name.substring(0, 2).toUpperCase();
   };
 
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        // Load user info
-        const userData = await AsyncStorage.getItem('userData');
-        if (userData) {
-          setUser(JSON.parse(userData));
-        }
-
-        // Fetch prices with sparkline data for all major pairs
-        const symbols = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'ADAUSDT', 'XRPUSDT', 'DOGEUSDT'];
-        const marketResponse = await marketService.getMultiplePricesLKR(symbols, true);
-
-        // Fetch portfolio summary
-        const portfolioResponse = await portfolioService.getPortfolio();
-
-        if (marketResponse.success && marketResponse.data?.prices) {
-          const prices = marketResponse.data.prices;
-          const formatted = prices.map((p: any) => ({
-            symbol: p.symbol,
-            pair: `${p.symbol.replace('USDT', '')}/LKR`,
-            change: `${p.changePercent >= 0 ? '+' : ''}${p.changePercent.toFixed(2)}%`,
-            changeVal: p.changePercent,
-            price: p.priceLKR < 10
-              ? `Rs ${p.priceLKR.toFixed(4)}`
-              : `Rs ${p.priceLKR.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`,
-            rawPrice: p.priceLKR,
-            color: p.changePercent >= 0 ? colors.accent : colors.red,
-            path: generateSparklinePath(p.sparkline, 110, 42),
-            sparkline: p.sparkline || []
-          }));
-          setWatchlist(formatted);
-          setLkrPriceData(marketResponse.data);
-
-          // Find top gainer & loser
-          const sorted = [...formatted].sort((a, b) => b.changeVal - a.changeVal);
-          setTopGainer(sorted[0]);
-          setTopLoser(sorted[sorted.length - 1]);
-        }
-
-        if (portfolioResponse.success) {
-          const { summary } = portfolioResponse.data;
-          setBalance(summary.availableCash);
-          setPortfolioValue(summary.totalPortfolioValue);
-          setTodaysProfit(summary.todaysProfit);
-          setPnlPercent(summary.profitLossPercent);
-        }
-
-      } catch (error) {
-        console.error('Failed to fetch home data:', error);
-      } finally {
-        setLoading(false);
+  const fetchData = useCallback(async (isRefresh = false) => {
+    try {
+      if (isRefresh) {
+        setRefreshing(true);
       }
-    };
+      // Load user info
+      const userData = await AsyncStorage.getItem('userData');
+      if (userData) {
+        setUser(JSON.parse(userData));
+      }
 
-    fetchData();
-    const interval = setInterval(fetchData, 30000);
-    return () => clearInterval(interval);
+      // Fetch prices with sparkline data for all major pairs
+      const symbols = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'ADAUSDT', 'XRPUSDT', 'DOGEUSDT'];
+      const marketResponse = await marketService.getMultiplePricesLKR(symbols, true);
+
+      // Fetch portfolio summary
+      const portfolioResponse = await portfolioService.getPortfolio();
+
+      if (marketResponse.success && marketResponse.data?.prices) {
+        const prices = marketResponse.data.prices;
+        const formatted = prices.map((p: any) => ({
+          symbol: p.symbol,
+          pair: `${p.symbol.replace('USDT', '')}/LKR`,
+          change: `${p.changePercent >= 0 ? '+' : ''}${p.changePercent.toFixed(2)}%`,
+          changeVal: p.changePercent,
+          price: p.priceLKR < 10
+            ? `Rs ${p.priceLKR.toFixed(4)}`
+            : `Rs ${p.priceLKR.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`,
+          rawPrice: p.priceLKR,
+          color: p.changePercent >= 0 ? colors.accent : colors.red,
+          path: generateSparklinePath(p.sparkline, 110, 42),
+          sparkline: p.sparkline || []
+        }));
+        setWatchlist(formatted);
+        setLkrPriceData(marketResponse.data);
+
+        // Find top gainer & loser
+        const sorted = [...formatted].sort((a, b) => b.changeVal - a.changeVal);
+        setTopGainer(sorted[0]);
+        setTopLoser(sorted[sorted.length - 1]);
+      }
+
+      if (portfolioResponse.success) {
+        const { summary } = portfolioResponse.data;
+        setBalance(summary.availableCash);
+        setPortfolioValue(summary.totalPortfolioValue);
+        setTodaysProfit(summary.todaysProfit);
+        setPnlPercent(summary.profitLossPercent);
+      }
+
+    } catch (error) {
+      console.error('Failed to fetch home data:', error);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
   }, []);
+
+  useEffect(() => {
+    fetchData();
+    const interval = setInterval(() => fetchData(), 30000);
+    return () => clearInterval(interval);
+  }, [fetchData]);
+
+  const onRefresh = useCallback(() => {
+    fetchData(true);
+  }, [fetchData]);
 
   const activeTrend = trendTab === 'gainer' ? topGainer : topLoser;
 
@@ -126,6 +136,14 @@ export const HomeScreen = () => {
       <ScrollView
         contentContainerStyle={styles.container}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={colors.accent}
+            colors={[colors.accent]}
+          />
+        }
       >
 
         {/* Top Header */}
@@ -139,12 +157,12 @@ export const HomeScreen = () => {
               {user?.profileImage ? (
                 <Image source={{ uri: user.profileImage }} style={styles.avatarImage} />
               ) : (
-                <Text style={styles.avatarText}>{getInitials(user?.name)}</Text>
+                <MaterialIcons name="person" size={24} color={colors.accent} />
               )}
             </View>
             <View style={styles.headerTextContainer}>
-              <Text style={styles.greetingText}>Ayubowan,</Text>
-              <Text style={styles.userName} numberOfLines={1}>{user?.name || 'Trader'}</Text>
+              <Text style={styles.greetingText}>WELCOME,</Text>
+              <Text style={styles.userName} numberOfLines={1}>{user?.name?.toUpperCase() || 'CLERANS'}</Text>
             </View>
           </TouchableOpacity>
 
@@ -217,14 +235,14 @@ export const HomeScreen = () => {
         {/* Quick Actions */}
         <View style={styles.quickActionsRow}>
           <TouchableOpacity
-            style={[styles.actionCard, styles.actionCardBuy]}
+            style={styles.actionCard}
             onPress={() => navigation.navigate('Trade')}
             activeOpacity={0.8}
           >
-            <View style={styles.actionIconBoxBuy}>
-              <MaterialIcons name="shopping-cart" size={20} color="#000" />
+            <View style={styles.actionIconBox}>
+              <MaterialIcons name="shopping-cart" size={20} color={colors.accent} />
             </View>
-            <Text style={styles.actionCardBuyText}>Buy</Text>
+            <Text style={styles.actionCardText}>Buy</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -426,6 +444,7 @@ const styles = StyleSheet.create({
   },
   container: {
     paddingTop: 12,
+    paddingBottom: TAB_BAR_BOTTOM_OFFSET,
   },
   header: {
     flexDirection: 'row',
@@ -445,35 +464,32 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     borderWidth: 1.5,
     borderColor: colors.accent,
-    backgroundColor: colors.accentMuted,
+    backgroundColor: '#000000',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
     overflow: 'hidden',
   },
   avatarImage: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-  },
-  avatarText: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: colors.accent,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
   },
   headerTextContainer: {
     flex: 1,
   },
   greetingText: {
-    ...typography.bodySmall,
-    color: colors.textSecondary,
-    fontSize: 12,
+    color: colors.accent,
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.8,
   },
   userName: {
-    ...typography.h3,
-    fontSize: 17,
-    fontWeight: '800',
-    color: colors.textPrimary,
+    fontSize: 18,
+    fontWeight: '900',
+    color: '#FFFFFF',
+    letterSpacing: 0.3,
+    marginTop: 1,
   },
   headerIcons: {
     flexDirection: 'row',
@@ -623,28 +639,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 6,
   },
-  actionCardBuy: {
-    backgroundColor: colors.accent,
-    borderColor: colors.accent,
-  },
-  actionIconBoxBuy: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    backgroundColor: '#00C853',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 6,
-  },
   actionCardText: {
     fontSize: 11,
     color: '#FFFFFF',
     fontWeight: '600',
-  },
-  actionCardBuyText: {
-    fontSize: 11,
-    color: '#000000',
-    fontWeight: '800',
   },
   rateBanner: {
     flexDirection: 'row',

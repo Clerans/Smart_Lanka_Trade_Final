@@ -6,29 +6,30 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
-  RefreshControl
+  RefreshControl,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
-import { colors, typography, layout } from '../../theme';
+import { colors, typography, layout, SCREEN_PADDING, TAB_BAR_BOTTOM_OFFSET, spacing } from '../../theme';
 import { Card } from '../../components';
 import { aiService } from '../../services/apiService';
 import { formatLKR, formatNumber } from '../../utils/formatters';
 
 const intervals = ['1h', '4h', '1d'];
 
-const ASSET_METADATA: Record<string, { name: string, icon: string, color: string }> = {
-  'BTCUSDT': { name: 'Bitcoin', icon: 'bitcoin', color: '#F7931A' },
-  'ETHUSDT': { name: 'Ethereum', icon: 'ethereum', color: '#627EEA' },
-  'BNBUSDT': { name: 'BNB', icon: 'coins', color: '#F3BA2F' },
-  'SOLUSDT': { name: 'Solana', icon: 'bolt', color: '#14F195' },
-  'XRPUSDT': { name: 'XRP', icon: 'gem', color: '#23292F' },
-  'ADAUSDT': { name: 'Cardano', icon: 'layer-group', color: '#0033AD' },
-  'DOGEUSDT': { name: 'Dogecoin', icon: 'paw', color: '#C2A633' },
+const ASSET_METADATA: Record<string, { name: string; icon: string; color: string }> = {
+  BTCUSDT: { name: 'Bitcoin', icon: 'bitcoin', color: '#F7931A' },
+  ETHUSDT: { name: 'Ethereum', icon: 'ethereum', color: '#627EEA' },
+  BNBUSDT: { name: 'BNB', icon: 'coins', color: '#F3BA2F' },
+  SOLUSDT: { name: 'Solana', icon: 'bolt', color: '#14F195' },
+  XRPUSDT: { name: 'XRP', icon: 'gem', color: '#23292F' },
+  ADAUSDT: { name: 'Cardano', icon: 'layer-group', color: '#0033AD' },
+  DOGEUSDT: { name: 'Dogecoin', icon: 'paw', color: '#C2A633' },
 };
 
 export const AIAnalyticsScreen = () => {
+  const insets = useSafeAreaInsets();
   const navigation = useNavigation<any>();
   const [activeInterval, setActiveInterval] = useState('1h');
   const [recommendations, setRecommendations] = useState<any[]>([]);
@@ -38,36 +39,43 @@ export const AIAnalyticsScreen = () => {
   const [lastUpdated, setLastUpdated] = useState<string>('Just now');
   const [expandedSymbol, setExpandedSymbol] = useState<string | null>(null);
 
-  const fetchRecommendations = useCallback(async (isRefresh = false) => {
-    try {
-      if (isRefresh) {
-        setRefreshing(true);
-      } else {
-        setLoading(true);
-      }
-      setError(null);
+  const fetchRecommendations = useCallback(
+    async (isRefresh = false) => {
+      try {
+        if (isRefresh) {
+          setRefreshing(true);
+        } else {
+          setLoading(true);
+        }
+        setError(null);
 
-      const response = await aiService.getRecommendations(activeInterval);
-      if (response && response.data) {
-        setRecommendations(response.data);
-        const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-        setLastUpdated(timeStr);
+        const response = await aiService.getRecommendations(activeInterval);
+        if (response && response.data) {
+          setRecommendations(response.data);
+          const timeStr = new Date().toLocaleTimeString([], {
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+          });
+          setLastUpdated(timeStr);
+        }
+      } catch (err: any) {
+        console.error('Failed to load AI recommendations:', err);
+        setError(err.message || 'Unable to connect to AI recommendation service.');
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
       }
-    } catch (err: any) {
-      console.error('Failed to load AI recommendations:', err);
-      setError(err.message || 'Unable to connect to AI recommendation service.');
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, [activeInterval]);
+    },
+    [activeInterval]
+  );
 
   useEffect(() => {
     fetchRecommendations();
   }, [fetchRecommendations]);
 
   const toggleExpand = (symbol: string) => {
-    setExpandedSymbol(prev => prev === symbol ? null : symbol);
+    setExpandedSymbol((prev) => (prev === symbol ? null : symbol));
   };
 
   const getRecommendationBadgeColor = (rec: string) => {
@@ -83,13 +91,16 @@ export const AIAnalyticsScreen = () => {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-
+    <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <TouchableOpacity onPress={() => navigation.navigate('Profile')} style={styles.avatar}>
-            <MaterialIcons name="person" size={24} color={colors.accent} />
+          <TouchableOpacity
+            onPress={() => navigation.navigate('Profile')}
+            style={styles.avatar}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <MaterialIcons name="person" size={22} color={colors.accent} />
           </TouchableOpacity>
           <View>
             <Text style={styles.headerTitle}>AI Insights</Text>
@@ -97,7 +108,11 @@ export const AIAnalyticsScreen = () => {
           </View>
         </View>
         <View style={styles.headerIcons}>
-          <TouchableOpacity style={styles.iconBtn} onPress={() => fetchRecommendations(true)}>
+          <TouchableOpacity
+            style={styles.iconBtn}
+            onPress={() => fetchRecommendations(true)}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
             <MaterialIcons name="refresh" size={24} color={colors.accent} />
           </TouchableOpacity>
         </View>
@@ -114,7 +129,11 @@ export const AIAnalyticsScreen = () => {
 
       {/* Timeframe Interval Filters */}
       <View style={styles.filtersWrapper}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filtersScroll}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.filtersScroll}
+        >
           {intervals.map((interval) => {
             const isActive = activeInterval === interval;
             return (
@@ -155,12 +174,17 @@ export const AIAnalyticsScreen = () => {
       {/* Recommendations List */}
       {!loading && !error ? (
         <ScrollView
-          contentContainerStyle={styles.listContainer}
+          contentContainerStyle={[
+            styles.listContainer,
+            { paddingBottom: TAB_BAR_BOTTOM_OFFSET + insets.bottom },
+          ]}
+          showsVerticalScrollIndicator={false}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
               onRefresh={() => fetchRecommendations(true)}
               tintColor={colors.accent}
+              colors={[colors.accent]}
             />
           }
         >
@@ -168,14 +192,13 @@ export const AIAnalyticsScreen = () => {
             const meta = ASSET_METADATA[item.symbol] || {
               name: item.coin || item.symbol,
               icon: 'coins',
-              color: colors.accent
+              color: colors.accent,
             };
             const recColor = getRecommendationBadgeColor(item.recommendation);
             const isExpanded = expandedSymbol === item.symbol;
 
             return (
               <Card key={item.symbol} style={styles.insightCard}>
-
                 {/* Top Row: Coin Info & Action Badge */}
                 <View style={styles.cardTopRow}>
                   <View style={styles.assetInfoRow}>
@@ -184,12 +207,19 @@ export const AIAnalyticsScreen = () => {
                     </View>
                     <View>
                       <Text style={styles.assetName}>{meta.name}</Text>
-                      <Text style={styles.assetPair}>{item.coin}/LKR • {item.symbol}</Text>
+                      <Text style={styles.assetPair}>
+                        {item.coin}/LKR • {item.symbol}
+                      </Text>
                     </View>
                   </View>
 
                   <View style={styles.badgeContainer}>
-                    <View style={[styles.sentimentBadge, { backgroundColor: recColor + '22', borderColor: recColor, borderWidth: 1 }]}>
+                    <View
+                      style={[
+                        styles.sentimentBadge,
+                        { backgroundColor: recColor + '22', borderColor: recColor, borderWidth: 1 },
+                      ]}
+                    >
                       <Text style={[styles.sentimentText, { color: recColor }]}>
                         {item.recommendation}
                       </Text>
@@ -204,19 +234,51 @@ export const AIAnalyticsScreen = () => {
                 <View style={styles.priceRow}>
                   <View>
                     <Text style={styles.priceLabel}>Current Price (LKR)</Text>
-                    <Text style={styles.priceValue}>
+                    <Text style={styles.priceValue} numberOfLines={1}>
                       රු {item.priceLKR ? formatLKR(item.priceLKR, 2) : '---'}
                     </Text>
                   </View>
                   <View style={styles.trendContainer}>
                     <Text style={styles.trendLabel}>Trend Direction</Text>
-                    <View style={[styles.trendBadge, { backgroundColor: item.trend === 'BULLISH' ? colors.accentMuted : colors.bgInput }]}>
+                    <View
+                      style={[
+                        styles.trendBadge,
+                        {
+                          backgroundColor:
+                            item.trend === 'BULLISH' ? colors.accentMuted : colors.bgInput,
+                        },
+                      ]}
+                    >
                       <MaterialIcons
-                        name={item.trend === 'BULLISH' ? 'trending-up' : item.trend === 'BEARISH' ? 'trending-down' : 'trending-flat'}
+                        name={
+                          item.trend === 'BULLISH'
+                            ? 'trending-up'
+                            : item.trend === 'BEARISH'
+                            ? 'trending-down'
+                            : 'trending-flat'
+                        }
                         size={16}
-                        color={item.trend === 'BULLISH' ? colors.accent : item.trend === 'BEARISH' ? colors.red : colors.textSecondary}
+                        color={
+                          item.trend === 'BULLISH'
+                            ? colors.accent
+                            : item.trend === 'BEARISH'
+                            ? colors.red
+                            : colors.textSecondary
+                        }
                       />
-                      <Text style={[styles.trendText, { color: item.trend === 'BULLISH' ? colors.accent : item.trend === 'BEARISH' ? colors.red : colors.textSecondary }]}>
+                      <Text
+                        style={[
+                          styles.trendText,
+                          {
+                            color:
+                              item.trend === 'BULLISH'
+                                ? colors.accent
+                                : item.trend === 'BEARISH'
+                                ? colors.red
+                                : colors.textSecondary,
+                          },
+                        ]}
+                      >
                         {item.trend}
                       </Text>
                     </View>
@@ -232,10 +294,12 @@ export const AIAnalyticsScreen = () => {
                 </View>
 
                 <View style={styles.progressBarBg}>
-                  <View style={[
-                    styles.progressBarFill,
-                    { width: `${item.confidence}%`, backgroundColor: recColor }
-                  ]} />
+                  <View
+                    style={[
+                      styles.progressBarFill,
+                      { width: `${item.confidence}%`, backgroundColor: recColor },
+                    ]}
+                  />
                 </View>
 
                 {/* Executive Summary */}
@@ -248,6 +312,7 @@ export const AIAnalyticsScreen = () => {
                 <TouchableOpacity
                   style={styles.toggleIndicatorsBtn}
                   onPress={() => toggleExpand(item.symbol)}
+                  activeOpacity={0.7}
                 >
                   <Text style={styles.toggleIndicatorsText}>
                     {isExpanded ? 'Hide Technical Indicators' : 'View Indicator Breakdown & Signals'}
@@ -267,29 +332,51 @@ export const AIAnalyticsScreen = () => {
                     <View style={styles.indicatorsGrid}>
                       <View style={styles.indicatorBox}>
                         <Text style={styles.indicatorName}>RSI (14)</Text>
-                        <Text style={styles.indicatorValue}>{item.indicators?.rsi ?? 'N/A'}</Text>
+                        <Text style={styles.indicatorValue}>
+                          {item.indicators?.rsi ?? 'N/A'}
+                        </Text>
                       </View>
                       <View style={styles.indicatorBox}>
                         <Text style={styles.indicatorName}>SMA 20</Text>
-                        <Text style={styles.indicatorValue}>${item.indicators?.sma20 ? formatNumber(item.indicators.sma20, 2) : 'N/A'}</Text>
+                        <Text style={styles.indicatorValue}>
+                          ${item.indicators?.sma20 ? formatNumber(item.indicators.sma20, 2) : 'N/A'}
+                        </Text>
                       </View>
                       <View style={styles.indicatorBox}>
                         <Text style={styles.indicatorName}>SMA 50</Text>
-                        <Text style={styles.indicatorValue}>${item.indicators?.sma50 ? formatNumber(item.indicators.sma50, 2) : 'N/A'}</Text>
+                        <Text style={styles.indicatorValue}>
+                          ${item.indicators?.sma50 ? formatNumber(item.indicators.sma50, 2) : 'N/A'}
+                        </Text>
                       </View>
                       <View style={styles.indicatorBox}>
                         <Text style={styles.indicatorName}>EMA 20</Text>
-                        <Text style={styles.indicatorValue}>${item.indicators?.ema20 ? formatNumber(item.indicators.ema20, 2) : 'N/A'}</Text>
+                        <Text style={styles.indicatorValue}>
+                          ${item.indicators?.ema20 ? formatNumber(item.indicators.ema20, 2) : 'N/A'}
+                        </Text>
                       </View>
                       <View style={styles.indicatorBox}>
                         <Text style={styles.indicatorName}>MACD Hist</Text>
-                        <Text style={[styles.indicatorValue, { color: (item.indicators?.macdHistogram ?? 0) >= 0 ? colors.accent : colors.red }]}>
+                        <Text
+                          style={[
+                            styles.indicatorValue,
+                            {
+                              color:
+                                (item.indicators?.macdHistogram ?? 0) >= 0
+                                  ? colors.accent
+                                  : colors.red,
+                            },
+                          ]}
+                        >
                           {item.indicators?.macdHistogram ?? 'N/A'}
                         </Text>
                       </View>
                       <View style={styles.indicatorBox}>
                         <Text style={styles.indicatorName}>Volatility</Text>
-                        <Text style={styles.indicatorValue}>{(item.indicators?.volatility * 100).toFixed(2)}%</Text>
+                        <Text style={styles.indicatorValue}>
+                          {item.indicators?.volatility
+                            ? `${(item.indicators.volatility * 100).toFixed(2)}%`
+                            : 'N/A'}
+                        </Text>
                       </View>
                     </View>
 
@@ -298,7 +385,12 @@ export const AIAnalyticsScreen = () => {
                     {item.reasons && item.reasons.length > 0 ? (
                       item.reasons.map((reason: string, idx: number) => (
                         <View key={idx} style={styles.reasonRow}>
-                          <MaterialIcons name="check-circle" size={16} color={colors.accent} style={styles.checkIcon} />
+                          <MaterialIcons
+                            name="check-circle"
+                            size={16}
+                            color={colors.accent}
+                            style={styles.checkIcon}
+                          />
                           <Text style={styles.reasonText}>{reason}</Text>
                         </View>
                       ))
@@ -307,7 +399,6 @@ export const AIAnalyticsScreen = () => {
                     )}
                   </View>
                 )}
-
               </Card>
             );
           })}
@@ -318,16 +409,16 @@ export const AIAnalyticsScreen = () => {
               SmartLanka AI Recommendations are algorithmic signals built for research and educational purposes. Always practice proper risk management.
             </Text>
           </View>
-          <View style={{ height: 90 }} />
         </ScrollView>
       ) : null}
 
       {/* Floating Action Button for SOMI AI Chat */}
       <TouchableOpacity
-        style={styles.fabBtn}
+        style={[styles.fabBtn, { bottom: TAB_BAR_BOTTOM_OFFSET + 12 }]}
         onPress={() => navigation.navigate('SOMIAIChat')}
+        activeOpacity={0.85}
       >
-        <FontAwesome5 name="robot" size={24} color="#000" />
+        <FontAwesome5 name="robot" size={22} color="#000" />
       </TouchableOpacity>
     </SafeAreaView>
   );
@@ -342,18 +433,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 24,
-    paddingTop: 16,
-    marginBottom: 16,
+    paddingHorizontal: SCREEN_PADDING,
+    paddingTop: 12,
+    marginBottom: spacing.m,
   },
   headerLeft: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   avatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     borderWidth: 1,
     borderColor: colors.accent,
     justifyContent: 'center',
@@ -373,14 +464,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
   },
   iconBtn: {
-    padding: 8,
+    padding: 6,
   },
   liveIndicatorContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 24,
-    marginBottom: 16,
+    paddingHorizontal: SCREEN_PADDING,
+    marginBottom: spacing.m,
   },
   liveLeft: {
     flexDirection: 'row',
@@ -402,12 +493,13 @@ const styles = StyleSheet.create({
     ...typography.label,
     fontSize: 10,
     color: colors.textSecondary,
+    fontVariant: ['tabular-nums'],
   },
   filtersWrapper: {
-    marginBottom: 16,
+    marginBottom: spacing.m,
   },
   filtersScroll: {
-    paddingHorizontal: 24,
+    paddingHorizontal: SCREEN_PADDING,
   },
   filterPill: {
     paddingHorizontal: 16,
@@ -432,7 +524,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 32,
+    paddingHorizontal: SCREEN_PADDING,
   },
   loadingText: {
     ...typography.bodySmall,
@@ -441,8 +533,8 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   errorCard: {
-    margin: 24,
-    padding: 24,
+    margin: SCREEN_PADDING,
+    padding: spacing.l,
     backgroundColor: colors.bgCard,
     borderRadius: layout.borderRadius,
     borderWidth: 1,
@@ -474,28 +566,28 @@ const styles = StyleSheet.create({
     color: '#000',
   },
   listContainer: {
-    paddingHorizontal: 20,
+    paddingHorizontal: SCREEN_PADDING,
   },
   insightCard: {
-    marginBottom: 16,
-    padding: 16,
+    marginBottom: spacing.m,
+    padding: spacing.m,
   },
   cardTopRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 16,
+    marginBottom: 14,
   },
   assetInfoRow: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   assetIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
+    marginRight: 10,
   },
   assetName: {
     ...typography.body,
@@ -511,7 +603,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
   },
   sentimentBadge: {
-    paddingHorizontal: 12,
+    paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 6,
     marginBottom: 4,
@@ -533,7 +625,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bgInput,
     padding: 12,
     borderRadius: 8,
-    marginBottom: 14,
+    marginBottom: 12,
   },
   priceLabel: {
     ...typography.label,
@@ -545,6 +637,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#FFF',
     marginTop: 2,
+    fontVariant: ['tabular-nums'],
   },
   trendContainer: {
     alignItems: 'flex-end',
@@ -582,13 +675,14 @@ const styles = StyleSheet.create({
   scoreValue: {
     ...typography.h3,
     fontSize: 18,
+    fontVariant: ['tabular-nums'],
   },
   progressBarBg: {
     height: 6,
     backgroundColor: colors.bgInput,
     borderRadius: 3,
     overflow: 'hidden',
-    marginBottom: 14,
+    marginBottom: 12,
   },
   progressBarFill: {
     height: '100%',
@@ -661,6 +755,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
     color: '#FFF',
+    fontVariant: ['tabular-nums'],
   },
   reasonsTitle: {
     ...typography.label,
@@ -702,11 +797,10 @@ const styles = StyleSheet.create({
   },
   fabBtn: {
     position: 'absolute',
-    bottom: 24,
-    right: 24,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    right: 20,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
     backgroundColor: colors.accent,
     justifyContent: 'center',
     alignItems: 'center',
@@ -717,3 +811,4 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
 });
+

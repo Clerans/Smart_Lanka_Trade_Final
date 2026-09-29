@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Keyboa
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { MaterialIcons } from '@expo/vector-icons';
-import { colors, typography, layout } from '../../theme';
+import { colors, typography, layout, SCREEN_PADDING, TAB_BAR_BOTTOM_OFFSET } from '../../theme';
 import { PrimaryButton, Card } from '../../components';
 import { marketService, aiService } from '../../services/apiService';
 import { formatLKR } from '../../utils/formatters';
@@ -89,7 +89,9 @@ export const TradingTerminalScreen = () => {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <ScrollView
-          contentContainerStyle={styles.container}
+          contentContainerStyle={[styles.container, { paddingBottom: TAB_BAR_BOTTOM_OFFSET }]}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -346,9 +348,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 24,
-    paddingTop: 20,
-    marginBottom: 24,
+    paddingHorizontal: SCREEN_PADDING,
+    paddingTop: 16,
+    marginBottom: 16,
   },
   logoRow: {
     flexDirection: 'row',
@@ -364,24 +366,27 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   iconBtn: {
-    marginRight: 16,
+    marginRight: 12,
   },
   avatar: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    borderWidth: 1,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    borderWidth: 1.5,
     borderColor: colors.accent,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: '#000',
   },
   modeToggleContainer: {
     flexDirection: 'row',
-    marginHorizontal: 24,
+    marginHorizontal: SCREEN_PADDING,
     backgroundColor: colors.bgInput,
     borderRadius: layout.borderRadiusPill,
     padding: 4,
-    marginBottom: 24,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   modeToggleBtn: {
     flex: 1,
@@ -396,17 +401,19 @@ const styles = StyleSheet.create({
     ...typography.bodySmall,
     color: colors.accent,
     fontWeight: '600',
+    fontSize: 13,
   },
   modeTextActive: {
     color: colors.bg,
+    fontWeight: '800',
   },
   assetSelector: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginHorizontal: 24,
-    paddingVertical: 16,
-    marginBottom: 24,
+    marginHorizontal: SCREEN_PADDING,
+    paddingVertical: 14,
+    marginBottom: 16,
   },
   assetSelectorText: {
     ...typography.body,
@@ -414,8 +421,9 @@ const styles = StyleSheet.create({
   },
   tradeTabs: {
     flexDirection: 'row',
-    marginHorizontal: 24,
+    marginHorizontal: SCREEN_PADDING,
     marginBottom: 16,
+    gap: 8,
   },
   tradeTab: {
     flex: 1,
@@ -423,32 +431,40 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderRadius: layout.borderRadiusPill,
     backgroundColor: colors.bgInput,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   tradeTabBuy: {
     backgroundColor: colors.accent,
+    borderColor: colors.accent,
   },
   tradeTabSell: {
     backgroundColor: colors.red,
+    borderColor: colors.red,
   },
   tradeTabText: {
     ...typography.body,
     fontWeight: '700',
     color: colors.textSecondary,
+    fontSize: 14,
   },
   tradeTabTextBuy: {
-    color: colors.bg,
+    color: '#000000',
+    fontWeight: '800',
   },
   tradeTabTextSell: {
-    color: colors.textPrimary,
+    color: '#FFFFFF',
+    fontWeight: '800',
   },
   orderForm: {
-    paddingHorizontal: 24,
-    marginBottom: 40,
+    paddingHorizontal: SCREEN_PADDING,
+    marginBottom: 24,
   },
   inputRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginBottom: 16,
+    gap: 12,
   },
   inputGroup: {
     flex: 1,
@@ -466,27 +482,31 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     paddingHorizontal: 16,
     fontWeight: '600',
+    borderWidth: 1,
+    borderColor: colors.border,
+    fontVariant: ['tabular-nums'] as any,
   },
   totalCard: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 20,
-    marginBottom: 24,
+    padding: 16,
+    marginBottom: 20,
   },
   totalLabel: {
     ...typography.label,
-    marginBottom: 8,
+    marginBottom: 6,
   },
   totalValue: {
     ...typography.h2,
     color: colors.accent,
+    fontVariant: ['tabular-nums'] as any,
   },
   calcIcon: {
     padding: 8,
   },
   recentSection: {
-    paddingHorizontal: 24,
+    paddingHorizontal: SCREEN_PADDING,
   },
   sectionHeader: {
     flexDirection: 'row',
