@@ -212,6 +212,9 @@ function cleanAndNormalizeName(rawName) {
 
   let cleaned = rawName.toUpperCase();
 
+  // Strip leading non-alphanumeric noise/bullets (e.g. '; - ', '- ', '* ', '> ', '~ ')
+  cleaned = cleaned.replace(/^[^A-Z0-9]+/, '');
+
   // Strip leading labels and prefixes (case-insensitive)
   const labelPatterns = [
     /^\s*(?:FULL\s*NAME|NAME\s*IN\s*FULL|GIVEN\s*NAME|SAMPURNA\s*NAMA|NAM\s*E|NAME|NAMA)\s*[:\-\.]*\s*/i,
@@ -349,6 +352,7 @@ function extractFromOCRText(ocrText) {
 
   // 4. Extract Cardholder Name (Do not fabricate, clean labels)
   let extractedName = null;
+  let hasExplicitNameLabel = false;
   const nameHeaders = [
     'FULL NAME',
     'NAME IN FULL',
@@ -369,12 +373,14 @@ function extractFromOCRText(ocrText) {
         const candidate = cleanAndNormalizeName(line);
         if (candidate) {
           extractedName = candidate;
+          hasExplicitNameLabel = true;
           break;
         } else if (i + 1 < lines.length) {
           // Check next line
           const nextCandidate = cleanAndNormalizeName(lines[i + 1]);
           if (nextCandidate) {
             extractedName = nextCandidate;
+            hasExplicitNameLabel = true;
             break;
           }
         }
@@ -387,9 +393,17 @@ function extractFromOCRText(ocrText) {
   if (!extractedName) {
     for (const line of lines) {
       const candidate = cleanAndNormalizeName(line);
-      if (candidate && candidate.split(' ').length >= 2 && candidate.length >= 5 && candidate.length <= 60) {
-        extractedName = candidate;
-        break;
+      if (candidate && candidate.length >= 5 && candidate.length <= 60) {
+        const words = candidate.split(/\s+/).filter(w => w.length > 0);
+        if (words.length >= 2) {
+          const longWords = words.filter(w => w.length >= 3);
+          const avgLen = words.reduce((acc, w) => acc + w.length, 0) / words.length;
+          // Must have at least one word >= 3 letters and avg length >= 2.5 to avoid single-letter noise
+          if (longWords.length >= 1 && avgLen >= 2.5) {
+            extractedName = candidate;
+            break;
+          }
+        }
       }
     }
   }
@@ -402,6 +416,7 @@ function extractFromOCRText(ocrText) {
     documentType,
     nicNumber: detectedNIC,
     extractedName: extractedName || null,
+    hasExplicitNameLabel,
     dob: parsedNIC ? parsedNIC.dob : null,
     gender: parsedNIC ? parsedNIC.gender : null,
     parsedNIC
