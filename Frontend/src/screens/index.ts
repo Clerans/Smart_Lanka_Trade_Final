@@ -15,5 +15,6 @@ export * from './analytics/AIAnalyticsScreen';
 export * from './ai/SOMIAIChatScreen';
 export * from './wallet/WalletOverviewScreen';
 export * from './wallet/CurrencyConversionScreen';
+export * from './portfolio/PortfolioScreen';
 export * from './profile/UserProfileScreen';
 export * from './profile/SecuritySettingsScreen';

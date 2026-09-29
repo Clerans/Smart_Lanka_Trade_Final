@@ -11,7 +11,8 @@ import {
     DemoTradingScreen,
     CurrencyConversionScreen,
     SecuritySettingsScreen,
-    KYCVerificationScreen
+    KYCVerificationScreen,
+    PortfolioScreen
 } from '../screens';
 
 const Stack = createStackNavigator();
@@ -38,6 +39,7 @@ export const RootNavigator = () => {
                 <Stack.Screen name="CurrencyConversion" component={CurrencyConversionScreen} />
                 <Stack.Screen name="SecuritySettings" component={SecuritySettingsScreen} />
                 <Stack.Screen name="KYCVerification" component={KYCVerificationScreen} />
+                <Stack.Screen name="Portfolio" component={PortfolioScreen} />
             </Stack.Navigator>
         </NavigationContainer>
     );

@@ -185,52 +185,60 @@ export const HomeScreen = () => {
         </View>
 
         {/* Balance Card */}
-        <Card style={styles.balanceCard}>
-          <View style={styles.balanceHeaderRow}>
-            <Text style={styles.balanceLabel}>EST. TOTAL VALUE</Text>
-            <View style={styles.liveRateBadge}>
-              <View style={styles.liveRateDot} />
-              <Text style={styles.liveRateText}>
-                1 USDT ≈ Rs {lkrPriceData?.usdToLkr ? lkrPriceData.usdToLkr.toFixed(2) : '331.27'}
+        <TouchableOpacity
+          activeOpacity={0.88}
+          onPress={() => navigation.navigate('Portfolio')}
+        >
+          <Card style={styles.balanceCard}>
+            <View style={styles.balanceHeaderRow}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Text style={styles.balanceLabel}>EST. TOTAL VALUE</Text>
+                <MaterialIcons name="chevron-right" size={16} color={colors.textSecondary} />
+              </View>
+              <View style={styles.liveRateBadge}>
+                <View style={styles.liveRateDot} />
+                <Text style={styles.liveRateText}>
+                  1 USDT ≈ Rs {lkrPriceData?.usdToLkr ? lkrPriceData.usdToLkr.toFixed(2) : '331.27'}
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.balanceMainRow}>
+              <Text style={styles.balanceCurrencyPrefix}>LKR</Text>
+              <Text style={styles.balanceValue}>
+                {portfolioValue !== null ? portfolioValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '1,030,000.00'}
               </Text>
             </View>
-          </View>
 
-          <View style={styles.balanceMainRow}>
-            <Text style={styles.balanceCurrencyPrefix}>LKR</Text>
-            <Text style={styles.balanceValue}>
-              {portfolioValue !== null ? portfolioValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '1,030,000.00'}
-            </Text>
-          </View>
+            <View style={styles.balanceCardDivider} />
 
-          <View style={styles.balanceCardDivider} />
-
-          <View style={styles.balanceFooterRow}>
-            <View style={[
-              styles.pnlPill,
-              todaysProfit !== null && todaysProfit < 0 ? styles.pnlPillRed : styles.pnlPillGreen
-            ]}>
-              <MaterialIcons
-                name={todaysProfit !== null && todaysProfit >= 0 ? "trending-up" : "trending-down"}
-                size={16}
-                color={todaysProfit !== null && todaysProfit >= 0 ? colors.accent : colors.red}
-              />
-              <Text style={[
-                styles.pnlText,
-                todaysProfit !== null && todaysProfit >= 0 ? { color: colors.accent } : { color: colors.red }
+            <View style={styles.balanceFooterRow}>
+              <View style={[
+                styles.pnlPill,
+                todaysProfit !== null && todaysProfit < 0 ? styles.pnlPillRed : styles.pnlPillGreen
               ]}>
-                {todaysProfit !== null && todaysProfit >= 0 ? '+' : ''}{pnlPercent !== null ? pnlPercent.toFixed(2) : '0.00'}% PNL
-              </Text>
-            </View>
+                <MaterialIcons
+                  name={todaysProfit !== null && todaysProfit >= 0 ? "trending-up" : "trending-down"}
+                  size={16}
+                  color={todaysProfit !== null && todaysProfit >= 0 ? colors.accent : colors.red}
+                />
+                <Text style={[
+                  styles.pnlText,
+                  todaysProfit !== null && todaysProfit >= 0 ? { color: colors.accent } : { color: colors.red }
+                ]}>
+                  {todaysProfit !== null && todaysProfit >= 0 ? '+' : ''}{pnlPercent !== null ? pnlPercent.toFixed(2) : '0.00'}% PNL
+                </Text>
+              </View>
 
-            <View style={styles.walletBalanceContainer}>
-              <Text style={styles.walletBalanceLabel}>Available: </Text>
-              <Text style={styles.walletBalanceValue}>
-                LKR {balance !== null ? balance.toLocaleString(undefined, { maximumFractionDigits: 0 }) : '1,030,000'}
-              </Text>
+              <View style={styles.walletBalanceContainer}>
+                <Text style={styles.walletBalanceLabel}>Available: </Text>
+                <Text style={styles.walletBalanceValue}>
+                  LKR {balance !== null ? balance.toLocaleString(undefined, { maximumFractionDigits: 0 }) : '1,030,000'}
+                </Text>
+              </View>
             </View>
-          </View>
-        </Card>
+          </Card>
+        </TouchableOpacity>
 
         {/* Quick Actions */}
         <View style={styles.quickActionsRow}>
@@ -269,7 +277,7 @@ export const HomeScreen = () => {
 
           <TouchableOpacity
             style={styles.actionCard}
-            onPress={() => navigation.navigate('Wallet')}
+            onPress={() => navigation.navigate('Portfolio')}
             activeOpacity={0.8}
           >
             <View style={styles.actionIconBox}>
