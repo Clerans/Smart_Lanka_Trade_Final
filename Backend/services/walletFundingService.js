@@ -44,7 +44,7 @@ class WalletFundingService {
   /**
    * Execute atomic internal wallet transfer between two users
    */
-  async executeInternalTransfer({ senderUserId, recipientUid, amount, message = '', idempotencyKey = null }) {
+  async executeInternalTransfer({ senderUserId, recipientUid, amount, message = '', idempotencyKey = null, pin = null }) {
     if (!amount || isNaN(amount) || parseFloat(amount) <= 0) {
       const err = new Error('Invalid transfer amount. Must be greater than zero.');
       err.status = 400;
@@ -53,6 +53,23 @@ class WalletFundingService {
 
     const numAmount = parseFloat(amount);
     const cleanRecipientUid = (recipientUid || '').trim().toUpperCase();
+
+    // Server-enforced High-Value Transaction Rule (> LKR 100,000)
+    if (numAmount > 100000) {
+      if (!pin) {
+        const err = new Error('High-value transfers exceeding LKR 100,000 require security PIN verification.');
+        err.code = 'HIGH_VALUE_PIN_REQUIRED';
+        err.status = 403;
+        throw err;
+      }
+      const isPinValid = await userModel.verifyPin(senderUserId, pin);
+      if (!isPinValid) {
+        const err = new Error('Invalid security PIN for high-value transfer authorization.');
+        err.code = 'INVALID_SECURITY_PIN';
+        err.status = 401;
+        throw err;
+      }
+    }
 
     let connection;
     try {
