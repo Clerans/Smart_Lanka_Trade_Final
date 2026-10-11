@@ -350,17 +350,28 @@ exports.googleLoginUser = async (idToken) => {
     throw createError('MISSING_TOKEN', 'Google ID token is required.', 400);
   }
 
-  const googleClientId = process.env.GOOGLE_CLIENT_ID;
-  if (!googleClientId) {
+  const googleWebClientId = process.env.GOOGLE_CLIENT_ID;
+  if (!googleWebClientId) {
     throw createError('SERVER_CONFIG_ERROR', 'Google OAuth client ID is not configured on the server.', 500);
   }
 
+  // Accept tokens from both the Web Client ID and the Android Client ID.
+  // The Android client ID may differ from the web client ID; if not configured
+  // separately it falls back to the web client ID.
+  const googleAndroidClientId =
+    process.env.GOOGLE_ANDROID_CLIENT_ID || googleWebClientId;
+
+  const acceptedAudiences = [
+    googleWebClientId,
+    googleAndroidClientId,
+  ].filter(Boolean);
+
   let payload;
   try {
-    const client = new OAuth2Client(googleClientId);
+    const client = new OAuth2Client();
     const ticket = await client.verifyIdToken({
       idToken,
-      audience: googleClientId,
+      audience: acceptedAudiences,
     });
     payload = ticket.getPayload();
   } catch (verifyErr) {

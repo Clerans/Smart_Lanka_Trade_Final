@@ -45,15 +45,22 @@ export const LoginScreen = () => {
   const [isNetworkError, setIsNetworkError] = useState(false);
 
   // Google OAuth Configuration
-  const googleClientId =
-    process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID ||
+  // WEB Client ID  — used by the backend to verify id_token audience
+  const googleWebClientId =
+    process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID ||
     '614054153944-7figt10pghsb14tg764jj3hfnktkqnbt.apps.googleusercontent.com';
 
+  // ANDROID Client ID — created in Google Cloud Console (Application type: Android)
+  // Package: com.michael_clerans.SmartLankaTrade
+  // SHA-1: 54:26:99:6C:4D:70:2C:5B:B9:CF:41:5D:6C:5F:B5:08:3D:76:0A:E8
+  const googleAndroidClientId =
+    process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID ||
+    '614054153944-t0flbk67jqulktrs8uf7gnghds8eeh15.apps.googleusercontent.com';
+
   const [request, response, promptAsync] = Google.useIdTokenAuthRequest({
-    clientId: googleClientId,
-    webClientId: googleClientId,
-    androidClientId: googleClientId,
-    iosClientId: googleClientId,
+    clientId: googleWebClientId,          // Web client — needed to get an id_token
+    webClientId: googleWebClientId,       // Explicit web client ID
+    androidClientId: googleAndroidClientId, // Android-specific client ID
     selectAccount: true,
   });
 
