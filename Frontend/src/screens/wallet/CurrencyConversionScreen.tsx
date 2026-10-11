@@ -92,20 +92,20 @@ export const CurrencyConversionScreen = () => {
   const handleConvertNow = async () => {
     const num = parseFloat(fromAmount);
     if (isNaN(num) || num <= 0) {
-      Alert.alert('Invalid Amount', 'Please enter a valid amount to convert.');
+      Alert.alert('Invalid Amount', 'Please enter a valid amount to benchmark.');
       return;
     }
 
     try {
       setConverting(true);
-      await new Promise((r) => setTimeout(r, 800));
+      await new Promise((r) => setTimeout(r, 400));
       Alert.alert(
-        'Conversion Successful',
-        `Successfully converted ${formatNumber(fromAmount, 2)} ${isLkrToUsd ? 'LKR' : 'USD'} to ${formatNumber(toAmount, 2)} ${isLkrToUsd ? 'USD' : 'LKR'}.`,
-        [{ text: 'OK', onPress: () => navigation.goBack() }]
+        'Indicative Valuation Benchmark',
+        `Valuation Calculation:\n${formatNumber(fromAmount, 2)} ${isLkrToUsd ? 'LKR' : 'USD'} ≈ ${formatNumber(toAmount, 2)} ${isLkrToUsd ? 'USD' : 'LKR'}\n\nExchange Rate: 1 USD = ${rate.toFixed(2)} LKR\n\nNotice: This is an analytical benchmark tool for international comparison. In compliance with financial regulations, real foreign exchange conversion is not executed.`,
+        [{ text: 'Got It' }]
       );
     } catch (e: any) {
-      Alert.alert('Conversion Failed', e.message || 'Could not complete transaction.');
+      Alert.alert('Calculation Error', e.message || 'Could not calculate valuation.');
     } finally {
       setConverting(false);
     }
@@ -259,17 +259,17 @@ export const CurrencyConversionScreen = () => {
             <View style={styles.bottomSection}>
               <Card style={styles.confirmCard}>
                 <View style={styles.confirmHeader}>
-                  <MaterialIcons name="check-circle" size={22} color={colors.accent} />
-                  <Text style={styles.confirmTitle}>Conversion Ready</Text>
+                  <MaterialIcons name="info-outline" size={22} color={colors.accent} />
+                  <Text style={styles.confirmTitle}>Indicative FX Benchmark</Text>
                 </View>
                 <Text style={styles.confirmDesc}>
-                  Convert {formatNumber(fromAmount || '0', 2)}{' '}
-                  {isLkrToUsd ? 'LKR' : 'USD'} to your {isLkrToUsd ? 'USD' : 'LKR'} wallet instantly.
+                  Estimated benchmark for {formatNumber(fromAmount || '0', 2)}{' '}
+                  {isLkrToUsd ? 'LKR' : 'USD'} based on live central rate. Provided for market analysis and context comparison.
                 </Text>
               </Card>
 
               <PrimaryButton
-                title={converting ? 'Converting...' : 'Convert Now'}
+                title={converting ? 'Calculating...' : 'Calculate Benchmark'}
                 onPress={handleConvertNow}
                 loading={converting}
               />

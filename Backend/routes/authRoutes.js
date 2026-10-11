@@ -19,7 +19,9 @@ const {
   getProfile,
   updateProfile,
   syncUser,
-  linkLegacyAccount
+  getSecuritySettings,
+  updateSecuritySettings,
+  verifyPin
 } = require('../controllers/authController');
 const { protect } = require('../middleware/authMiddleware');
 const { requireAdmin } = require('../middleware/adminMiddleware');
@@ -38,10 +40,14 @@ const otpLimiter = rateLimit({
   }
 });
 
-// Firebase user synchronization endpoint
+// Authenticated session state endpoints
 router.post('/sync', protect, syncUser);
 router.get('/me', protect, syncUser);
-router.post('/link-legacy-account', protect, linkLegacyAccount);
+
+// Security Settings & PIN Verification Endpoints
+router.get('/security-settings', protect, getSecuritySettings);
+router.put('/security-settings', protect, updateSecuritySettings);
+router.post('/verify-pin', protect, verifyPin);
 
 router.post('/register', register);
 router.post('/login', login);

@@ -16,6 +16,7 @@ function normalizeSymbol(symbol) {
 // Shared rate & inflight caches
 let cachedUsdToLkr = null;
 let cachedUsdToLkrTime = 0;
+let cachedUsdToLkrSource = 'uninitialized';
 let inflightLivePricesPromise = null;
 
 // 1. Get crypto ticker from Binance (Price + 24h Change)
@@ -41,10 +42,15 @@ async function getCryptoTicker(symbol = "BTCUSDT") {
   };
 }
 
-// 2. Get USD → LKR rate (cached for 60s)
-async function getUSDToLKR() {
+// 2. Get USD → LKR rate with explicit source disclosure
+async function getUSDToLKRDetails() {
   if (cachedUsdToLkr && (Date.now() - cachedUsdToLkrTime) < 60000) {
-    return cachedUsdToLkr;
+    return {
+      rate: cachedUsdToLkr,
+      source: cachedUsdToLkrSource,
+      isEstimated: cachedUsdToLkrSource === 'fallback_estimate',
+      updatedAt: new Date(cachedUsdToLkrTime).toISOString()
+    };
   }
 
   try {
@@ -55,26 +61,57 @@ async function getUSDToLKR() {
     if (response.data && response.data.rates && response.data.rates.LKR) {
       cachedUsdToLkr = parseFloat(response.data.rates.LKR);
       cachedUsdToLkrTime = Date.now();
-      return cachedUsdToLkr;
+      cachedUsdToLkrSource = 'live';
+      return {
+        rate: cachedUsdToLkr,
+        source: 'live',
+        isEstimated: false,
+        updatedAt: new Date(cachedUsdToLkrTime).toISOString()
+      };
     }
   } catch (err) {
     console.warn('⚠️ Currency API warning, using cached or fallback rate:', err.message);
   }
 
-  return cachedUsdToLkr || 328.2;
+  if (cachedUsdToLkr) {
+    return {
+      rate: cachedUsdToLkr,
+      source: 'stale_cache',
+      isEstimated: true,
+      updatedAt: new Date(cachedUsdToLkrTime).toISOString()
+    };
+  }
+
+  cachedUsdToLkr = 328.2;
+  cachedUsdToLkrTime = Date.now();
+  cachedUsdToLkrSource = 'fallback_estimate';
+
+  return {
+    rate: 328.2,
+    source: 'fallback_estimate',
+    isEstimated: true,
+    updatedAt: new Date(cachedUsdToLkrTime).toISOString()
+  };
+}
+
+async function getUSDToLKR() {
+  const details = await getUSDToLKRDetails();
+  return details.rate;
 }
 
 // 3. Final conversion
 async function getPriceInLKR(symbol) {
   const ticker = await getCryptoTicker(symbol);
-  const usdToLkr = await getUSDToLKR();
+  const fxDetails = await getUSDToLKRDetails();
 
   return {
     symbol,
     priceUSDT: ticker.price,
     changePercent: ticker.changePercent,
-    usdToLkr,
-    priceLKR: ticker.price * usdToLkr,
+    usdToLkr: fxDetails.rate,
+    isRateEstimated: fxDetails.isEstimated,
+    rateSource: fxDetails.source,
+    priceLKR: Math.round(ticker.price * fxDetails.rate * 100) / 100,
   };
 }
 
@@ -294,5 +331,6 @@ module.exports = {
   getAllPricesInLKR,
   getLivePrices,
   getUSDToLKR,
+  getUSDToLKRDetails,
   getCryptoTicker
 };

@@ -26,16 +26,14 @@ const VALID_INTERVALS = ['1m', '5m', '15m', '30m', '1h', '4h', '1d'];
  */
 function validateSymbol(symbol) {
   if (!symbol || typeof symbol !== 'string') {
-    throw new Error('Invalid symbol parameter');
+    throw new Error('Invalid symbol parameter: must be a non-empty string');
   }
   let normalized = symbol.toUpperCase().trim().replace('/', '').replace('LKR', 'USDT');
   if (!normalized.endsWith('USDT')) {
     normalized = normalized + 'USDT';
   }
   if (!SUPPORTED_SYMBOLS.includes(normalized)) {
-    if (normalized.length < 5) {
-      throw new Error(`Symbol '${symbol}' is not supported. Supported symbols: ${SUPPORTED_SYMBOLS.join(', ')}`);
-    }
+    throw new Error(`Symbol '${symbol}' is not supported. Supported symbols: ${SUPPORTED_SYMBOLS.join(', ')}`);
   }
   return normalized;
 }
@@ -46,10 +44,14 @@ function validateSymbol(symbol) {
  * @returns {string}
  */
 function validateInterval(interval = '1h') {
-  if (!VALID_INTERVALS.includes(interval)) {
-    return '1h'; // Default to 1h
+  if (!interval || typeof interval !== 'string') {
+    throw new Error('Invalid interval parameter: must be a string');
   }
-  return interval;
+  const cleanInterval = interval.toLowerCase().trim();
+  if (!VALID_INTERVALS.includes(cleanInterval)) {
+    throw new Error(`Interval '${interval}' is not supported. Supported intervals: ${VALID_INTERVALS.join(', ')}`);
+  }
+  return cleanInterval;
 }
 
 /**
@@ -82,15 +84,26 @@ async function getHistoricalCandles(symbol = 'BTCUSDT', interval = '1h', limit =
       throw new Error(`No candle data returned for ${normSymbol}`);
     }
 
-    const candles = rawKlines.map(k => ({
-      timestamp: parseInt(k[0], 10),
-      open: parseFloat(k[1]),
-      high: parseFloat(k[2]),
-      low: parseFloat(k[3]),
-      close: parseFloat(k[4]),
-      volume: parseFloat(k[5]),
-      closeTime: parseInt(k[6], 10)
-    }));
+    const seenTimestamps = new Set();
+    const candles = [];
+
+    for (const k of rawKlines) {
+      const ts = parseInt(k[0], 10);
+      if (seenTimestamps.has(ts)) continue;
+      seenTimestamps.add(ts);
+
+      candles.push({
+        timestamp: ts,
+        open: parseFloat(k[1]),
+        high: parseFloat(k[2]),
+        low: parseFloat(k[3]),
+        close: parseFloat(k[4]),
+        volume: parseFloat(k[5]),
+        closeTime: parseInt(k[6], 10)
+      });
+    }
+
+    candles.sort((a, b) => a.timestamp - b.timestamp);
 
     klineCache.set(cacheKey, {
       data: candles,

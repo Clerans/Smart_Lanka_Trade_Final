@@ -135,21 +135,6 @@ exports.verifyOtp = async (email, otp, firebaseUid = null) => {
   // 2. Mark user's email as verified in Oracle (EMAIL_VERIFIED = 1, IS_VERIFIED = 1)
   await otpModel.markUserEmailVerified(cleanEmail);
 
-  // 3. Synchronize with Firebase Authentication if UID is present
-  const user = await userModel.findByEmail(cleanEmail);
-  const targetFirebaseUid = firebaseUid || user?.FIREBASE_UID;
-  if (targetFirebaseUid) {
-    try {
-      const { admin } = require('../config/firebaseAdmin');
-      if (admin && admin.apps && admin.apps.length > 0) {
-        await admin.auth().updateUser(targetFirebaseUid, { emailVerified: true });
-        console.log(`✅ [Firebase Admin] Set emailVerified=true for Firebase UID: ${targetFirebaseUid}`);
-      }
-    } catch (fbAdminErr) {
-      console.warn(`⚠️ [Firebase Admin] Could not update emailVerified for ${targetFirebaseUid}:`, fbAdminErr.message);
-    }
-  }
-
   return {
     success: true,
     message: 'Email verified successfully!'
@@ -184,13 +169,17 @@ exports.registerUser = async (name, email, password) => {
   const userId = await userModel.createUser(cleanName, cleanEmail, hashedPassword, token);
 
   // Trigger sendOtp (HMAC-SHA256 hashed code sent via Brevo)
+  let otpSent = false;
+  let otpError = null;
   try {
     await exports.sendOtp(cleanEmail);
+    otpSent = true;
   } catch (otpErr) {
-    console.warn(`⚠️ sendOtp warning on registration for ${cleanEmail}:`, otpErr.message);
+    console.warn(`⚠️ Initial OTP dispatch note for ${cleanEmail}:`, otpErr.message);
+    otpError = otpErr.message;
   }
 
-  return { userId, email: cleanEmail };
+  return { userId, email: cleanEmail, otpSent, otpError };
 };
 
 exports.loginUser = async (email, password) => {

@@ -14,7 +14,7 @@ const userModel = require('../models/userModel');
  */
 const KYC_CONFIG = {
   MIN_OCR_CONFIDENCE: 30,
-  VERIFIED_OCR_CONFIDENCE: 30,
+  VERIFIED_OCR_CONFIDENCE: 70, // High confidence threshold required for instant automated verification (as documented)
   VERIFIED_NAME_MATCH: 0.80,
   BORDERLINE_NAME_MATCH: 0.65,
   MIN_NAME_MATCH: 0.35
@@ -209,18 +209,13 @@ function evaluateKYCDecision({ nicNumber, ocrConfidence, nameSimilarity, hasExtr
       };
     }
   } else {
-    // Name could not be isolated from image, but NIC and demographics are valid
-    if (ocrConfidence >= KYC_CONFIG.VERIFIED_OCR_CONFIDENCE) {
-      return {
-        verificationStatus: 'VERIFIED',
-        rejectionReason: null
-      };
-    } else {
-      return {
-        verificationStatus: 'PENDING',
-        rejectionReason: 'Identity details were extracted successfully, but OCR confidence is low. The document has been submitted for administrative review.'
-      };
-    }
+    // Name could not be isolated from image. Even if NIC is valid,
+    // never auto-approve an identity based solely on a pattern match.
+    // Always queue for manual administrative review.
+    return {
+      verificationStatus: 'PENDING',
+      rejectionReason: 'Cardholder name could not be automatically confirmed from document text. Document queued for manual administrative review.'
+    };
   }
 }
 

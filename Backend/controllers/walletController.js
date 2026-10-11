@@ -216,7 +216,7 @@ const requestWithdrawal = async (req, res) => {
     if (!req.user || !req.user.id) {
       return res.status(401).json({ success: false, code: 'UNAUTHORIZED', message: 'Authentication required.' });
     }
-    const { amount, method = 'BANK_ACCOUNT', destination, bankName, idempotencyKey } = req.body;
+    const { amount, method = 'BANK_ACCOUNT', destination, bankName, idempotencyKey, pin } = req.body;
     const userId = req.user.id;
 
     const result = await walletFundingService.requestWithdrawal({
@@ -225,7 +225,8 @@ const requestWithdrawal = async (req, res) => {
       method,
       destination,
       bankName,
-      idempotencyKey
+      idempotencyKey,
+      pin
     });
 
     res.json({
@@ -275,7 +276,7 @@ const executeTransfer = async (req, res) => {
     if (!req.user || !req.user.id) {
       return res.status(401).json({ success: false, code: 'UNAUTHORIZED', message: 'Authentication required.' });
     }
-    const { recipientUid, amount, message, idempotencyKey } = req.body;
+    const { recipientUid, amount, message, idempotencyKey, pin } = req.body;
     const senderUserId = req.user.id;
 
     const result = await walletFundingService.executeInternalTransfer({
@@ -283,7 +284,8 @@ const executeTransfer = async (req, res) => {
       recipientUid,
       amount,
       message,
-      idempotencyKey
+      idempotencyKey,
+      pin
     });
 
     res.json({

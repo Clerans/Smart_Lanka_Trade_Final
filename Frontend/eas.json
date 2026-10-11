@@ -17,13 +17,7 @@
         "NPM_CONFIG_LEGACY_PEER_DEPS": "true",
         "EXPO_PUBLIC_API_URL": "https://smart-lanka-trade-final.onrender.com/api",
         "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "614054153944-7figt10pghsb14tg764jj3hfnktkqnbt.apps.googleusercontent.com",
-        "EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID": "614054153944-t0flbk67jqulktrs8uf7gnghds8eeh15.apps.googleusercontent.com",
-        "EXPO_PUBLIC_FIREBASE_API_KEY": "AIzaSyA8YZwo5LDc9_rLsxQxEm-D_a-HxHjAW0s",
-        "EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN": "smartlankatrade-final.firebaseapp.com",
-        "EXPO_PUBLIC_FIREBASE_PROJECT_ID": "smartlankatrade-final",
-        "EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET": "smartlankatrade-final.firebasestorage.app",
-        "EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID": "345276801948",
-        "EXPO_PUBLIC_FIREBASE_APP_ID": "1:345276801948:web:eccf7408899a769fe91e59"
+        "EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID": "614054153944-t0flbk67jqulktrs8uf7gnghds8eeh15.apps.googleusercontent.com"
       }
     },
     "production-apk": {
@@ -34,13 +28,7 @@
         "NPM_CONFIG_LEGACY_PEER_DEPS": "true",
         "EXPO_PUBLIC_API_URL": "https://smart-lanka-trade-final.onrender.com/api",
         "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "614054153944-7figt10pghsb14tg764jj3hfnktkqnbt.apps.googleusercontent.com",
-        "EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID": "614054153944-t0flbk67jqulktrs8uf7gnghds8eeh15.apps.googleusercontent.com",
-        "EXPO_PUBLIC_FIREBASE_API_KEY": "AIzaSyA8YZwo5LDc9_rLsxQxEm-D_a-HxHjAW0s",
-        "EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN": "smartlankatrade-final.firebaseapp.com",
-        "EXPO_PUBLIC_FIREBASE_PROJECT_ID": "smartlankatrade-final",
-        "EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET": "smartlankatrade-final.firebasestorage.app",
-        "EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID": "345276801948",
-        "EXPO_PUBLIC_FIREBASE_APP_ID": "1:345276801948:web:eccf7408899a769fe91e59"
+        "EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID": "614054153944-t0flbk67jqulktrs8uf7gnghds8eeh15.apps.googleusercontent.com"
       }
     },
     "production": {
@@ -49,13 +37,7 @@
         "NPM_CONFIG_LEGACY_PEER_DEPS": "true",
         "EXPO_PUBLIC_API_URL": "https://smart-lanka-trade-final.onrender.com/api",
         "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "614054153944-7figt10pghsb14tg764jj3hfnktkqnbt.apps.googleusercontent.com",
-        "EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID": "614054153944-t0flbk67jqulktrs8uf7gnghds8eeh15.apps.googleusercontent.com",
-        "EXPO_PUBLIC_FIREBASE_API_KEY": "AIzaSyA8YZwo5LDc9_rLsxQxEm-D_a-HxHjAW0s",
-        "EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN": "smartlankatrade-final.firebaseapp.com",
-        "EXPO_PUBLIC_FIREBASE_PROJECT_ID": "smartlankatrade-final",
-        "EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET": "smartlankatrade-final.firebasestorage.app",
-        "EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID": "345276801948",
-        "EXPO_PUBLIC_FIREBASE_APP_ID": "1:345276801948:web:eccf7408899a769fe91e59"
+        "EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID": "614054153944-t0flbk67jqulktrs8uf7gnghds8eeh15.apps.googleusercontent.com"
       }
     }
   },

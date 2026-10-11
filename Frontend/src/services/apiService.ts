@@ -93,14 +93,6 @@ export const authService = {
         password
       });
 
-      // Optionally dispatch Firebase email verification link
-      try {
-        const { firebaseVerificationService } = require('./firebaseVerificationService');
-        await firebaseVerificationService.sendVerificationLink(cleanEmail, password, cleanName);
-      } catch (fbErr) {
-        console.log('Firebase verification link helper notice:', fbErr);
-      }
-
       return response.data;
     } catch (error: any) {
       throw error;
@@ -263,6 +255,30 @@ export const authService = {
       if (response.data && response.data.user) {
         await storageService.setUserData(response.data.user);
       }
+      return response.data;
+    } catch (error: any) {
+      throw error;
+    }
+  },
+  getSecuritySettings: async () => {
+    try {
+      const response = await api.get('/auth/security-settings');
+      return response.data;
+    } catch (error: any) {
+      throw error;
+    }
+  },
+  updateSecuritySettings: async (settings: { twoFactorEnabled?: boolean; pin?: string }) => {
+    try {
+      const response = await api.put('/auth/security-settings', settings);
+      return response.data;
+    } catch (error: any) {
+      throw error;
+    }
+  },
+  verifyPin: async (pin: string) => {
+    try {
+      const response = await api.post('/auth/verify-pin', { pin });
       return response.data;
     } catch (error: any) {
       throw error;
