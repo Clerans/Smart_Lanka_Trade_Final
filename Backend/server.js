@@ -102,18 +102,39 @@ app.get(['/', '/health', '/api/health'], async (req, res) => {
   const mem = process.memoryUsage();
   let dbStatus = 'disconnected';
   let poolStats = null;
+  let dbLatencyMs = null;
 
   try {
     const oracledb = require('oracledb');
     const pool = oracledb.getPool();
     if (pool) {
-      dbStatus = 'connected';
       poolStats = {
         connectionsOpen: pool.connectionsOpen,
         connectionsInUse: pool.connectionsInUse,
         poolMin: pool.poolMin,
         poolMax: pool.poolMax
       };
+
+      // Lightweight probe with SELECT 1 FROM DUAL and 3000ms timeout
+      let conn;
+      try {
+        const startProbe = Date.now();
+        conn = await Promise.race([
+          pool.getConnection(),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('PROBE_TIMEOUT')), 3000))
+        ]);
+        await conn.execute('SELECT 1 FROM DUAL');
+        dbLatencyMs = Date.now() - startProbe;
+        dbStatus = 'connected';
+      } catch (probeErr) {
+        dbStatus = probeErr.message === 'PROBE_TIMEOUT' ? 'timeout' : 'unreachable';
+      } finally {
+        if (conn) {
+          try { await conn.close(); } catch (_) {}
+        }
+      }
+    } else {
+      dbStatus = 'uninitialized';
     }
   } catch (e) {
     dbStatus = 'uninitialized';
@@ -125,8 +146,9 @@ app.get(['/', '/health', '/api/health'], async (req, res) => {
     timestamp: new Date().toISOString(),
     uptime: `${Math.floor(uptimeSeconds / 3600)}h ${Math.floor((uptimeSeconds % 3600) / 60)}m ${uptimeSeconds % 60}s`,
     database: {
-      engine: 'Oracle Database 21c / Express',
+      engine: 'Oracle Autonomous Database',
       status: dbStatus,
+      latencyMs: dbLatencyMs,
       pool: poolStats
     },
     memory: {
