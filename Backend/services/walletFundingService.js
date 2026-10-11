@@ -283,7 +283,7 @@ class WalletFundingService {
   /**
    * Request / Process a withdrawal with state lifecycle
    */
-  async requestWithdrawal({ userId, amount, method = 'BANK_ACCOUNT', destination = '', bankName = '', idempotencyKey = null }) {
+  async requestWithdrawal({ userId, amount, method = 'BANK_ACCOUNT', destination = '', bankName = '', idempotencyKey = null, pin = null }) {
     if (!amount || isNaN(amount) || parseFloat(amount) <= 0) {
       const err = new Error('Invalid withdrawal amount. Must be greater than zero.');
       err.status = 400;
@@ -297,6 +297,24 @@ class WalletFundingService {
     }
 
     const numAmount = parseFloat(amount);
+
+    // Server-enforced High-Value Transaction Rule (> LKR 100,000)
+    if (numAmount > 100000) {
+      if (!pin) {
+        const err = new Error('High-value withdrawals exceeding LKR 100,000 require security PIN verification.');
+        err.code = 'HIGH_VALUE_PIN_REQUIRED';
+        err.status = 403;
+        throw err;
+      }
+      const isPinValid = await userModel.verifyPin(userId, pin);
+      if (!isPinValid) {
+        const err = new Error('Invalid security PIN for high-value withdrawal authorization.');
+        err.code = 'INVALID_SECURITY_PIN';
+        err.status = 401;
+        throw err;
+      }
+    }
+
     let connection;
     try {
       connection = await oracledb.getConnection();
