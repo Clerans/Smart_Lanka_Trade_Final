@@ -30,10 +30,15 @@ exports.register = async (req, res) => {
     }
 
     const result = await authService.registerUser(name, email, password);
+    const message = result.otpSent
+      ? 'Registration successful! Please check your email for the verification code.'
+      : 'Account created, but verification code could not be delivered immediately. Please click Resend Code on the next screen.';
+
     res.status(201).json({
       success: true,
-      message: 'Registration successful! Please check your email for the verification code.',
-      userId: result.userId
+      message,
+      userId: result.userId,
+      otpSent: result.otpSent
     });
   } catch (err) {
     res.status(err.status || 500).json({
