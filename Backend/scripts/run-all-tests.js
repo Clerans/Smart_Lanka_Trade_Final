@@ -154,13 +154,13 @@ async function runTestSuite() {
 
     // 4.1 Valid NIC parsing
     const oldNicValidation = validateNICFormat('921451234V');
-    assert(oldNicValidation.valid === true && oldNicValidation.format === 'old', 'Parses 9-digit old Sri Lankan NIC format (V suffix)');
+    assert(oldNicValidation.isValid === true && oldNicValidation.format === 'OLD', 'Parses 9-digit old Sri Lankan NIC format (V suffix)');
 
     const newNicValidation = validateNICFormat('199512345678');
-    assert(newNicValidation.valid === true && newNicValidation.format === 'new', 'Parses 12-digit new Sri Lankan NIC format');
+    assert(newNicValidation.isValid === true && newNicValidation.format === 'NEW', 'Parses 12-digit new Sri Lankan NIC format');
 
     const parsedOld = parseNICDetails('921451234V');
-    assert(parsedOld && parsedOld.year === 1992 && parsedOld.gender === 'Male', 'Derives 1992 birth year and Male gender for day 145');
+    assert(parsedOld && parsedOld.year === 1992 && parsedOld.gender === 'MALE', 'Derives 1992 birth year and Male gender for day 145');
 
     // 4.2 Auto-approval guard: High confidence + matching name
     const matchDecision = evaluateKYCDecision({
