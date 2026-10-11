@@ -93,14 +93,6 @@ export const authService = {
         password
       });
 
-      // Optionally dispatch Firebase email verification link
-      try {
-        const { firebaseVerificationService } = require('./firebaseVerificationService');
-        await firebaseVerificationService.sendVerificationLink(cleanEmail, password, cleanName);
-      } catch (fbErr) {
-        console.log('Firebase verification link helper notice:', fbErr);
-      }
-
       return response.data;
     } catch (error: any) {
       throw error;

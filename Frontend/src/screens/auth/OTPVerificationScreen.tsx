@@ -16,7 +16,6 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { colors, typography } from '../../theme';
 import { PrimaryButton, Toast, NetworkErrorScreen } from '../../components';
 import { authService } from '../../services/apiService';
-import { firebaseVerificationService } from '../../services/firebaseVerificationService';
 
 export const OTPVerificationScreen = () => {
   const navigation = useNavigation<any>();
@@ -36,10 +35,6 @@ export const OTPVerificationScreen = () => {
   const [toastMessage, setToastMessage] = useState('');
   const [toastType, setToastType] = useState<'success' | 'error' | 'warning'>('success');
   const [isNetworkError, setIsNetworkError] = useState(false);
-
-  const [fallbackMode, setFallbackMode] = useState(false);
-  const [checkingLinkStatus, setCheckingLinkStatus] = useState(false);
-  const [sendingLink, setSendingLink] = useState(false);
 
   // Focus first input on mount
   useEffect(() => {
