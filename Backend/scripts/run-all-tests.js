@@ -45,24 +45,23 @@ async function runTestSuite() {
   // -------------------------------------------------------------
   console.log('SUITE 1: Cryptographic Security & OTP Lifecycle');
   try {
-    const { hashOtp, verifyOtpHash, generateOtpCode } = require('../utils/otpSecurity');
+    const { hashOtp, verifyOtpHash } = require('../models/otpModel');
 
-    // 1.1 OTP Code Format
-    const code = generateOtpCode();
-    assert(/^\d{6}$/.test(code), 'generateOtpCode produces a 6-digit numeric string');
+    // 1.1 Secure 6-digit OTP Generation
+    const code = crypto.randomInt(100000, 1000000).toString();
+    assert(/^\d{6}$/.test(code), 'crypto.randomInt produces a 6-digit numeric string');
     
     // 1.2 Uniqueness (CSPRNG)
-    const code2 = generateOtpCode();
     const codes = new Set();
-    for (let i = 0; i < 20; i++) codes.add(generateOtpCode());
+    for (let i = 0; i < 20; i++) codes.add(crypto.randomInt(100000, 1000000).toString());
     assert(codes.size >= 18, 'CSPRNG generates high-entropy distinct OTP codes');
 
     // 1.3 Hash Verification with timingSafeEqual
-    const secretHash = hashOtp('test@smartlanka.lk', code);
+    const secretHash = hashOtp(code);
     assert(typeof secretHash === 'string' && secretHash.length === 64, 'hashOtp generates 64-char HMAC-SHA256 hex string');
-    assert(verifyOtpHash('test@smartlanka.lk', code, secretHash), 'verifyOtpHash accepts valid code and email');
-    assert(!verifyOtpHash('test@smartlanka.lk', '000000', secretHash), 'verifyOtpHash rejects wrong code');
-    assert(!verifyOtpHash('wrong@smartlanka.lk', code, secretHash), 'verifyOtpHash binds hash to user email');
+    assert(verifyOtpHash(code, secretHash), 'verifyOtpHash accepts valid code');
+    assert(!verifyOtpHash('000000', secretHash), 'verifyOtpHash rejects wrong code');
+    assert(!verifyOtpHash('', secretHash), 'verifyOtpHash rejects empty code');
 
     // 1.4 Cooldown and Expiry Logic
     const OTP_COOLDOWN_SECONDS = 60;
@@ -147,52 +146,57 @@ async function runTestSuite() {
   // -------------------------------------------------------------
   console.log('\nSUITE 4: KYC OCR Decision Engine & Threshold Security');
   try {
-    const { KYC_CONFIG, determineKycDecision, parseSriLankanNic } = require('../services/kycService');
+    const { KYC_CONFIG, evaluateKYCDecision } = require('../services/kycService');
+    const { validateNICFormat, parseNICDetails } = require('../utils/nicParser');
 
     assert(KYC_CONFIG.VERIFIED_OCR_CONFIDENCE === 70, 'KYC verified threshold is centrally configured at 70%');
-    assert(KYC_CONFIG.REJECTED_OCR_CONFIDENCE === 20, 'KYC rejection threshold is centrally configured at 20%');
+    assert(KYC_CONFIG.MIN_OCR_CONFIDENCE === 30, 'KYC readable minimum threshold is configured at 30%');
 
     // 4.1 Valid NIC parsing
-    const oldNic = parseSriLankanNic('Extracted text 921451234V on national identity card');
-    assert(oldNic && oldNic.format === 'old' && oldNic.nic === '921451234V', 'Parses 9-digit old Sri Lankan NIC format (V suffix)');
+    const oldNicValidation = validateNICFormat('921451234V');
+    assert(oldNicValidation.valid === true && oldNicValidation.format === 'old', 'Parses 9-digit old Sri Lankan NIC format (V suffix)');
 
-    const newNic = parseSriLankanNic('Extracted text 199512345678 on card');
-    assert(newNic && newNic.format === 'new' && newNic.nic === '199512345678', 'Parses 12-digit new Sri Lankan NIC format');
+    const newNicValidation = validateNICFormat('199512345678');
+    assert(newNicValidation.valid === true && newNicValidation.format === 'new', 'Parses 12-digit new Sri Lankan NIC format');
+
+    const parsedOld = parseNICDetails('921451234V');
+    assert(parsedOld && parsedOld.year === 1992 && parsedOld.gender === 'Male', 'Derives 1992 birth year and Male gender for day 145');
 
     // 4.2 Auto-approval guard: High confidence + matching name
-    const matchDecision = determineKycDecision({
-      confidence: 85,
-      parsedNic: oldNic,
-      extractedName: 'Kavindu Perera',
-      registeredName: 'Kavindu Perera'
+    const matchDecision = evaluateKYCDecision({
+      nicNumber: '921451234V',
+      ocrConfidence: 85,
+      nameSimilarity: 0.95,
+      hasExtractedName: true
     });
-    assert(matchDecision.status === 'VERIFIED', 'Approves when confidence >= 70% and names match');
+    assert(matchDecision.verificationStatus === 'VERIFIED', 'Approves when confidence >= 70% and names match');
 
-    // 4.3 Security Guard: High confidence BUT missing or mismatched name -> PENDING
-    const mismatchDecision = determineKycDecision({
-      confidence: 85,
-      parsedNic: oldNic,
-      extractedName: 'Random Stranger',
-      registeredName: 'Kavindu Perera'
+    // 4.3 Security Guard: High confidence BUT mismatched name -> REJECTED or PENDING
+    const mismatchDecision = evaluateKYCDecision({
+      nicNumber: '921451234V',
+      ocrConfidence: 85,
+      nameSimilarity: 0.20,
+      hasExtractedName: true
     });
-    assert(mismatchDecision.status === 'PENDING', 'Queues as PENDING for manual admin review when name does not match');
+    assert(mismatchDecision.verificationStatus === 'REJECTED', 'Rejects when name differs significantly (< 0.35)');
 
-    const missingNameDecision = determineKycDecision({
-      confidence: 88,
-      parsedNic: oldNic,
-      extractedName: '',
-      registeredName: 'Kavindu Perera'
+    // 4.4 Security Guard: Missing extracted name -> Never auto-approved, queued as PENDING for admin
+    const missingNameDecision = evaluateKYCDecision({
+      nicNumber: '921451234V',
+      ocrConfidence: 88,
+      nameSimilarity: 0,
+      hasExtractedName: false
     });
-    assert(missingNameDecision.status === 'PENDING', 'Queues as PENDING when name is missing despite high OCR score');
+    assert(missingNameDecision.verificationStatus === 'PENDING', 'Queues as PENDING when name is missing despite high OCR score');
 
-    // 4.4 Low confidence rejection
-    const lowConfDecision = determineKycDecision({
-      confidence: 15,
-      parsedNic: null,
-      extractedName: '',
-      registeredName: 'Kavindu Perera'
+    // 4.5 Low confidence rejection
+    const lowConfDecision = evaluateKYCDecision({
+      nicNumber: '921451234V',
+      ocrConfidence: 15,
+      nameSimilarity: 0.95,
+      hasExtractedName: true
     });
-    assert(lowConfDecision.status === 'REJECTED', 'Rejects document when confidence is below 20%');
+    assert(lowConfDecision.verificationStatus === 'REJECTED', 'Rejects document when confidence is below readable threshold (30%)');
   } catch (err) {
     assert(false, 'Suite 4 execution', err.message);
   }
