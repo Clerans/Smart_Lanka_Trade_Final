@@ -14,7 +14,7 @@ const userModel = require('../models/userModel');
  */
 const KYC_CONFIG = {
   MIN_OCR_CONFIDENCE: 30,
-  VERIFIED_OCR_CONFIDENCE: 30,
+  VERIFIED_OCR_CONFIDENCE: 70, // High confidence threshold required for instant automated verification (as documented)
   VERIFIED_NAME_MATCH: 0.80,
   BORDERLINE_NAME_MATCH: 0.65,
   MIN_NAME_MATCH: 0.35
