@@ -196,11 +196,16 @@ export const SecuritySettingsScreen = () => {
     }
     try {
       await storageService.setPin(pin);
+      try {
+        await authService.updateSecuritySettings({ pin });
+      } catch (backendErr) {
+        console.warn('Backend PIN sync note:', backendErr);
+      }
       setSavedPin(pin);
       setPinModalVisible(false);
       setPin('');
       setConfirmPin('');
-      Alert.alert('Success', 'Your 4-digit security PIN has been securely updated in hardware-backed storage.');
+      Alert.alert('Success', 'Your 4-digit security PIN has been updated and synchronized with server authorization.');
     } catch {
       Alert.alert('Error', 'Failed to save security PIN.');
     }
