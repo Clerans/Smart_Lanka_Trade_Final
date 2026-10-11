@@ -122,8 +122,7 @@ exports.verifyOtp = async (req, res) => {
       });
     }
 
-    const firebaseUid = req.user?.firebaseUid || req.firebaseUser?.uid || null;
-    const result = await authService.verifyOtp(email, otp, firebaseUid);
+    const result = await authService.verifyOtp(email, otp);
     res.json({
       success: true,
       message: result.message || 'Email verified successfully!'
@@ -250,40 +249,89 @@ exports.syncUser = async (req, res) => {
   }
 };
 
-exports.linkLegacyAccount = async (req, res) => {
+exports.getSecuritySettings = async (req, res) => {
   try {
-    const { legacyPassword } = req.body;
-    if (!legacyPassword) {
+    const userModel = require('../models/userModel');
+    const settings = await userModel.getSecuritySettings(req.user.id);
+    res.json({
+      success: true,
+      data: settings
+    });
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      code: 'SERVER_ERROR',
+      message: err.message
+    });
+  }
+};
+
+exports.updateSecuritySettings = async (req, res) => {
+  try {
+    const { twoFactorEnabled, pin } = req.body;
+    const userModel = require('../models/userModel');
+    const bcrypt = require('bcryptjs');
+
+    const updatePayload = {};
+    if (twoFactorEnabled !== undefined) {
+      updatePayload.twoFactorEnabled = !!twoFactorEnabled;
+    }
+    if (pin) {
+      const cleanPin = String(pin).trim();
+      if (!/^\d{4,6}$/.test(cleanPin)) {
+        return res.status(422).json({
+          success: false,
+          code: 'INVALID_PIN_FORMAT',
+          message: 'Security PIN must be 4 to 6 digits.'
+        });
+      }
+      updatePayload.pinHash = await bcrypt.hash(cleanPin, 10);
+    }
+
+    const settings = await userModel.updateSecuritySettings(req.user.id, updatePayload);
+    res.json({
+      success: true,
+      message: 'Security settings updated successfully.',
+      data: settings
+    });
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      code: 'SERVER_ERROR',
+      message: err.message
+    });
+  }
+};
+
+exports.verifyPin = async (req, res) => {
+  try {
+    const { pin } = req.body;
+    if (!pin) {
       return res.status(422).json({
         success: false,
-        code: 'MISSING_FIELDS',
-        message: 'Legacy account password is required.'
+        code: 'MISSING_PIN',
+        message: 'Security PIN is required.'
       });
     }
 
-    if (!req.firebaseUser || !req.firebaseUser.uid || !req.firebaseUser.email) {
+    const userModel = require('../models/userModel');
+    const isValid = await userModel.verifyPin(req.user.id, pin);
+    if (!isValid) {
       return res.status(401).json({
         success: false,
-        code: 'UNAUTHORIZED',
-        message: 'A verified Firebase authenticated session is required to link an existing account.'
+        code: 'INVALID_PIN',
+        message: 'Incorrect security PIN.'
       });
     }
-
-    const userProfile = await authService.linkLegacyAccount(
-      req.firebaseUser.uid,
-      req.firebaseUser.email,
-      legacyPassword
-    );
 
     res.json({
       success: true,
-      message: 'Legacy account successfully verified and linked!',
-      user: userProfile
+      message: 'Security PIN verified successfully.'
     });
   } catch (err) {
-    res.status(err.status || 500).json({
+    res.status(500).json({
       success: false,
-      code: err.code || 'SERVER_ERROR',
+      code: 'SERVER_ERROR',
       message: err.message
     });
   }
