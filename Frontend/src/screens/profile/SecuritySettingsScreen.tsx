@@ -58,8 +58,17 @@ export const SecuritySettingsScreen = () => {
       const bio = await AsyncStorage.getItem('@pref_biometric');
       if (bio !== null) setBiometricEnabled(bio === 'true');
 
-      const tfa = await AsyncStorage.getItem('@pref_2fa');
-      if (tfa !== null) setTwoFactorEnabled(tfa === 'true');
+      // Sync authoritative 2FA from backend API
+      try {
+        const secRes = await authService.getSecuritySettings();
+        if (secRes?.success && secRes?.data) {
+          setTwoFactorEnabled(secRes.data.twoFactorEnabled);
+          await AsyncStorage.setItem('@pref_2fa', String(secRes.data.twoFactorEnabled));
+        }
+      } catch {
+        const tfa = await AsyncStorage.getItem('@pref_2fa');
+        if (tfa !== null) setTwoFactorEnabled(tfa === 'true');
+      }
 
       const face = await AsyncStorage.getItem('@pref_face_id');
       if (face !== null) setFaceIdEnabled(face === 'true');
@@ -128,6 +137,11 @@ export const SecuritySettingsScreen = () => {
   const handle2FAToggle = async (val: boolean) => {
     setTwoFactorEnabled(val);
     await AsyncStorage.setItem('@pref_2fa', String(val));
+    try {
+      await authService.updateSecuritySettings({ twoFactorEnabled: val });
+    } catch (e) {
+      console.warn('Backend 2FA update notice:', e);
+    }
     if (val) {
       Alert.alert('2-Factor Authentication Active', 'OTP verification will be required for trades and withdrawals over LKR 100,000.');
     } else {

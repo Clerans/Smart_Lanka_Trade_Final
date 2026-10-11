@@ -259,6 +259,30 @@ export const authService = {
     } catch (error: any) {
       throw error;
     }
+  },
+  getSecuritySettings: async () => {
+    try {
+      const response = await api.get('/auth/security-settings');
+      return response.data;
+    } catch (error: any) {
+      throw error;
+    }
+  },
+  updateSecuritySettings: async (settings: { twoFactorEnabled?: boolean; pin?: string }) => {
+    try {
+      const response = await api.put('/auth/security-settings', settings);
+      return response.data;
+    } catch (error: any) {
+      throw error;
+    }
+  },
+  verifyPin: async (pin: string) => {
+    try {
+      const response = await api.post('/auth/verify-pin', { pin });
+      return response.data;
+    } catch (error: any) {
+      throw error;
+    }
   }
 };
 
