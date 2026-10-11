@@ -16,7 +16,8 @@
       "env": {
         "NPM_CONFIG_LEGACY_PEER_DEPS": "true",
         "EXPO_PUBLIC_API_URL": "https://smart-lanka-trade-final.onrender.com/api",
-        "EXPO_PUBLIC_GOOGLE_CLIENT_ID": "614054153944-7figt10pghsb14tg764jj3hfnktkqnbt.apps.googleusercontent.com",
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "614054153944-7figt10pghsb14tg764jj3hfnktkqnbt.apps.googleusercontent.com",
+        "EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID": "614054153944-t0flbk67jqulktrs8uf7gnghds8eeh15.apps.googleusercontent.com",
         "EXPO_PUBLIC_FIREBASE_API_KEY": "AIzaSyA8YZwo5LDc9_rLsxQxEm-D_a-HxHjAW0s",
         "EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN": "smartlankatrade-final.firebaseapp.com",
         "EXPO_PUBLIC_FIREBASE_PROJECT_ID": "smartlankatrade-final",
@@ -32,7 +33,8 @@
       "env": {
         "NPM_CONFIG_LEGACY_PEER_DEPS": "true",
         "EXPO_PUBLIC_API_URL": "https://smart-lanka-trade-final.onrender.com/api",
-        "EXPO_PUBLIC_GOOGLE_CLIENT_ID": "614054153944-7figt10pghsb14tg764jj3hfnktkqnbt.apps.googleusercontent.com",
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "614054153944-7figt10pghsb14tg764jj3hfnktkqnbt.apps.googleusercontent.com",
+        "EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID": "614054153944-t0flbk67jqulktrs8uf7gnghds8eeh15.apps.googleusercontent.com",
         "EXPO_PUBLIC_FIREBASE_API_KEY": "AIzaSyA8YZwo5LDc9_rLsxQxEm-D_a-HxHjAW0s",
         "EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN": "smartlankatrade-final.firebaseapp.com",
         "EXPO_PUBLIC_FIREBASE_PROJECT_ID": "smartlankatrade-final",
@@ -46,7 +48,8 @@
       "env": {
         "NPM_CONFIG_LEGACY_PEER_DEPS": "true",
         "EXPO_PUBLIC_API_URL": "https://smart-lanka-trade-final.onrender.com/api",
-        "EXPO_PUBLIC_GOOGLE_CLIENT_ID": "614054153944-7figt10pghsb14tg764jj3hfnktkqnbt.apps.googleusercontent.com",
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "614054153944-7figt10pghsb14tg764jj3hfnktkqnbt.apps.googleusercontent.com",
+        "EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID": "614054153944-t0flbk67jqulktrs8uf7gnghds8eeh15.apps.googleusercontent.com",
         "EXPO_PUBLIC_FIREBASE_API_KEY": "AIzaSyA8YZwo5LDc9_rLsxQxEm-D_a-HxHjAW0s",
         "EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN": "smartlankatrade-final.firebaseapp.com",
         "EXPO_PUBLIC_FIREBASE_PROJECT_ID": "smartlankatrade-final",

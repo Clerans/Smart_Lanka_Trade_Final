@@ -55,7 +55,7 @@ export const LoginScreen = () => {
   // SHA-1: 54:26:99:6C:4D:70:2C:5B:B9:CF:41:5D:6C:5F:B5:08:3D:76:0A:E8
   const googleAndroidClientId =
     process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID ||
-    googleWebClientId; // fallback to web until Android client ID is registered
+    '614054153944-t0flbk67jqulktrs8uf7gnghds8eeh15.apps.googleusercontent.com';
 
   const [request, response, promptAsync] = Google.useIdTokenAuthRequest({
     clientId: googleWebClientId,          // Web client — needed to get an id_token
