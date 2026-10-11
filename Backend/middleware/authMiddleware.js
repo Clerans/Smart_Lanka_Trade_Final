@@ -46,33 +46,13 @@ const protect = async (req, res, next) => {
         return next();
       }
     } catch (jwtErr) {
-      // If JWT verification fails, attempt optional fallback before rejecting
+      return res.status(401).json({
+        success: false,
+        code: 'UNAUTHORIZED',
+        message: 'Authentication failed: Invalid or expired token.'
+      });
     }
   }
-
-  // 2. Auxiliary Fallback: Verify Firebase ID token if supplied for email verification link synchronization
-  try {
-    const { verifyFirebaseIdToken, isInitialized } = require('../config/firebaseAdmin');
-    if (isInitialized()) {
-      const decodedFb = await verifyFirebaseIdToken(token);
-      if (decodedFb && decodedFb.email) {
-        const user = await userModel.findByEmail(decodedFb.email.toLowerCase().trim());
-        if (user) {
-          req.user = {
-            id: user.ID,
-            accountUid: user.ACCOUNT_UID || null,
-            email: user.EMAIL,
-            name: user.NAME,
-            role: (user.ROLE || 'USER').toUpperCase(),
-            firebaseUid: user.FIREBASE_UID || decodedFb.uid,
-            isVerified: user.IS_VERIFIED === 1,
-            emailVerified: !!decodedFb.email_verified || user.IS_VERIFIED === 1
-          };
-          return next();
-        }
-      }
-    }
-  } catch (fbErr) {}
 
   return res.status(401).json({
     success: false,
@@ -97,8 +77,8 @@ const requireVerifiedEmail = (req, res, next) => {
 
 module.exports = {
   protect,
-  firebaseAuth: protect, // Backward compatibility alias
   requireVerifiedEmail
 };
+
 
 
