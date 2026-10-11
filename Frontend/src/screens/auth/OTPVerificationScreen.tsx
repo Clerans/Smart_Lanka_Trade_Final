@@ -156,43 +156,6 @@ export const OTPVerificationScreen = () => {
     }
   };
 
-  // Handle Fallback: Firebase Email Verification Link
-  const handleSendEmailLink = async () => {
-    setSendingLink(true);
-    setIsNetworkError(false);
-    try {
-      await firebaseVerificationService.sendVerificationLink(email);
-      setFallbackMode(true);
-      showToast('Firebase verification link sent to your email!', 'success');
-    } catch (error: any) {
-      showToast(error.message || 'Could not send verification email. Please try again.', 'error');
-    } finally {
-      setSendingLink(false);
-    }
-  };
-
-  // Check if Firebase email link was clicked
-  const handleCheckEmailLinkVerification = async () => {
-    setCheckingLinkStatus(true);
-    try {
-      const isVerified = await firebaseVerificationService.checkEmailLinkVerified();
-      if (isVerified) {
-        // Synchronize with Oracle backend
-        await authService.sync();
-        showToast('Email verified successfully! Welcome to SmartLanka Trade.', 'success');
-        setTimeout(() => {
-          navigation.replace('MainApp');
-        }, 800);
-      } else {
-        showToast('Email not verified yet. Please click the link in your email and tap this button again.', 'warning');
-      }
-    } catch (error: any) {
-      showToast('Unable to confirm verification status. Please try again.', 'error');
-    } finally {
-      setCheckingLinkStatus(false);
-    }
-  };
-
   const handleBackToLogin = async () => {
     await authService.logout();
     navigation.replace('Login');
@@ -204,11 +167,7 @@ export const OTPVerificationScreen = () => {
         <NetworkErrorScreen
           onRetry={() => {
             setIsNetworkError(false);
-            if (fallbackMode) {
-              handleCheckEmailLinkVerification();
-            } else {
-              handleVerify();
-            }
+            handleVerify();
           }}
         />
       )}
@@ -236,126 +195,77 @@ export const OTPVerificationScreen = () => {
           {/* Content */}
           <View style={styles.content}>
             <View style={styles.iconContainer}>
-              <MaterialIcons name={fallbackMode ? "mail" : "mark-email-read"} size={44} color={colors.accent} />
+              <MaterialIcons name="mark-email-read" size={44} color={colors.accent} />
             </View>
 
             <Text style={styles.mainTitle}>
-              {fallbackMode ? 'Email Link Verification' : 'Verify Your Email'}
+              Verify Your Email
             </Text>
             <Text style={styles.description}>
-              {fallbackMode
-                ? 'We sent a verification link to your email address'
-                : 'We\'ve sent a 6-digit verification code to'}
+              We&apos;ve sent a 6-digit verification code to
             </Text>
             <Text style={styles.highlightText}>{maskEmail(email)}</Text>
 
-            {!fallbackMode ? (
-              <>
-                {/* 6-Digit OTP Input Boxes */}
-                <View style={styles.otpRow}>
-                  {otp.map((digit, index) => (
-                    <TextInput
-                      key={index}
-                      ref={el => {
-                        inputRefs.current[index] = el;
-                      }}
-                      style={[
-                        styles.otpBox,
-                        digit ? styles.otpBoxFilled : null,
-                      ]}
-                      value={digit}
-                      onChangeText={val => handleDigitChange(val, index)}
-                      onKeyPress={e => handleKeyPress(e, index)}
-                      keyboardType="number-pad"
-                      maxLength={6} // Allows paste
-                      selectTextOnFocus
-                      textAlign="center"
-                      textContentType="oneTimeCode"
-                      autoComplete="one-time-code"
-                      accessibilityLabel={`OTP Digit ${index + 1}`}
-                    />
-                  ))}
-                </View>
+            {/* 6-Digit OTP Input Boxes */}
+            <View style={styles.otpRow}>
+              {otp.map((digit, index) => (
+                <TextInput
+                  key={index}
+                  ref={el => {
+                    inputRefs.current[index] = el;
+                  }}
+                  style={[
+                    styles.otpBox,
+                    digit ? styles.otpBoxFilled : null,
+                  ]}
+                  value={digit}
+                  onChangeText={val => handleDigitChange(val, index)}
+                  onKeyPress={e => handleKeyPress(e, index)}
+                  keyboardType="number-pad"
+                  maxLength={6} // Allows paste
+                  selectTextOnFocus
+                  textAlign="center"
+                  textContentType="oneTimeCode"
+                  autoComplete="one-time-code"
+                  accessibilityLabel={`OTP Digit ${index + 1}`}
+                />
+              ))}
+            </View>
 
-                {/* Verify Button */}
-                {loading ? (
-                  <ActivityIndicator color={colors.accent} size="large" style={{ marginVertical: 20 }} />
+            {/* Verify Button */}
+            {loading ? (
+              <ActivityIndicator color={colors.accent} size="large" style={{ marginVertical: 20 }} />
+            ) : (
+              <PrimaryButton
+                title="Verify Code →"
+                onPress={handleVerify}
+                disabled={!isOtpComplete}
+                style={[styles.verifyBtn, !isOtpComplete && { opacity: 0.5 }]}
+              />
+            )}
+
+            {/* Resend Action */}
+            <View style={styles.resendSection}>
+              <Text style={styles.didNotReceive}>Didn&apos;t receive the code?</Text>
+              <View style={styles.timerRow}>
+                {timer > 0 ? (
+                  <View style={styles.timerPill}>
+                    <MaterialIcons name="access-time" size={16} color={colors.accent} />
+                    <Text style={styles.timerText}>
+                      Resend code in 00:{timer < 10 ? `0${timer}` : timer}
+                    </Text>
+                  </View>
                 ) : (
-                  <PrimaryButton
-                    title="Verify Code →"
-                    onPress={handleVerify}
-                    disabled={!isOtpComplete}
-                    style={[styles.verifyBtn, !isOtpComplete && { opacity: 0.5 }]}
-                  />
-                )}
-
-                {/* Resend Action */}
-                <View style={styles.resendSection}>
-                  <Text style={styles.didNotReceive}>Didn&apos;t receive the code?</Text>
-                  <View style={styles.timerRow}>
-                    {timer > 0 ? (
-                      <View style={styles.timerPill}>
-                        <MaterialIcons name="access-time" size={16} color={colors.accent} />
-                        <Text style={styles.timerText}>
-                          Resend code in 00:{timer < 10 ? `0${timer}` : timer}
-                        </Text>
-                      </View>
-                    ) : (
-                      <TouchableOpacity onPress={handleResend} disabled={resending}>
-                        {resending ? (
-                          <ActivityIndicator size="small" color={colors.accent} />
-                        ) : (
-                          <Text style={styles.resendText}>Resend 6-Digit Code</Text>
-                        )}
-                      </TouchableOpacity>
-                    )}
-                  </View>
-
-                  {/* Fallback Option: Email Link */}
-                  <View style={styles.fallbackDivider}>
-                    <Text style={styles.fallbackOrText}>or</Text>
-                  </View>
-
-                  <TouchableOpacity
-                    onPress={handleSendEmailLink}
-                    disabled={sendingLink}
-                    style={styles.fallbackButton}
-                  >
-                    {sendingLink ? (
+                  <TouchableOpacity onPress={handleResend} disabled={resending}>
+                    {resending ? (
                       <ActivityIndicator size="small" color={colors.accent} />
                     ) : (
-                      <Text style={styles.fallbackButtonText}>Verify using email link</Text>
+                      <Text style={styles.resendText}>Resend 6-Digit Code</Text>
                     )}
                   </TouchableOpacity>
-                </View>
-              </>
-            ) : (
-              <>
-                {/* Fallback instructions & check button */}
-                <View style={styles.fallbackInstructionsCard}>
-                  <Text style={styles.instructionStep}>1. Check your email inbox for the verification email.</Text>
-                  <Text style={styles.instructionStep}>2. Tap the confirmation link in the email.</Text>
-                  <Text style={styles.instructionStep}>3. Return here and tap the button below.</Text>
-                </View>
-
-                {checkingLinkStatus ? (
-                  <ActivityIndicator color={colors.accent} size="large" style={{ marginVertical: 20 }} />
-                ) : (
-                  <PrimaryButton
-                    title="I Have Verified My Email"
-                    onPress={handleCheckEmailLinkVerification}
-                    style={styles.verifyBtn}
-                  />
                 )}
-
-                <TouchableOpacity
-                  onPress={() => setFallbackMode(false)}
-                  style={styles.backToOtpBtn}
-                >
-                  <Text style={styles.backToOtpText}>← Back to 6-Digit Code</Text>
-                </TouchableOpacity>
-              </>
-            )}
+              </View>
+            </View>
 
             <TouchableOpacity onPress={handleBackToLogin} style={styles.backToLoginBtn}>
               <Text style={styles.backToLoginText}>Log In with Another Account</Text>
