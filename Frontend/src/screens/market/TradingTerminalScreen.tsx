@@ -13,8 +13,18 @@ export const TradingTerminalScreen = () => {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const [isDemoMode, setIsDemoMode] = useState(false);
-  const [tradeType, setTradeType] = useState<'BUY' | 'SELL'>('BUY');
+  const [tradeType, setTradeType] = useState<'BUY' | 'SELL'>(route.params?.action === 'SELL' ? 'SELL' : 'BUY');
   const [selectedSymbol, setSelectedSymbol] = useState(route.params?.symbol || 'BTCUSDT');
+
+  // Sync route params when navigated with new symbol or action
+  useEffect(() => {
+    if (route.params?.symbol) {
+      setSelectedSymbol(route.params.symbol);
+    }
+    if (route.params?.action) {
+      setTradeType(route.params.action === 'SELL' ? 'SELL' : 'BUY');
+    }
+  }, [route.params?.symbol, route.params?.action]);
   const [lkrPriceData, setLkrPriceData] = useState<any>(null);
   const [aiRec, setAiRec] = useState<any>(null);
   const [loading, setLoading] = useState(true);

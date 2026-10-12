@@ -12,7 +12,8 @@ import {
     CurrencyConversionScreen,
     SecuritySettingsScreen,
     KYCVerificationScreen,
-    PortfolioScreen
+    PortfolioScreen,
+    TradingTerminalScreen
 } from '../screens';
 
 const Stack = createStackNavigator();
@@ -32,6 +33,8 @@ export const RootNavigator = () => {
                 <Stack.Screen name="Auth" component={AuthStackNavigator} />
                 <Stack.Screen name="MainApp" component={MainTabNavigator} />
 
+                <Stack.Screen name="Trade" component={TradingTerminalScreen} />
+                <Stack.Screen name="TradingTerminal" component={TradingTerminalScreen} />
                 <Stack.Screen name="AssetDetails" component={AssetDetailsScreen} />
                 <Stack.Screen name="AIAnalytics" component={AIAnalyticsScreen} />
                 <Stack.Screen name="SOMIAIChat" component={SOMIAIChatScreen} />
