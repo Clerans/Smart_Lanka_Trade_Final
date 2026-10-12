@@ -348,7 +348,35 @@ export const marketService = {
       throw error;
     }
   },
+  getCseWatchlist: async () => {
+    try {
+      const response = await api.get('/market/cse/watchlist');
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching CSE watchlist:', error);
+      throw error;
+    }
+  },
+  getCseStockDetail: async (symbol: string) => {
+    try {
+      const response = await api.get(`/market/cse/stock/${symbol}`);
+      return response.data;
+    } catch (error) {
+      console.error(`Error fetching CSE stock details for ${symbol}:`, error);
+      throw error;
+    }
+  },
+  getCseSession: async () => {
+    try {
+      const response = await api.get('/market/cse/session');
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching CSE session:', error);
+      throw error;
+    }
+  },
 };
+
 
 // In-flight request cache for getOverview
 let inFlightOverviewPromise: Promise<any> | null = null;

@@ -13,7 +13,7 @@ import {
   RefreshControl,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import { MaterialIcons } from '@expo/vector-icons';
 import Svg, { Path } from 'react-native-svg';
 import { colors, typography, layout, SCREEN_PADDING, TAB_BAR_BOTTOM_OFFSET, spacing } from '../../theme';
@@ -30,7 +30,10 @@ import { formatLKR, formatNumber } from '../../utils/formatters';
 export const DemoTradingScreen = () => {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<any>();
-  const [selectedSymbol, setSelectedSymbol] = useState('BTCUSDT');
+  const route = useRoute<any>();
+
+  const initialSym = route.params?.initialSymbol || route.params?.symbol || 'BTCUSDT';
+  const [selectedSymbol, setSelectedSymbol] = useState(initialSym);
   const [tradeType, setTradeType] = useState<'BUY' | 'SELL'>('BUY');
 
   const [walletDetails, setWalletDetails] = useState<any>(null);
@@ -49,6 +52,7 @@ export const DemoTradingScreen = () => {
 
   const [pickerVisible, setPickerVisible] = useState(false);
   const [pickerSearchQuery, setPickerSearchQuery] = useState('');
+  const [pickerCategory, setPickerCategory] = useState<'ALL' | 'CRYPTO' | 'STOCKS'>('ALL');
   const [confirmModalVisible, setConfirmModalVisible] = useState(false);
 
   // Toast & Network states
@@ -66,9 +70,10 @@ export const DemoTradingScreen = () => {
 
   const fetchTradingData = useCallback(async () => {
     try {
-      const [walletRes, marketRes, txRes, portfolioRes] = await Promise.all([
+      const [walletRes, marketRes, cseRes, txRes, portfolioRes] = await Promise.all([
         walletService.getWalletDetails(),
         marketService.getLivePrices(),
+        marketService.getCseWatchlist().catch(() => ({ success: false, data: [] })),
         transactionService.getTransactions(),
         portfolioService.getPortfolio(),
       ]);
@@ -80,13 +85,41 @@ export const DemoTradingScreen = () => {
         setPortfolioHoldings(portfolioRes.data.holdings);
       }
 
-      if (marketRes.success) {
-        setLiveCoins(marketRes.data);
-        const active = marketRes.data.find((c: any) => c.symbol === selectedSymbol);
-        if (active) {
-          setActiveCoinPriceLKR(active.priceLKR);
-          setActiveCoinChange(active.change24h);
-        }
+      const mergedAssets: any[] = [];
+      if (marketRes?.success && Array.isArray(marketRes.data)) {
+        marketRes.data.forEach((c: any) => {
+          mergedAssets.push({
+            symbol: c.symbol,
+            coin: c.coin,
+            name: c.coin,
+            priceLKR: c.priceLKR,
+            change24h: c.change24h,
+            assetType: 'CRYPTO'
+          });
+        });
+      }
+
+      if (cseRes?.success && Array.isArray(cseRes.data)) {
+        cseRes.data.forEach((s: any) => {
+          mergedAssets.push({
+            symbol: s.symbol,
+            coin: s.ticker || s.symbol.split('.')[0],
+            name: s.name,
+            sector: s.sector,
+            priceLKR: s.priceLKR,
+            change24h: s.changePercent,
+            assetType: 'STOCK',
+            dataFreshness: s.dataFreshness
+          });
+        });
+      }
+
+      setLiveCoins(mergedAssets);
+
+      const active = mergedAssets.find((c: any) => c.symbol === selectedSymbol);
+      if (active) {
+        setActiveCoinPriceLKR(active.priceLKR);
+        setActiveCoinChange(active.change24h);
       }
       setIsNetworkError(false);
     } catch (error: any) {
@@ -101,6 +134,7 @@ export const DemoTradingScreen = () => {
       setRefreshing(false);
     }
   }, [selectedSymbol, showToast]);
+
 
   const onRefresh = () => {
     setRefreshing(true);
