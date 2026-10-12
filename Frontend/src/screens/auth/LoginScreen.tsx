@@ -64,7 +64,6 @@ export const LoginScreen = () => {
   const [request, response, promptAsync] = Google.useAuthRequest({
     clientId: googleWebClientId,
     webClientId: googleWebClientId,
-    androidClientId: googleAndroidClientId,
     scopes: ['openid', 'profile', 'email'],
     redirectUri,
   });
@@ -198,7 +197,7 @@ export const LoginScreen = () => {
           code,
           codeVerifier: request?.codeVerifier,
           redirectUri,
-          clientId: Platform.OS === 'android' ? googleAndroidClientId : googleWebClientId
+          clientId: googleWebClientId
         });
       } else if (idToken) {
         handleGoogleLogin({ idToken });
