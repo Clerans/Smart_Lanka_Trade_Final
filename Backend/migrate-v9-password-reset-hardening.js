@@ -70,9 +70,11 @@ async function runMigration() {
     const { owner, qualifiedName } = await resolveTableOwner(connection, 'SL_PASSWORD_RESET');
     console.log(`ℹ️ Resolved target table SL_PASSWORD_RESET on owner: [${owner}] (target: ${qualifiedName})`);
 
-    // 2. Inspect existing columns in SL_PASSWORD_RESET
+    // 2. Inspect existing columns in SL_PASSWORD_RESET via ALL_TAB_COLUMNS and USER_TAB_COLUMNS
     const colRes = await connection.execute(
-      `SELECT COLUMN_NAME FROM ALL_TAB_COLUMNS WHERE OWNER = :owner AND TABLE_NAME = 'SL_PASSWORD_RESET'`,
+      `SELECT COLUMN_NAME FROM ALL_TAB_COLUMNS WHERE OWNER = :owner AND TABLE_NAME = 'SL_PASSWORD_RESET'
+       UNION
+       SELECT COLUMN_NAME FROM USER_TAB_COLUMNS WHERE TABLE_NAME = 'SL_PASSWORD_RESET'`,
       [owner],
       { outFormat: oracledb.OUT_FORMAT_OBJECT }
     );
@@ -110,9 +112,11 @@ async function runMigration() {
       console.log(`ℹ️ CREATED_AT column already exists on [${owner}].SL_PASSWORD_RESET`);
     }
 
-    // 3. Check and add index IDX_PWD_RESET_USER_EXP
+    // 3. Check and add index IDX_PWD_RESET_USER_EXP via ALL_INDEXES and USER_INDEXES
     const idxRes = await connection.execute(
-      `SELECT INDEX_NAME FROM ALL_INDEXES WHERE TABLE_NAME = 'SL_PASSWORD_RESET' AND INDEX_NAME = 'IDX_PWD_RESET_USER_EXP' AND (OWNER = :owner OR TABLE_OWNER = :owner)`,
+      `SELECT INDEX_NAME FROM ALL_INDEXES WHERE TABLE_NAME = 'SL_PASSWORD_RESET' AND INDEX_NAME = 'IDX_PWD_RESET_USER_EXP' AND (OWNER = :owner OR TABLE_OWNER = :owner)
+       UNION
+       SELECT INDEX_NAME FROM USER_INDEXES WHERE TABLE_NAME = 'SL_PASSWORD_RESET' AND INDEX_NAME = 'IDX_PWD_RESET_USER_EXP'`,
       [owner, owner],
       { outFormat: oracledb.OUT_FORMAT_OBJECT }
     );

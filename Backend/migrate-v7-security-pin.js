@@ -85,9 +85,11 @@ async function migrate() {
     const { owner, qualifiedName } = await resolveTableOwner(connection, 'SL_USERS');
     console.log(`ℹ️ Resolved target table SL_USERS on owner: [${owner}] (target: ${qualifiedName})`);
 
-    // 2. Inspect existing columns in SL_USERS via owner-aware ALL_TAB_COLUMNS
+    // 2. Inspect existing columns in SL_USERS via owner-aware ALL_TAB_COLUMNS and USER_TAB_COLUMNS
     const colRes = await connection.execute(
-      `SELECT COLUMN_NAME FROM ALL_TAB_COLUMNS WHERE OWNER = :owner AND TABLE_NAME = 'SL_USERS'`,
+      `SELECT COLUMN_NAME FROM ALL_TAB_COLUMNS WHERE OWNER = :owner AND TABLE_NAME = 'SL_USERS'
+       UNION
+       SELECT COLUMN_NAME FROM USER_TAB_COLUMNS WHERE TABLE_NAME = 'SL_USERS'`,
       [owner],
       { outFormat: oracledb.OUT_FORMAT_OBJECT }
     );
