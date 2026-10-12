@@ -181,7 +181,12 @@ export const OTPVerificationScreen = () => {
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        <ScrollView contentContainerStyle={styles.container}>
+        <ScrollView
+          contentContainerStyle={styles.container}
+          scrollEnabled={false}
+          bounces={false}
+          showsVerticalScrollIndicator={false}
+        >
 
           {/* Header */}
           <View style={styles.header}>

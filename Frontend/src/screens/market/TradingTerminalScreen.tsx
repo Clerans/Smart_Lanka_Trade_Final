@@ -4,8 +4,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { colors, typography, layout, SCREEN_PADDING, TAB_BAR_BOTTOM_OFFSET } from '../../theme';
-import { PrimaryButton, Card } from '../../components';
-import { marketService, aiService } from '../../services/apiService';
+import { PrimaryButton, Card, Toast } from '../../components';
+import { marketService, aiService, tradeService, transactionService } from '../../services/apiService';
 import { formatLKR } from '../../utils/formatters';
 const { useState, useEffect, useCallback } = React;
 
@@ -13,8 +13,18 @@ export const TradingTerminalScreen = () => {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const [isDemoMode, setIsDemoMode] = useState(false);
-  const [tradeType, setTradeType] = useState<'BUY' | 'SELL'>('BUY');
+  const [tradeType, setTradeType] = useState<'BUY' | 'SELL'>(route.params?.action === 'SELL' ? 'SELL' : 'BUY');
   const [selectedSymbol, setSelectedSymbol] = useState(route.params?.symbol || 'BTCUSDT');
+
+  // Sync route params when navigated with new symbol or action
+  useEffect(() => {
+    if (route.params?.symbol) {
+      setSelectedSymbol(route.params.symbol);
+    }
+    if (route.params?.action) {
+      setTradeType(route.params.action === 'SELL' ? 'SELL' : 'BUY');
+    }
+  }, [route.params?.symbol, route.params?.action]);
   const [lkrPriceData, setLkrPriceData] = useState<any>(null);
   const [aiRec, setAiRec] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -24,6 +34,19 @@ export const TradingTerminalScreen = () => {
   const [showPicker, setShowPicker] = useState(false);
   const [allCoins, setAllCoins] = useState<any[]>([]);
   const [pickerSearchQuery, setPickerSearchQuery] = useState('');
+
+  // Order execution & Toast states
+  const [submittingOrder, setSubmittingOrder] = useState(false);
+  const [toastVisible, setToastVisible] = useState(false);
+  const [toastMessage, setToastMessage] = useState('');
+  const [toastType, setToastType] = useState<'success' | 'error' | 'warning'>('success');
+  const [recentTransactions, setRecentTransactions] = useState<any[]>([]);
+
+  const showToast = useCallback((message: string, type: 'success' | 'error' | 'warning') => {
+    setToastMessage(message);
+    setToastType(type);
+    setToastVisible(true);
+  }, []);
 
   const fetchPriceAndAI = useCallback(async () => {
     try {
@@ -51,6 +74,61 @@ export const TradingTerminalScreen = () => {
     }
   }, [selectedSymbol]);
 
+  const fetchRecentTransactions = useCallback(async () => {
+    try {
+      const res = await transactionService.getTransactions();
+      if (res?.success && Array.isArray(res.data)) {
+        setRecentTransactions(res.data);
+      }
+    } catch (e) {
+      console.warn('Failed to fetch recent transactions:', e);
+    }
+  }, []);
+
+  const handleConfirmOrder = async () => {
+    if (submittingOrder) return;
+
+    const numQty = parseFloat(quantity);
+    const numPrice = parseFloat(limitPrice);
+
+    if (isNaN(numQty) || numQty <= 0) {
+      showToast('Please enter a valid order quantity', 'warning');
+      return;
+    }
+
+    if (isNaN(numPrice) || numPrice <= 0) {
+      showToast('Please enter a valid limit price in LKR', 'warning');
+      return;
+    }
+
+    const orderTotalLKR = numQty * numPrice;
+    if (orderTotalLKR <= 0) {
+      showToast('Estimated total must be greater than 0', 'warning');
+      return;
+    }
+
+    setSubmittingOrder(true);
+    try {
+      let result;
+      if (tradeType === 'BUY') {
+        result = await tradeService.buy(selectedSymbol, orderTotalLKR);
+      } else {
+        result = await tradeService.sell(selectedSymbol, numQty);
+      }
+
+      showToast(result.message || `${tradeType} order confirmed successfully!`, 'success');
+      await Promise.allSettled([
+        fetchRecentTransactions(),
+        fetchPriceAndAI()
+      ]);
+    } catch (err: any) {
+      console.error('Order confirmation failed:', err);
+      showToast(err.message || 'Order execution failed. Please check balance and quantity.', 'error');
+    } finally {
+      setSubmittingOrder(false);
+    }
+  };
+
   useEffect(() => {
     const fetchInitialData = async () => {
       try {
@@ -63,7 +141,8 @@ export const TradingTerminalScreen = () => {
       }
     };
     fetchInitialData();
-  }, []);
+    fetchRecentTransactions();
+  }, [fetchRecentTransactions]);
 
   useEffect(() => {
     fetchPriceAndAI();
@@ -74,6 +153,7 @@ export const TradingTerminalScreen = () => {
   const onRefresh = () => {
     setRefreshing(true);
     fetchPriceAndAI();
+    fetchRecentTransactions();
   };
 
   const filteredPickerCoins = allCoins.filter(coin =>
@@ -84,6 +164,12 @@ export const TradingTerminalScreen = () => {
 
   return (
     <SafeAreaView style={styles.safeArea}>
+      <Toast
+        visible={toastVisible}
+        message={toastMessage}
+        type={toastType}
+        onDismiss={() => setToastVisible(false)}
+      />
       <KeyboardAvoidingView
         style={styles.keyboardAvoiding}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -281,8 +367,15 @@ export const TradingTerminalScreen = () => {
             </Card>
 
             <PrimaryButton
-              title={tradeType === 'BUY' ? 'CONFIRM BUY ORDER →' : 'CONFIRM SELL ORDER →'}
-              onPress={() => { }}
+              title={
+                submittingOrder
+                  ? 'EXECUTING ORDER...'
+                  : tradeType === 'BUY'
+                  ? 'CONFIRM BUY ORDER →'
+                  : 'CONFIRM SELL ORDER →'
+              }
+              onPress={handleConfirmOrder}
+              disabled={submittingOrder}
               style={tradeType === 'SELL' ? { backgroundColor: colors.red } : {}}
             />
           </View>
@@ -291,40 +384,58 @@ export const TradingTerminalScreen = () => {
           <View style={styles.recentSection}>
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>Recent Transactions</Text>
-              <TouchableOpacity><Text style={styles.seeAllText}>View All</Text></TouchableOpacity>
+              <TouchableOpacity onPress={() => navigation.navigate('WalletTab')}>
+                <Text style={styles.seeAllText}>View All</Text>
+              </TouchableOpacity>
             </View>
 
-            {[
-              { id: 1, type: 'Buy', pair: 'BTC/LKR', amount: '+0.0015 BTC', status: 'Completed', isBuy: true },
-              { id: 2, type: 'Sell', pair: 'ETH/LKR', amount: '-0.2400 ETH', status: 'Pending', isBuy: false },
-              { id: 3, type: 'Buy', pair: 'SOL/LKR', amount: '+12.50 SOL', status: 'Completed', isBuy: true },
-            ].map((tx) => (
-              <View key={tx.id} style={styles.txRow}>
-                <View style={styles.txLeft}>
-                  <View style={[styles.txIconContainer, tx.isBuy ? styles.txBgGreen : styles.txBgRed]}>
-                    <MaterialIcons
-                      name={tx.isBuy ? 'call-received' : 'call-made'}
-                      size={20}
-                      color={tx.isBuy ? colors.accent : colors.red}
-                    />
+            {recentTransactions.length > 0 ? (
+              recentTransactions.slice(0, 5).map((tx) => {
+                const isBuy = tx.action === 'BUY' || tx.action === 'DEPOSIT';
+                const pair = tx.coin ? `${tx.coin}/LKR` : 'LKR';
+                const typeLabel = tx.action === 'BUY' ? 'Buy' : tx.action === 'SELL' ? 'Sell' : tx.action;
+                const formattedDate = tx.date ? new Date(tx.date).toLocaleDateString() : 'Today';
+                const formattedAmt = `${isBuy ? '+' : '-'}${
+                  tx.quantity ? tx.quantity.toFixed(4) + ' ' + (tx.coin || '') : formatLKR(tx.total, 2) + ' LKR'
+                }`;
+                const isCompleted = (tx.status || '').toUpperCase() === 'COMPLETED';
+
+                return (
+                  <View key={tx.id} style={styles.txRow}>
+                    <View style={styles.txLeft}>
+                      <View style={[styles.txIconContainer, isBuy ? styles.txBgGreen : styles.txBgRed]}>
+                        <MaterialIcons
+                          name={isBuy ? 'call-received' : 'call-made'}
+                          size={20}
+                          color={isBuy ? colors.accent : colors.red}
+                        />
+                      </View>
+                      <View>
+                        <Text style={styles.txPair}>{pair}</Text>
+                        <Text style={styles.txTime}>{formattedDate}, {typeLabel}</Text>
+                      </View>
+                    </View>
+                    <View style={styles.txRight}>
+                      <Text style={[styles.txAmount, isBuy ? styles.txAmountGreen : styles.txAmountRed]}>
+                        {formattedAmt}
+                      </Text>
+                      <View style={[styles.statusBadge, isCompleted ? styles.statusCompleted : styles.statusPending]}>
+                        <Text style={[styles.statusText, isCompleted ? styles.statusTextCompleted : styles.statusTextPending]}>
+                          {tx.status || 'Completed'}
+                        </Text>
+                      </View>
+                    </View>
                   </View>
-                  <View>
-                    <Text style={styles.txPair}>{tx.pair}</Text>
-                    <Text style={styles.txTime}>Today, {tx.type}</Text>
-                  </View>
-                </View>
-                <View style={styles.txRight}>
-                  <Text style={[styles.txAmount, tx.isBuy ? styles.txAmountGreen : styles.txAmountRed]}>
-                    {tx.amount}
-                  </Text>
-                  <View style={[styles.statusBadge, tx.status === 'Completed' ? styles.statusCompleted : styles.statusPending]}>
-                    <Text style={[styles.statusText, tx.status === 'Completed' ? styles.statusTextCompleted : styles.statusTextPending]}>
-                      {tx.status}
-                    </Text>
-                  </View>
-                </View>
+                );
+              })
+            ) : (
+              <View style={{ paddingVertical: 24, alignItems: 'center' }}>
+                <MaterialIcons name="receipt-long" size={36} color={colors.textMuted} />
+                <Text style={{ color: colors.textSecondary, marginTop: 8, fontSize: 13 }}>
+                  No recent orders recorded yet.
+                </Text>
               </View>
-            ))}
+            )}
           </View>
 
         </ScrollView>

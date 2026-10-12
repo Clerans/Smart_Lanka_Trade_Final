@@ -131,13 +131,21 @@ export const AssetDetailsScreen = () => {
           <View style={styles.statBox}>
             <Text style={styles.statLabel}>24H HIGH</Text>
             <Text style={styles.statValue} numberOfLines={1}>
-              {priceLKR > 0 ? `රු ${formatNumber(priceLKR * 1.025, 0)}` : '---'}
+              {priceData?.high24hLKR
+                ? `රු ${formatNumber(priceData.high24hLKR, priceData.high24hLKR < 10 ? 2 : 0)}`
+                : priceLKR > 0
+                ? `රු ${formatNumber(priceLKR * 1.025, priceLKR < 10 ? 2 : 0)}`
+                : '---'}
             </Text>
           </View>
           <View style={styles.statBox}>
             <Text style={styles.statLabel}>24H LOW</Text>
             <Text style={styles.statValue} numberOfLines={1}>
-              {priceLKR > 0 ? `රු ${formatNumber(priceLKR * 0.975, 0)}` : '---'}
+              {priceData?.low24hLKR
+                ? `රු ${formatNumber(priceData.low24hLKR, priceData.low24hLKR < 10 ? 2 : 0)}`
+                : priceLKR > 0
+                ? `රු ${formatNumber(priceLKR * 0.975, priceLKR < 10 ? 2 : 0)}`
+                : '---'}
             </Text>
           </View>
           <View style={styles.statBox}>
@@ -209,13 +217,13 @@ export const AssetDetailsScreen = () => {
         <PrimaryButton
           title="SELL"
           style={styles.sellBtn}
-          onPress={() => navigation.navigate('Trade', { symbol, action: 'SELL' })}
+          onPress={() => navigation.navigate('MainApp', { screen: 'Trade', params: { symbol, action: 'SELL' } })}
         />
         <View style={{ width: 14 }} />
         <PrimaryButton
           title={`BUY ${coin}`}
           style={styles.buyBtn}
-          onPress={() => navigation.navigate('Trade', { symbol, action: 'BUY' })}
+          onPress={() => navigation.navigate('MainApp', { screen: 'Trade', params: { symbol, action: 'BUY' } })}
         />
       </View>
     </SafeAreaView>

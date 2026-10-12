@@ -38,7 +38,10 @@ async function getCryptoTicker(symbol = "BTCUSDT") {
 
   return {
     price: parseFloat(data.lastPrice),
-    changePercent: parseFloat(data.priceChangePercent)
+    changePercent: parseFloat(data.priceChangePercent),
+    high24h: parseFloat(data.highPrice || data.lastPrice),
+    low24h: parseFloat(data.lowPrice || data.lastPrice),
+    volume: parseFloat(data.volume || 0)
   };
 }
 
@@ -108,6 +111,11 @@ async function getPriceInLKR(symbol) {
     symbol,
     priceUSDT: ticker.price,
     changePercent: ticker.changePercent,
+    high24hUSDT: ticker.high24h,
+    low24hUSDT: ticker.low24h,
+    high24hLKR: Math.round(ticker.high24h * fxDetails.rate * 100) / 100,
+    low24hLKR: Math.round(ticker.low24h * fxDetails.rate * 100) / 100,
+    volume24h: ticker.volume,
     usdToLkr: fxDetails.rate,
     isRateEstimated: fxDetails.isEstimated,
     rateSource: fxDetails.source,

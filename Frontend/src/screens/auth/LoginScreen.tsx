@@ -64,7 +64,6 @@ export const LoginScreen = () => {
   const [request, response, promptAsync] = Google.useAuthRequest({
     clientId: googleWebClientId,
     webClientId: googleWebClientId,
-    androidClientId: googleAndroidClientId,
     scopes: ['openid', 'profile', 'email'],
     redirectUri,
   });
@@ -198,7 +197,7 @@ export const LoginScreen = () => {
           code,
           codeVerifier: request?.codeVerifier,
           redirectUri,
-          clientId: Platform.OS === 'android' ? googleAndroidClientId : googleWebClientId
+          clientId: googleWebClientId
         });
       } else if (idToken) {
         handleGoogleLogin({ idToken });
@@ -373,6 +372,30 @@ export const LoginScreen = () => {
       setLoading(false);
     }
   };
+
+  const hasPromptedAutoBiometrics = useRef(false);
+
+  useEffect(() => {
+    const triggerAutoBiometrics = async () => {
+      if (hasPromptedAutoBiometrics.current) return;
+      try {
+        const bioPref = await AsyncStorage.getItem('@pref_biometric');
+        if (bioPref === 'true') {
+          const hasSession = await storageService.hasBiometricSession();
+          if (hasSession) {
+            hasPromptedAutoBiometrics.current = true;
+            setTimeout(() => {
+              handleBiometricLogin();
+            }, 350);
+          }
+        }
+      } catch (err) {
+        console.warn('Auto biometric prompt error:', err);
+      }
+    };
+
+    triggerAutoBiometrics();
+  }, []);
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right', 'bottom']}>

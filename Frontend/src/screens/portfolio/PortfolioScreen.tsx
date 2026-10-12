@@ -322,7 +322,7 @@ export const PortfolioScreen: React.FC = () => {
         <View style={styles.actionButtonsRow}>
           <TouchableOpacity
             style={styles.actionPillBtn}
-            onPress={() => navigation.navigate('Trade')}
+            onPress={() => navigation.navigate('MainApp', { screen: 'Trade' })}
             activeOpacity={0.8}
           >
             <MaterialIcons name="swap-horiz" size={20} color="#06090E" />
@@ -331,7 +331,7 @@ export const PortfolioScreen: React.FC = () => {
 
           <TouchableOpacity
             style={styles.actionPillSecondaryBtn}
-            onPress={() => navigation.navigate('Wallet')}
+            onPress={() => navigation.navigate('MainApp', { screen: 'Wallet' })}
             activeOpacity={0.8}
           >
             <MaterialIcons name="account-balance-wallet" size={20} color={colors.accent} />
@@ -500,7 +500,7 @@ export const PortfolioScreen: React.FC = () => {
             </Text>
             <PrimaryButton
               title="Start Trading Crypto ⚡"
-              onPress={() => navigation.navigate('Trade')}
+              onPress={() => navigation.navigate('MainApp', { screen: 'Trade' })}
               style={{ marginTop: 16 }}
             />
           </Card>

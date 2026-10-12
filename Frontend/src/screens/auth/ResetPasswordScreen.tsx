@@ -14,11 +14,17 @@ export const ResetPasswordScreen = () => {
 
   const [step, setStep] = useState<1 | 2>(1);
   const [otp, setOtp] = useState<string>('');
+  const [resetToken, setResetToken] = useState<string | null>(null);
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [resending, setResending] = useState(false);
+
+  // 60-second resend cooldown timer
+  const [countdown, setCountdown] = useState(60);
+  const [canResend, setCanResend] = useState(false);
 
   // Toast & Network error states
   const [toastVisible, setToastVisible] = useState(false);
@@ -26,6 +32,23 @@ export const ResetPasswordScreen = () => {
   const [toastType, setToastType] = useState<'success' | 'error' | 'warning'>('success');
   const [isNetworkError, setIsNetworkError] = useState(false);
   const [lastAction, setLastAction] = useState<'verify_otp' | 'reset_password'>('verify_otp');
+
+  // Timer effect
+  React.useEffect(() => {
+    let timer: any;
+    if (countdown > 0 && !canResend) {
+      timer = setInterval(() => {
+        setCountdown(prev => {
+          if (prev <= 1) {
+            setCanResend(true);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }
+    return () => clearInterval(timer);
+  }, [countdown, canResend]);
 
   // Password requirements checks
   const hasMinLength = password.length >= 8;
@@ -64,6 +87,22 @@ export const ResetPasswordScreen = () => {
     }
   };
 
+  const handleResendCode = async () => {
+    if (!canResend || resending) return;
+    setResending(true);
+    try {
+      await authService.forgotPassword(email);
+      showToast('A new 6-digit code has been sent to your email.', 'success');
+      setOtp('');
+      setCountdown(60);
+      setCanResend(false);
+    } catch (error: any) {
+      showToast(error.message || 'Failed to resend code. Please try again.', 'error');
+    } finally {
+      setResending(false);
+    }
+  };
+
   const handleVerifyOTP = async () => {
     if (otp.length < 6) {
       showToast('Please enter the 6-digit OTP code', 'warning');
@@ -74,11 +113,14 @@ export const ResetPasswordScreen = () => {
     setIsNetworkError(false);
     setLastAction('verify_otp');
     try {
-      await authService.verifyResetOTP(email, otp);
+      const res = await authService.verifyResetOTP(email, otp);
+      if (res?.resetToken) {
+        setResetToken(res.resetToken);
+      }
       showToast('Code verified successfully!', 'success');
       setTimeout(() => {
         setStep(2);
-      }, 1000);
+      }, 800);
     } catch (error: any) {
       if (error.code === 'NETWORK_ERROR') {
         setIsNetworkError(true);
@@ -110,11 +152,11 @@ export const ResetPasswordScreen = () => {
     setIsNetworkError(false);
     setLastAction('reset_password');
     try {
-      const response = await authService.resetPassword(email, otp, password);
-      showToast(response.message || 'Password reset successful!', 'success');
+      const response = await authService.resetPassword(email, otp, password, resetToken || undefined);
+      showToast(response.message || 'Password reset successful! You can now log in.', 'success');
       setTimeout(() => {
         navigation.navigate('Login');
-      }, 2000);
+      }, 1500);
     } catch (error: any) {
       if (error.code === 'NETWORK_ERROR') {
         setIsNetworkError(true);
@@ -144,26 +186,36 @@ export const ResetPasswordScreen = () => {
         type={toastType}
         onDismiss={() => setToastVisible(false)}
       />
-      <ScrollView contentContainerStyle={styles.container}>
-        {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-            <MaterialIcons name="arrow-back" size={24} color="#FFF" />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Reset Password</Text>
-          <View style={{ width: 24 }} />
-        </View>
+      {/* Header */}
+      <View style={styles.header}>
+        <TouchableOpacity
+          onPress={() => {
+            if (step === 2) {
+              setStep(1);
+            } else {
+              navigation.goBack();
+            }
+          }}
+          style={styles.backButton}
+        >
+          <MaterialIcons name="arrow-back" size={24} color="#FFF" />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>{step === 1 ? 'Reset Password' : 'Create New Password'}</Text>
+        <View style={{ width: 24 }} />
+      </View>
 
-        {step === 1 ? (
-          /* Step 1: OTP Input screen */
-          <View style={styles.content}>
+      {step === 1 ? (
+        /* Step 1: Fixed Non-Scrollable OTP Input Screen */
+        <View style={styles.stepOneWrapper}>
+          <View style={styles.stepOneContent}>
             <View style={styles.iconContainer}>
-              <MaterialIcons name="vpn-key" size={48} color={colors.accent} />
+              <MaterialIcons name="vpn-key" size={32} color={colors.accent} />
             </View>
 
             <Text style={styles.mainTitle}>Enter Reset Code</Text>
             <Text style={styles.description}>
-              We have sent a 6-digit verification code to <Text style={styles.highlightText}>{email}</Text>. Please enter it below.
+              We have sent a 6-digit verification code to{'\n'}
+              <Text style={styles.highlightText}>{email}</Text>
             </Text>
 
             {/* OTP Input UI */}
@@ -184,47 +236,86 @@ export const ResetPasswordScreen = () => {
               ))}
             </View>
 
+            {/* Resend Link with Cooldown */}
+            <View style={styles.resendContainer}>
+              <Text style={styles.resendLabel}>Didn't receive the code? </Text>
+              <TouchableOpacity
+                disabled={!canResend || resending}
+                onPress={handleResendCode}
+                style={styles.resendTouch}
+              >
+                {resending ? (
+                  <ActivityIndicator size="small" color={colors.accent} />
+                ) : (
+                  <Text style={[styles.resendAction, !canResend && styles.resendActionDisabled]}>
+                    {canResend ? 'Resend Code' : `Resend in ${countdown}s`}
+                  </Text>
+                )}
+              </TouchableOpacity>
+            </View>
+
             {loading ? (
-              <ActivityIndicator color={colors.accent} size="large" style={{ marginBottom: 32 }} />
+              <ActivityIndicator color={colors.accent} size="large" style={{ marginVertical: 12 }} />
             ) : (
               <PrimaryButton
                 title="Verify Reset Code →"
                 onPress={handleVerifyOTP}
-                style={styles.actionBtn}
+                disabled={otp.length < 6}
+                style={[styles.actionBtn, otp.length < 6 && { opacity: 0.5 }]}
               />
             )}
+          </View>
 
-            {/* Custom Keypad */}
-            <View style={styles.keypadContainer}>
-              {[['1', '2', '3'], ['4', '5', '6'], ['7', '8', '9']].map((row, i) => (
-                <View key={i} style={styles.keypadRow}>
-                  {row.map(num => (
-                    <TouchableOpacity key={num} style={styles.keypadButton} onPress={() => handleKeyPress(num)}>
-                      <Text style={styles.keypadText}>{num}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              ))}
-              <View style={styles.keypadRow}>
-                <View style={styles.keypadButton} />
-                <TouchableOpacity style={styles.keypadButton} onPress={() => handleKeyPress('0')}>
-                  <Text style={styles.keypadText}>0</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.keypadButton} onPress={handleDelete}>
-                  <FontAwesome5 name="backspace" size={20} color={colors.textSecondary} />
-                </TouchableOpacity>
+          {/* Custom Keypad - Anchored firmly at bottom */}
+          <View style={styles.keypadContainer}>
+            {[['1', '2', '3'], ['4', '5', '6'], ['7', '8', '9']].map((row, i) => (
+              <View key={i} style={styles.keypadRow}>
+                {row.map(num => (
+                  <TouchableOpacity
+                    key={num}
+                    style={styles.keypadButton}
+                    onPress={() => handleKeyPress(num)}
+                    activeOpacity={0.6}
+                  >
+                    <Text style={styles.keypadText}>{num}</Text>
+                  </TouchableOpacity>
+                ))}
               </View>
+            ))}
+            <View style={styles.keypadRow}>
+              <View style={styles.keypadButton} />
+              <TouchableOpacity
+                style={styles.keypadButton}
+                onPress={() => handleKeyPress('0')}
+                activeOpacity={0.6}
+              >
+                <Text style={styles.keypadText}>0</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.keypadButton}
+                onPress={handleDelete}
+                activeOpacity={0.6}
+              >
+                <FontAwesome5 name="backspace" size={20} color={colors.textSecondary} />
+              </TouchableOpacity>
             </View>
           </View>
-        ) : (
-          /* Step 2: New Password input screen */
-          <KeyboardAvoidingView
-            style={styles.keyboardAvoiding}
-            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        </View>
+      ) : (
+        /* Step 2: Scrollable Password Setup for Keyboard entry */
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
+          <ScrollView
+            style={{ flex: 1 }}
+            contentContainerStyle={styles.stepTwoScrollContainer}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
           >
             <View style={styles.content}>
               <View style={styles.iconContainer}>
-                <MaterialIcons name="security" size={48} color={colors.accent} />
+                <MaterialIcons name="security" size={40} color={colors.accent} />
               </View>
 
               <Text style={styles.mainTitle}>Create New Password</Text>
@@ -331,9 +422,9 @@ export const ResetPasswordScreen = () => {
                 )}
               </View>
             </View>
-          </KeyboardAvoidingView>
-        )}
-      </ScrollView>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      )}
     </SafeAreaView>
   );
 };
@@ -343,19 +434,25 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.bg,
   },
-  keyboardAvoiding: {
-    width: '100%',
-  },
-  container: {
-    flexGrow: 1,
+  stepOneWrapper: {
+    flex: 1,
     justifyContent: 'space-between',
+  },
+  stepOneContent: {
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    flex: 1,
+    justifyContent: 'center',
+  },
+  stepTwoScrollContainer: {
+    paddingBottom: 40,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 24,
-    paddingVertical: 20,
+    paddingVertical: 14,
   },
   backButton: {
     padding: 8,
@@ -371,25 +468,27 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   iconContainer: {
-    width: 80,
-    height: 80,
-    borderRadius: 24,
+    width: 64,
+    height: 64,
+    borderRadius: 20,
     backgroundColor: colors.bgInput,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 24,
-    marginTop: 20,
+    marginBottom: 12,
   },
   mainTitle: {
     ...typography.h2,
-    marginBottom: 12,
+    fontSize: 22,
+    marginBottom: 6,
+    textAlign: 'center',
   },
   description: {
     ...typography.body,
+    fontSize: 13,
     color: colors.textSecondary,
     textAlign: 'center',
-    marginBottom: 32,
-    lineHeight: 24,
+    marginBottom: 16,
+    lineHeight: 18,
   },
   highlightText: {
     color: colors.textPrimary,
@@ -399,11 +498,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     width: '100%',
-    marginBottom: 36,
+    maxWidth: 320,
+    marginBottom: 14,
   },
   otpBox: {
-    width: 48,
-    height: 56,
+    width: 44,
+    height: 50,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: colors.border,
@@ -420,9 +520,12 @@ const styles = StyleSheet.create({
   },
   otpText: {
     ...typography.h3,
+    fontSize: 20,
   },
   actionBtn: {
-    marginBottom: 32,
+    width: '100%',
+    maxWidth: 320,
+    marginBottom: 4,
     shadowColor: colors.accent,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.2,
@@ -431,25 +534,28 @@ const styles = StyleSheet.create({
   },
   keypadContainer: {
     backgroundColor: '#0a0a0a',
-    paddingBottom: 40,
-    paddingTop: 20,
-    width: Dimensions.get('window').width,
-    paddingHorizontal: 24,
+    paddingBottom: Platform.OS === 'ios' ? 28 : 14,
+    paddingTop: 8,
+    width: '100%',
+    paddingHorizontal: 20,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255, 255, 255, 0.05)',
   },
   keypadRow: {
     flexDirection: 'row',
     justifyContent: 'space-around',
-    marginBottom: 20,
+    marginBottom: 6,
   },
   keypadButton: {
-    width: 80,
-    height: 60,
+    width: 76,
+    height: 48,
     justifyContent: 'center',
     alignItems: 'center',
   },
   keypadText: {
     ...typography.h2,
     fontWeight: '400',
+    fontSize: 22,
   },
   formSection: {
     width: '100%',
@@ -501,5 +607,31 @@ const styles = StyleSheet.create({
   },
   checklistTextActive: {
     color: colors.accent,
+  },
+  resendContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 14,
+    marginTop: 2,
+  },
+  resendLabel: {
+    ...typography.bodySmall,
+    color: colors.textSecondary,
+    fontSize: 13,
+  },
+  resendTouch: {
+    paddingVertical: 4,
+    paddingHorizontal: 4,
+  },
+  resendAction: {
+    ...typography.bodySmall,
+    color: colors.accent,
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  resendActionDisabled: {
+    color: colors.textMuted,
+    fontWeight: '500',
   },
 });
