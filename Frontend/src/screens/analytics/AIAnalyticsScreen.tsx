@@ -235,7 +235,7 @@ export const AIAnalyticsScreen = () => {
                   <View>
                     <Text style={styles.priceLabel}>Current Price (LKR)</Text>
                     <Text style={styles.priceValue} numberOfLines={1}>
-                      රු {item.priceLKR ? formatLKR(item.priceLKR, 2) : '---'}
+                      Rs. {item.priceLKR ? formatLKR(item.priceLKR, 2) : '---'}
                     </Text>
                   </View>
                   <View style={styles.trendContainer}>

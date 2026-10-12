@@ -104,7 +104,7 @@ export const AssetDetailsScreen = () => {
         {/* Price Display */}
         <View style={styles.priceSection}>
           <Text style={styles.priceValue} numberOfLines={1} adjustsFontSizeToFit>
-            {priceLKR > 0 ? `රු ${formatLKR(priceLKR, 2)}` : 'Loading...'}
+            {priceLKR > 0 ? `Rs. ${formatLKR(priceLKR, 2)}` : 'Loading...'}
           </Text>
           <View style={[styles.changePill, !isPositive && { backgroundColor: colors.red + '22' }]}>
             <MaterialIcons
@@ -132,9 +132,9 @@ export const AssetDetailsScreen = () => {
             <Text style={styles.statLabel}>24H HIGH</Text>
             <Text style={styles.statValue} numberOfLines={1}>
               {priceData?.high24hLKR
-                ? `රු ${formatNumber(priceData.high24hLKR, priceData.high24hLKR < 10 ? 2 : 0)}`
+                ? `Rs. ${formatNumber(priceData.high24hLKR, priceData.high24hLKR < 10 ? 2 : 0)}`
                 : priceLKR > 0
-                ? `රු ${formatNumber(priceLKR * 1.025, priceLKR < 10 ? 2 : 0)}`
+                ? `Rs. ${formatNumber(priceLKR * 1.025, priceLKR < 10 ? 2 : 0)}`
                 : '---'}
             </Text>
           </View>
@@ -142,9 +142,9 @@ export const AssetDetailsScreen = () => {
             <Text style={styles.statLabel}>24H LOW</Text>
             <Text style={styles.statValue} numberOfLines={1}>
               {priceData?.low24hLKR
-                ? `රු ${formatNumber(priceData.low24hLKR, priceData.low24hLKR < 10 ? 2 : 0)}`
+                ? `Rs. ${formatNumber(priceData.low24hLKR, priceData.low24hLKR < 10 ? 2 : 0)}`
                 : priceLKR > 0
-                ? `රු ${formatNumber(priceLKR * 0.975, priceLKR < 10 ? 2 : 0)}`
+                ? `Rs. ${formatNumber(priceLKR * 0.975, priceLKR < 10 ? 2 : 0)}`
                 : '---'}
             </Text>
           </View>
