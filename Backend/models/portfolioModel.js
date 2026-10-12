@@ -5,7 +5,7 @@ const getUserPortfolio = async (userId) => {
   try {
     connection = await oracledb.getConnection();
     const result = await connection.execute(
-      `SELECT PORTFOLIO_ID, USER_ID, SYMBOL, QUANTITY, AVERAGE_PRICE, INVESTED_AMOUNT, CREATED_AT, UPDATED_AT 
+      `SELECT PORTFOLIO_ID, USER_ID, SYMBOL, QUANTITY, AVERAGE_PRICE, INVESTED_AMOUNT, ASSET_TYPE, CREATED_AT, UPDATED_AT 
        FROM PORTFOLIOS 
        WHERE USER_ID = :userId AND QUANTITY > 0
        ORDER BY SYMBOL ASC`,
@@ -23,10 +23,10 @@ const getAssetHolding = async (userId, symbol) => {
   try {
     connection = await oracledb.getConnection();
     const result = await connection.execute(
-      `SELECT PORTFOLIO_ID, USER_ID, SYMBOL, QUANTITY, AVERAGE_PRICE, INVESTED_AMOUNT 
+      `SELECT PORTFOLIO_ID, USER_ID, SYMBOL, QUANTITY, AVERAGE_PRICE, INVESTED_AMOUNT, ASSET_TYPE 
        FROM PORTFOLIOS 
        WHERE USER_ID = :userId AND SYMBOL = :symbol`,
-      { userId, symbol },
+      [userId],
       { outFormat: oracledb.OUT_FORMAT_OBJECT }
     );
     return result.rows[0] || null;
@@ -35,7 +35,7 @@ const getAssetHolding = async (userId, symbol) => {
   }
 };
 
-const updateAssetHolding = async (connection, userId, symbol, quantity, averagePrice, investedAmount) => {
+const updateAssetHolding = async (connection, userId, symbol, quantity, averagePrice, investedAmount, assetType = 'CRYPTO') => {
   const conn = connection || (await oracledb.getConnection());
   try {
     await conn.execute(
@@ -46,11 +46,12 @@ const updateAssetHolding = async (connection, userId, symbol, quantity, averageP
          UPDATE SET p.quantity = :quantity,
                     p.average_price = :averagePrice,
                     p.invested_amount = :investedAmount,
+                    p.asset_type = :assetType,
                     p.updated_at = CURRENT_TIMESTAMP
        WHEN NOT MATCHED THEN
-         INSERT (USER_ID, SYMBOL, QUANTITY, AVERAGE_PRICE, INVESTED_AMOUNT)
-         VALUES (:userId, :symbol, :quantity, :averagePrice, :investedAmount)`,
-      { userId, symbol, quantity, averagePrice, investedAmount }
+         INSERT (USER_ID, SYMBOL, QUANTITY, AVERAGE_PRICE, INVESTED_AMOUNT, ASSET_TYPE)
+         VALUES (:userId, :symbol, :quantity, :averagePrice, :investedAmount, :assetType)`,
+      { userId, symbol, quantity, averagePrice, investedAmount, assetType }
     );
     if (!connection) {
       await conn.commit();

@@ -1,5 +1,6 @@
 const oracledb = require('oracledb');
 const { getPriceInLKR } = require('./marketService');
+const cseMarketService = require('./cseMarketService');
 const walletModel = require('../models/walletModel');
 const portfolioModel = require('../models/portfolioModel');
 const transactionModel = require('../models/transactionModel');
@@ -11,6 +12,47 @@ const createError = (code, message, status) => {
   return err;
 };
 
+const TRADEABLE_CRYPTO_SYMBOLS = ['BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'SOLUSDT', 'XRPUSDT', 'ADAUSDT', 'DOGEUSDT'];
+
+/**
+ * Resolves symbol, asset type ('CRYPTO' | 'STOCK'), and current execution price in LKR
+ */
+async function resolveAssetPrice(symbol) {
+  if (cseMarketService.isCseSymbol(symbol)) {
+    const normCse = cseMarketService.normalizeCseSymbol(symbol);
+    if (!normCse || !cseMarketService.isValidCseSymbol(normCse)) {
+      throw createError('INVALID_SYMBOL', `CSE equity '${symbol}' is not supported. Supported: ${cseMarketService.ALLOWED_CSE_SYMBOLS.join(', ')}`, 422);
+    }
+    const quote = await cseMarketService.getCseStockPrice(normCse);
+    if (quote.isSuspended) {
+      throw createError('SECURITY_SUSPENDED', `CSE security '${normCse}' is currently suspended from trading.`, 422);
+    }
+    return {
+      symbol: normCse,
+      assetType: 'STOCK',
+      priceLKR: quote.priceLKR,
+      displayName: normCse
+    };
+  }
+
+  // Otherwise treat as Crypto
+  if (!TRADEABLE_CRYPTO_SYMBOLS.includes(symbol)) {
+    throw createError('INVALID_SYMBOL', `Cryptocurrency symbol '${symbol}' is not supported. Supported: ${TRADEABLE_CRYPTO_SYMBOLS.join(', ')}`, 422);
+  }
+
+  try {
+    const marketData = await getPriceInLKR(symbol);
+    return {
+      symbol,
+      assetType: 'CRYPTO',
+      priceLKR: marketData.priceLKR,
+      displayName: symbol.replace('USDT', '')
+    };
+  } catch (error) {
+    throw createError('SERVER_ERROR', 'Failed to retrieve live cryptocurrency price.', 500);
+  }
+}
+
 const executeBuyOrder = async (userId, symbol, amountLKR) => {
   // Input validations
   if (!amountLKR || isNaN(amountLKR) || parseFloat(amountLKR) <= 0) {
@@ -18,19 +60,9 @@ const executeBuyOrder = async (userId, symbol, amountLKR) => {
   }
   
   const numAmount = parseFloat(amountLKR);
-  const tradeableSymbols = ['BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'SOLUSDT', 'XRPUSDT', 'ADAUSDT', 'DOGEUSDT'];
-  if (!tradeableSymbols.includes(symbol)) {
-    throw createError('INVALID_SYMBOL', `Trading symbol ${symbol} is not supported.`, 422);
-  }
-
-  // 1. Retrieve current LKR price
-  let priceLKR;
-  try {
-    const marketData = await getPriceInLKR(symbol);
-    priceLKR = marketData.priceLKR;
-  } catch (error) {
-    throw createError('SERVER_ERROR', 'Failed to retrieve live coin price from Binance.', 500);
-  }
+  const asset = await resolveAssetPrice(symbol);
+  const { assetType, priceLKR, displayName } = asset;
+  const canonicalSymbol = asset.symbol;
 
   const quantity = numAmount / priceLKR;
 
@@ -66,8 +98,8 @@ const executeBuyOrder = async (userId, symbol, amountLKR) => {
     const portfolioRes = await connection.execute(
       `SELECT QUANTITY, AVERAGE_PRICE, INVESTED_AMOUNT 
        FROM PORTFOLIOS 
-       WHERE USER_ID = :userId AND SYMBOL = :symbol FOR UPDATE`,
-      { userId, symbol },
+       WHERE USER_ID = :userId AND SYMBOL = :canonicalSymbol FOR UPDATE`,
+      { userId, canonicalSymbol },
       { outFormat: oracledb.OUT_FORMAT_OBJECT }
     );
 
@@ -84,31 +116,34 @@ const executeBuyOrder = async (userId, symbol, amountLKR) => {
       newAveragePrice = newInvested / newQty;
     }
 
-    // 5. Update portfolio record
+    // 5. Update portfolio record with ASSET_TYPE
     await connection.execute(
       `MERGE INTO PORTFOLIOS p
-       USING (SELECT :userId AS user_id, :symbol AS symbol FROM dual) src
+       USING (SELECT :userId AS user_id, :canonicalSymbol AS symbol FROM dual) src
        ON (p.user_id = src.user_id AND p.symbol = src.symbol)
        WHEN MATCHED THEN
          UPDATE SET p.quantity = :newQty,
                     p.average_price = :newAveragePrice,
                     p.invested_amount = :newInvested,
+                    p.asset_type = :assetType,
                     p.updated_at = CURRENT_TIMESTAMP
        WHEN NOT MATCHED THEN
-         INSERT (USER_ID, SYMBOL, QUANTITY, AVERAGE_PRICE, INVESTED_AMOUNT)
-         VALUES (:userId, :symbol, :newQty, :newAveragePrice, :newInvested)`,
-      { userId, symbol, newQty, newAveragePrice, newInvested }
+         INSERT (USER_ID, SYMBOL, QUANTITY, AVERAGE_PRICE, INVESTED_AMOUNT, ASSET_TYPE)
+         VALUES (:userId, :canonicalSymbol, :newQty, :newAveragePrice, :newInvested, :assetType)`,
+      { userId, canonicalSymbol, newQty, newAveragePrice, newInvested, assetType }
     );
 
     // 6. Log transaction
     const txId = await transactionModel.createTransaction(
       connection,
       userId,
-      symbol,
+      canonicalSymbol,
       'BUY',
       quantity,
       priceLKR,
-      numAmount
+      numAmount,
+      'COMPLETED',
+      assetType
     );
 
     await connection.commit();
@@ -119,14 +154,15 @@ const executeBuyOrder = async (userId, symbol, amountLKR) => {
 
     return {
       success: true,
-      message: `Successfully purchased ${quantity.toFixed(6)} ${symbol.replace('USDT', '')}`,
+      message: `Successfully purchased ${quantity.toFixed(assetType === 'STOCK' ? 4 : 6)} ${displayName}`,
       order: {
         orderId,
         transactionId: txId,
-        symbol,
+        symbol: canonicalSymbol,
+        assetType,
         side: 'BUY',
         orderType: 'MARKET',
-        executionVenue: 'INTERNAL_PORTFOLIO',
+        executionVenue: assetType === 'STOCK' ? 'INTERNAL_DEMO_CSE' : 'INTERNAL_PORTFOLIO',
         executedPriceLKR: priceLKR,
         executedQuantity: quantity,
         totalAmountLKR: numAmount,
@@ -153,10 +189,9 @@ const executeSellOrder = async (userId, symbol, quantity) => {
   }
 
   const numQty = parseFloat(quantity);
-  const tradeableSymbols = ['BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'SOLUSDT', 'XRPUSDT', 'ADAUSDT', 'DOGEUSDT'];
-  if (!tradeableSymbols.includes(symbol)) {
-    throw createError('INVALID_SYMBOL', `Trading symbol ${symbol} is not supported.`, 422);
-  }
+  const asset = await resolveAssetPrice(symbol);
+  const { assetType, priceLKR, displayName } = asset;
+  const canonicalSymbol = asset.symbol;
 
   let connection;
   try {
@@ -166,29 +201,20 @@ const executeSellOrder = async (userId, symbol, quantity) => {
     const portfolioRes = await connection.execute(
       `SELECT QUANTITY, AVERAGE_PRICE, INVESTED_AMOUNT 
        FROM PORTFOLIOS 
-       WHERE USER_ID = :userId AND SYMBOL = :symbol FOR UPDATE`,
-      { userId, symbol },
+       WHERE USER_ID = :userId AND SYMBOL = :canonicalSymbol FOR UPDATE`,
+      { userId, canonicalSymbol },
       { outFormat: oracledb.OUT_FORMAT_OBJECT }
     );
 
     if (portfolioRes.rows.length === 0 || parseFloat(portfolioRes.rows[0].QUANTITY) <= 0) {
-      throw createError('ASSET_NOT_FOUND', `You do not hold any ${symbol.replace('USDT', '')} to sell.`, 404);
+      throw createError('ASSET_NOT_FOUND', `You do not hold any ${displayName} to sell.`, 404);
     }
 
     const existingQty = parseFloat(portfolioRes.rows[0].QUANTITY);
     const averagePrice = parseFloat(portfolioRes.rows[0].AVERAGE_PRICE);
 
     if (existingQty < numQty) {
-      throw createError('INVALID_AMOUNT', `Insufficient assets. You only hold ${existingQty} ${symbol.replace('USDT', '')}.`, 400);
-    }
-
-    // 2. Retrieve live coin price
-    let priceLKR;
-    try {
-      const marketData = await getPriceInLKR(symbol);
-      priceLKR = marketData.priceLKR;
-    } catch (error) {
-      throw createError('SERVER_ERROR', 'Failed to retrieve live coin price from Binance.', 500);
+      throw createError('INVALID_AMOUNT', `Insufficient assets. You only hold ${existingQty} ${displayName}.`, 400);
     }
 
     const sellValue = numQty * priceLKR;
@@ -198,15 +224,15 @@ const executeSellOrder = async (userId, symbol, quantity) => {
     // 3. Update holdings or delete if fully sold
     if (newQty <= 0.00000001) {
       await connection.execute(
-        `DELETE FROM PORTFOLIOS WHERE USER_ID = :userId AND SYMBOL = :symbol`,
-        { userId, symbol }
+        `DELETE FROM PORTFOLIOS WHERE USER_ID = :userId AND SYMBOL = :canonicalSymbol`,
+        { userId, canonicalSymbol }
       );
     } else {
       await connection.execute(
         `UPDATE PORTFOLIOS 
-         SET QUANTITY = :newQty, INVESTED_AMOUNT = :newInvested, UPDATED_AT = CURRENT_TIMESTAMP 
-         WHERE USER_ID = :userId AND SYMBOL = :symbol`,
-        { newQty, newInvested, userId, symbol }
+         SET QUANTITY = :newQty, INVESTED_AMOUNT = :newInvested, ASSET_TYPE = :assetType, UPDATED_AT = CURRENT_TIMESTAMP 
+         WHERE USER_ID = :userId AND SYMBOL = :canonicalSymbol`,
+        { newQty, newInvested, assetType, userId, canonicalSymbol }
       );
     }
 
@@ -222,11 +248,13 @@ const executeSellOrder = async (userId, symbol, quantity) => {
     const txId = await transactionModel.createTransaction(
       connection,
       userId,
-      symbol,
+      canonicalSymbol,
       'SELL',
       numQty,
       priceLKR,
-      sellValue
+      sellValue,
+      'COMPLETED',
+      assetType
     );
 
     await connection.commit();
@@ -237,14 +265,15 @@ const executeSellOrder = async (userId, symbol, quantity) => {
 
     return {
       success: true,
-      message: `Successfully sold ${numQty} ${symbol.replace('USDT', '')}`,
+      message: `Successfully sold ${numQty} ${displayName}`,
       order: {
         orderId,
         transactionId: txId,
-        symbol,
+        symbol: canonicalSymbol,
+        assetType,
         side: 'SELL',
         orderType: 'MARKET',
-        executionVenue: 'INTERNAL_PORTFOLIO',
+        executionVenue: assetType === 'STOCK' ? 'INTERNAL_DEMO_CSE' : 'INTERNAL_PORTFOLIO',
         executedPriceLKR: priceLKR,
         executedQuantity: numQty,
         totalAmountLKR: sellValue,
@@ -266,5 +295,7 @@ const executeSellOrder = async (userId, symbol, quantity) => {
 
 module.exports = {
   executeBuyOrder,
-  executeSellOrder
+  executeSellOrder,
+  resolveAssetPrice,
+  TRADEABLE_CRYPTO_SYMBOLS
 };

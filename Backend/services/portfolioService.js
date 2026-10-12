@@ -1,6 +1,7 @@
 const portfolioModel = require('../models/portfolioModel');
 const walletModel = require('../models/walletModel');
 const marketService = require('./marketService');
+const cseMarketService = require('./cseMarketService');
 
 const getPortfolioSummary = async (userId) => {
   // 1. Get user holdings
@@ -15,6 +16,8 @@ const getPortfolioSummary = async (userId) => {
       holdings: [],
       summary: {
         totalPortfolioValue: availableCash,
+        cryptoHoldingsValue: 0.0,
+        stockHoldingsValue: 0.0,
         todaysProfit: 0.0,
         profitLossPercent: 0.0,
         investedAmount: 0.0,
@@ -24,31 +27,65 @@ const getPortfolioSummary = async (userId) => {
   }
 
   // 3. Get live prices for value calculations
-  let livePrices;
+  let liveCryptoPrices = {};
   try {
-    liveData = await marketService.getLivePrices();
-    // Map array to object for quick lookup
-    livePrices = {};
-    liveData.forEach(item => {
-      livePrices[item.symbol] = item;
+    const liveCrypto = await marketService.getLivePrices();
+    (liveCrypto || []).forEach(item => {
+      liveCryptoPrices[item.symbol] = item;
     });
   } catch (error) {
-    console.error('Error fetching live prices for portfolio summary:', error.message);
-    livePrices = {};
+    console.error('Error fetching crypto prices for portfolio summary:', error.message);
+  }
+
+  let cseStockPrices = {};
+  try {
+    const cseWatchlist = await cseMarketService.getCseWatchlist();
+    (cseWatchlist || []).forEach(stock => {
+      cseStockPrices[stock.symbol] = stock;
+    });
+  } catch (error) {
+    console.error('Error fetching CSE stock prices for portfolio summary:', error.message);
   }
 
   let totalHoldingsValue = 0.0;
+  let cryptoHoldingsValue = 0.0;
+  let stockHoldingsValue = 0.0;
   let totalInvestedAmount = 0.0;
 
   const formattedHoldings = holdings.map(holding => {
     const symbol = holding.SYMBOL;
+    const isStock = holding.ASSET_TYPE === 'STOCK' || cseMarketService.isCseSymbol(symbol);
     const qty = parseFloat(holding.QUANTITY);
     const avgPrice = parseFloat(holding.AVERAGE_PRICE);
     const invested = parseFloat(holding.INVESTED_AMOUNT);
 
-    // Get current price from cache, fallback to avgPrice if API fails
-    const ticker = livePrices[symbol];
-    const currentPrice = ticker ? ticker.priceLKR : avgPrice;
+    let currentPrice = avgPrice;
+    let ticker = null;
+    let coinName = symbol;
+    let displayName = symbol;
+    let dataFreshness = 'DELAYED';
+
+    if (isStock) {
+      ticker = cseStockPrices[symbol];
+      if (ticker) {
+        currentPrice = ticker.priceLKR;
+        coinName = ticker.ticker || symbol.split('.')[0];
+        displayName = ticker.name;
+        dataFreshness = ticker.dataFreshness;
+      } else {
+        coinName = symbol.split('.')[0];
+      }
+    } else {
+      ticker = liveCryptoPrices[symbol];
+      if (ticker) {
+        currentPrice = ticker.priceLKR;
+        coinName = symbol.replace('USDT', '');
+        displayName = symbol.replace('USDT', '');
+        dataFreshness = ticker.isFallback ? 'DELAYED' : 'LIVE';
+      } else {
+        coinName = symbol.replace('USDT', '');
+      }
+    }
 
     const currentValue = qty * currentPrice;
     const profitLoss = currentValue - invested;
@@ -57,15 +94,24 @@ const getPortfolioSummary = async (userId) => {
     totalHoldingsValue += currentValue;
     totalInvestedAmount += invested;
 
+    if (isStock) {
+      stockHoldingsValue += currentValue;
+    } else {
+      cryptoHoldingsValue += currentValue;
+    }
+
     return {
-      coin: symbol.replace('USDT', ''),
+      coin: coinName,
+      name: displayName,
       symbol: symbol,
+      assetType: isStock ? 'STOCK' : 'CRYPTO',
       quantity: qty,
       averageBuyPrice: avgPrice,
       currentPrice: currentPrice,
       currentValue: currentValue,
       profitLoss: profitLoss,
-      profitPercent: profitPercent
+      profitPercent: profitPercent,
+      dataFreshness
     };
   });
 
@@ -77,6 +123,8 @@ const getPortfolioSummary = async (userId) => {
     holdings: formattedHoldings,
     summary: {
       totalPortfolioValue: totalPortfolioValue,
+      cryptoHoldingsValue: cryptoHoldingsValue,
+      stockHoldingsValue: stockHoldingsValue,
       todaysProfit: todaysProfit,
       profitLossPercent: profitLossPercent,
       investedAmount: totalInvestedAmount,
