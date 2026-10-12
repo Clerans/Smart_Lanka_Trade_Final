@@ -166,3 +166,65 @@ exports.getKlines = async (req, res) => {
     });
   }
 };
+
+const cseMarketService = require('../services/cseMarketService');
+
+exports.getCseWatchlist = async (req, res) => {
+  try {
+    const data = await cseMarketService.getCseWatchlist();
+    res.json({
+      success: true,
+      data
+    });
+  } catch (error) {
+    console.error('getCseWatchlist Error:', error.message);
+    res.status(500).json({
+      success: false,
+      code: 'SERVER_ERROR',
+      message: 'Failed to fetch CSE stock market data'
+    });
+  }
+};
+
+exports.getCseStock = async (req, res) => {
+  try {
+    const rawSymbol = req.params.symbol || req.query.symbol;
+    if (!rawSymbol) {
+      return res.status(400).json({
+        success: false,
+        code: 'INVALID_SYMBOL',
+        message: 'Stock symbol parameter is required'
+      });
+    }
+
+    const data = await cseMarketService.getCseStockQuote(rawSymbol);
+    res.json({
+      success: true,
+      data
+    });
+  } catch (error) {
+    const status = error.status || 500;
+    res.status(status).json({
+      success: false,
+      code: error.code || 'SERVER_ERROR',
+      message: error.message || 'Failed to retrieve CSE stock quote'
+    });
+  }
+};
+
+exports.getCseSession = async (req, res) => {
+  try {
+    const data = cseMarketService.getMarketSessionInfo();
+    res.json({
+      success: true,
+      data
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      code: 'SERVER_ERROR',
+      message: 'Failed to evaluate CSE trading session status'
+    });
+  }
+};
+
