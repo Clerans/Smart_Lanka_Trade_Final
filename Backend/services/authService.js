@@ -551,10 +551,13 @@ exports.googleLoginUser = async (authInput) => {
   }
 
   const googleAndroidClientId = process.env.GOOGLE_ANDROID_CLIENT_ID || googleWebClientId;
-  const acceptedAudiences = [
+  const acceptedAudiences = Array.from(new Set([
     googleWebClientId,
     googleAndroidClientId,
-  ].filter(Boolean);
+    '614054153944-7figt10pghsb14tg764jj3hfnktkqnbt.apps.googleusercontent.com',
+    '614054153944-39dgjpn4vskvm4e494ajiip01gaks2cs.apps.googleusercontent.com',
+    '614054153944-t0flbk67jqulktrs8uf7gnghds8eeh15.apps.googleusercontent.com',
+  ].filter(Boolean)));
 
   if (process.env.NODE_ENV !== 'production') {
     console.log('[OAuth Diagnostic] Stage: TOKEN_VALIDATION verifying token signature and audience');

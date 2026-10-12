@@ -44,7 +44,8 @@ if (!isExpoGo && Platform.OS !== 'web') {
     if (GoogleSignin) {
       GoogleSignin.configure({
         webClientId: GOOGLE_WEB_CLIENT_ID,
-        offlineAccess: true,
+        scopes: ['profile', 'email'],
+        offlineAccess: false,
       });
     }
   } catch (err) {
