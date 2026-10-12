@@ -198,7 +198,7 @@ export const LoginScreen = () => {
           code,
           codeVerifier: request?.codeVerifier,
           redirectUri,
-          clientId: googleWebClientId
+          clientId: Platform.OS === 'android' ? googleAndroidClientId : googleWebClientId
         });
       } else if (idToken) {
         handleGoogleLogin({ idToken });
@@ -218,7 +218,7 @@ export const LoginScreen = () => {
       }
       setGoogleLoading(false);
     }
-  }, [response, request, redirectUri, googleWebClientId, handleGoogleLogin, showToast]);
+  }, [response, request, redirectUri, googleWebClientId, googleAndroidClientId, handleGoogleLogin, showToast]);
 
   const handleGooglePress = async () => {
     if (loading || googleLoading || !request) return;
