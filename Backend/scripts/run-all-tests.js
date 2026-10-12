@@ -239,66 +239,114 @@ async function runTestSuite() {
   // -------------------------------------------------------------
   // SUITE 6: High-Value Financial Operations & Security PIN
   // -------------------------------------------------------------
-  console.log('\nSUITE 6: High-Value Financial Transaction Security');
+  console.log('\nSUITE 6: High-Value Financial Transaction Security & PIN Hardening');
   try {
+    const bcrypt = require('bcryptjs');
     const HIGH_VALUE_THRESHOLD = 100000; // LKR 100,000
 
-    const validateHighValueTransaction = ({ amount, userHasPin, providedPin, userPinHash }) => {
-      if (amount > HIGH_VALUE_THRESHOLD) {
+    const validateHighValueTransaction = async ({ amount, userHasPin, providedPin, userPinHash, failedAttempts = 0, lockedUntil = null }) => {
+      if (amount >= HIGH_VALUE_THRESHOLD) {
         if (!userHasPin) {
           return { allowed: false, code: 'PIN_SETUP_REQUIRED', message: 'PIN setup required for transactions over LKR 100,000' };
         }
         if (!providedPin) {
           return { allowed: false, code: 'HIGH_VALUE_PIN_REQUIRED', message: 'Transaction PIN required for operations over LKR 100,000' };
         }
-        const pinValid = crypto.createHash('sha256').update(String(providedPin)).digest('hex') === userPinHash;
+        if (lockedUntil && new Date(lockedUntil) > new Date()) {
+          return { allowed: false, code: 'PIN_LOCKED', message: 'PIN locked due to too many failed attempts' };
+        }
+
+        // Support bcrypt or legacy SHA-256
+        let pinValid = false;
+        if (/^[a-f0-9]{64}$/i.test(userPinHash)) {
+          pinValid = crypto.createHash('sha256').update(String(providedPin)).digest('hex') === userPinHash;
+        } else {
+          pinValid = await bcrypt.compare(String(providedPin), userPinHash);
+        }
+
         if (!pinValid) {
+          const newAttempts = failedAttempts + 1;
+          if (newAttempts >= 5) {
+            return { allowed: false, code: 'PIN_LOCKED', message: 'PIN locked due to 5 consecutive failed attempts' };
+          }
           return { allowed: false, code: 'INVALID_PIN', message: 'Incorrect transaction PIN' };
         }
       }
       return { allowed: true };
     };
 
-    const userPinHash = crypto.createHash('sha256').update('1234').digest('hex');
+    const userBcryptPinHash = await bcrypt.hash('1234', 10);
+    const legacySha256PinHash = crypto.createHash('sha256').update('1234').digest('hex');
 
     // 6.1 Transaction below threshold does not require PIN
-    const standardTx = validateHighValueTransaction({
+    const standardTx = await validateHighValueTransaction({
       amount: 25000,
       userHasPin: true,
       providedPin: null,
-      userPinHash
+      userPinHash: userBcryptPinHash
     });
     assert(standardTx.allowed === true, 'Allows sub-100k transactions without prompting for PIN');
 
     // 6.2 Transaction above threshold without PIN is blocked
-    const highValueNoPin = validateHighValueTransaction({
+    const highValueNoPin = await validateHighValueTransaction({
       amount: 150000,
       userHasPin: true,
       providedPin: null,
-      userPinHash
+      userPinHash: userBcryptPinHash
     });
     assert(highValueNoPin.allowed === false && highValueNoPin.code === 'HIGH_VALUE_PIN_REQUIRED',
-      'Blocks transactions > LKR 100,000 when PIN is omitted');
+      'Blocks transactions >= LKR 100,000 when PIN is omitted');
 
-    // 6.3 Transaction above threshold with wrong PIN is blocked
-    const highValueWrongPin = validateHighValueTransaction({
+    // 6.3 Transaction above threshold without configured PIN is blocked
+    const highValueNoSetup = await validateHighValueTransaction({
+      amount: 150000,
+      userHasPin: false,
+      providedPin: null,
+      userPinHash: null
+    });
+    assert(highValueNoSetup.allowed === false && highValueNoSetup.code === 'PIN_SETUP_REQUIRED',
+      'Blocks transactions >= LKR 100,000 with PIN_SETUP_REQUIRED when user has not set up a PIN');
+
+    // 6.4 Transaction above threshold with wrong PIN is blocked
+    const highValueWrongPin = await validateHighValueTransaction({
       amount: 150000,
       userHasPin: true,
       providedPin: '9999',
-      userPinHash
+      userPinHash: userBcryptPinHash
     });
     assert(highValueWrongPin.allowed === false && highValueWrongPin.code === 'INVALID_PIN',
       'Blocks high-value transactions when wrong PIN is entered');
 
-    // 6.4 Transaction above threshold with correct PIN is authorized
-    const highValueCorrectPin = validateHighValueTransaction({
+    // 6.5 Transaction above threshold with correct bcrypt PIN is authorized
+    const highValueCorrectPin = await validateHighValueTransaction({
       amount: 150000,
       userHasPin: true,
       providedPin: '1234',
-      userPinHash
+      userPinHash: userBcryptPinHash
     });
     assert(highValueCorrectPin.allowed === true,
-      'Authorizes high-value transaction when correct PIN is validated');
+      'Authorizes high-value transaction when correct bcrypt PIN is validated');
+
+    // 6.6 Seamless legacy SHA-256 PIN compatibility
+    const legacyPinTx = await validateHighValueTransaction({
+      amount: 150000,
+      userHasPin: true,
+      providedPin: '1234',
+      userPinHash: legacySha256PinHash
+    });
+    assert(legacyPinTx.allowed === true,
+      'Seamlessly validates legacy SHA-256 PIN hash during upgrade migration');
+
+    // 6.7 Lockout enforced after 5 consecutive failed attempts
+    const lockedPinTx = await validateHighValueTransaction({
+      amount: 150000,
+      userHasPin: true,
+      providedPin: '9999',
+      userPinHash: userBcryptPinHash,
+      failedAttempts: 4
+    });
+    assert(lockedPinTx.allowed === false && lockedPinTx.code === 'PIN_LOCKED',
+      'Enforces PIN lockout after 5 consecutive failed verification attempts');
   } catch (err) {
     assert(false, 'Suite 6 execution', err.message);
   }
@@ -430,6 +478,57 @@ async function runTestSuite() {
       'Truthfully reports degraded and unreachable when ping fails, never falsely claiming connected');
   } catch (err) {
     assert(false, 'Suite 8 execution', err.message);
+  }
+
+  // -------------------------------------------------------------
+  // SUITE 9: Firebase Complete Deprecation & Removal Invariants
+  // -------------------------------------------------------------
+  console.log('\nSUITE 9: Complete Firebase Absence & Native Auth Invariants');
+  try {
+    const fs = require('fs');
+    const path = require('path');
+
+    // 9.1 Manifest checks
+    const backendPkg = require('../package.json');
+    const backendDeps = { ...backendPkg.dependencies, ...backendPkg.devDependencies };
+    assert(!('firebase' in backendDeps), 'Backend dependencies contain zero "firebase" packages');
+    assert(!('firebase-admin' in backendDeps), 'Backend dependencies contain zero "firebase-admin" packages');
+
+    const frontendPkgPath = path.join(__dirname, '..', '..', 'Frontend', 'package.json');
+    if (fs.existsSync(frontendPkgPath)) {
+      const frontendPkg = JSON.parse(fs.readFileSync(frontendPkgPath, 'utf8'));
+      const frontendDeps = { ...frontendPkg.dependencies, ...frontendPkg.devDependencies };
+      assert(!('firebase' in frontendDeps), 'Frontend dependencies contain zero "firebase" packages');
+      assert(!('@react-native-firebase/app' in frontendDeps), 'Frontend contains zero @react-native-firebase packages');
+    }
+
+    // 9.2 Obsolete config files absence
+    const obsoleteFiles = [
+      path.join(__dirname, '..', '..', 'Frontend', 'src', 'config', 'firebase.ts'),
+      path.join(__dirname, '..', '..', 'Frontend', 'src', 'services', 'firebaseAuthService.ts'),
+      path.join(__dirname, '..', '..', 'Frontend', 'google-services.json'),
+      path.join(__dirname, '..', 'config', 'firebaseAdmin.js'),
+      path.join(__dirname, '..', 'middleware', 'firebaseAuthMiddleware.js')
+    ];
+    let allObsoleteFilesAbsent = true;
+    for (const f of obsoleteFiles) {
+      if (fs.existsSync(f)) {
+        allObsoleteFilesAbsent = false;
+        break;
+      }
+    }
+    assert(allObsoleteFilesAbsent, 'All obsolete Firebase configuration files and services deleted');
+
+    // 9.3 Middleware & UserModel decoupling
+    const middlewareSource = fs.readFileSync(path.join(__dirname, '..', 'middleware', 'authMiddleware.js'), 'utf8');
+    assert(!middlewareSource.includes('firebaseUid') && !middlewareSource.includes('FIREBASE_UID'),
+      'Auth middleware verifies application JWT with zero firebaseUid references');
+
+    const userModelSource = fs.readFileSync(path.join(__dirname, '..', 'models', 'userModel.js'), 'utf8');
+    assert(!userModelSource.includes('findByFirebaseUid') && !userModelSource.includes('linkFirebaseUid') && !userModelSource.includes('FIREBASE_UID'),
+      'UserModel queries Oracle SL_USERS with zero FIREBASE_UID dependencies');
+  } catch (err) {
+    assert(false, 'Suite 9 execution', err.message);
   }
 
   // -------------------------------------------------------------

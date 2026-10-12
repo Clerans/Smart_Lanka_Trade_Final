@@ -67,7 +67,8 @@
 - `JWT_EXPIRES_IN`: JWT token validity duration (e.g., `7d`)
 - `RESEND_API_KEY`: API key for Resend email dispatch
 - `EMAIL_FROM`: Verified sender address for transactional OTP emails
-- `FIREBASE_SERVICE_ACCOUNT`: Firebase credentials path/payload for token verification
+- `GOOGLE_CLIENT_ID`: Google OAuth Web Client ID for token verification
+- `GOOGLE_ANDROID_CLIENT_ID`: Google OAuth Android Client ID
 - `BINANCE_API_BASE_URL`: Binance public spot market API URL
 
 #### Frontend Environment Variables

@@ -37,7 +37,6 @@ const protect = async (req, res, next) => {
           email: user.EMAIL,
           name: user.NAME,
           role: (user.ROLE || decoded.role || 'USER').toUpperCase(),
-          firebaseUid: user.FIREBASE_UID || null,
           isVerified: user.IS_VERIFIED === 1,
           emailVerified: user.IS_VERIFIED === 1,
           phoneNumber: user.PHONE_NUMBER || null,

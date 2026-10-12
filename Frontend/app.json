@@ -2,7 +2,11 @@
   "expo": {
     "name": "SmartLankaTrade",
     "slug": "SmartLankaTrade",
-    "scheme": "smartlankatrade",
+    "scheme": [
+      "smartlankatrade",
+      "com.googleusercontent.apps.614054153944-uipn34jn1loslr40qe15i99upspv4l7j",
+      "com.googleusercontent.apps.614054153944-t0flbk67jqulktrs8uf7gnghds8eeh15"
+    ],
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",

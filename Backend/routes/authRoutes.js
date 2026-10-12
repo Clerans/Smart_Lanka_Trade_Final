@@ -40,6 +40,19 @@ const otpLimiter = rateLimit({
   }
 });
 
+// Dedicated rate limiter for authentication & credential verification endpoints
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 30, // 30 requests per 15 minutes per IP
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    code: 'TOO_MANY_REQUESTS',
+    message: 'Too many authentication requests from this IP. Please try again after 15 minutes.'
+  }
+});
+
 // Authenticated session state endpoints
 router.post('/sync', protect, syncUser);
 router.get('/me', protect, syncUser);
@@ -47,11 +60,11 @@ router.get('/me', protect, syncUser);
 // Security Settings & PIN Verification Endpoints
 router.get('/security-settings', protect, getSecuritySettings);
 router.put('/security-settings', protect, updateSecuritySettings);
-router.post('/verify-pin', protect, verifyPin);
+router.post('/verify-pin', protect, authLimiter, verifyPin);
 
-router.post('/register', register);
-router.post('/login', login);
-router.post('/google-login', googleLogin);
+router.post('/register', authLimiter, register);
+router.post('/login', authLimiter, login);
+router.post('/google-login', authLimiter, googleLogin);
 router.get('/users', protect, requireAdmin, getUsers);
 router.get('/verify/:token', verifyEmailToken); // Legacy HTML verification support
 

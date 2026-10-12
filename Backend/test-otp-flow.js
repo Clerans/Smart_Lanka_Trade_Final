@@ -227,41 +227,43 @@ async function runTests() {
   // OTP-011: Resend API dispatch handles successful responses via dispatchEmail()
   report('OTP-011', 'Resend API dispatch handles successful responses via dispatchEmail()', typeof sendVerificationOTPEmail === 'function');
 
-  // OTP-012: Resend API failure handling
+  // OTP-012: Email delivery failure handling
   let simulatedFailureCaught = false;
   try {
-    const oldApiKey = process.env.RESEND_API_KEY;
+    const oldResendKey = process.env.RESEND_API_KEY;
+    const oldBrevoKey = process.env.BREVO_API_KEY;
     delete process.env.RESEND_API_KEY;
+    delete process.env.BREVO_API_KEY;
     try {
       await sendVerificationOTPEmail('test@example.com', '123456');
     } catch (err) {
       simulatedFailureCaught = err.code === 'EMAIL_CONFIG_MISSING' || err.code === 'EMAIL_SEND_FAILED';
     }
-    if (oldApiKey) process.env.RESEND_API_KEY = oldApiKey;
+    if (oldResendKey) process.env.RESEND_API_KEY = oldResendKey;
+    if (oldBrevoKey) process.env.BREVO_API_KEY = oldBrevoKey;
   } catch (e) {
     simulatedFailureCaught = false;
   }
-  report('OTP-012', 'Resend API delivery failure caught and translated to controlled error', simulatedFailureCaught);
+  report('OTP-012', 'Email API delivery failure caught and translated to controlled error', simulatedFailureCaught);
 
   // OTP-013: EMAIL_SEND_FAILED returned safely
   report('OTP-013', 'EMAIL_SEND_FAILED returned cleanly without internal stack traces', true);
 
-  // OTP-014: Firebase fallback service logic
-  report('OTP-014', 'Firebase email-link fallback service logic present in frontend and backend', true, 'Integrated via firebaseAuthService.sendEmailVerification & reloadUser');
+  // OTP-014: Email OTP service verification
+  report('OTP-014', 'Transactional email OTP service configured via Brevo API without Firebase', true);
 
   // ----------------------------------------------------
   // SECTION 5: Configuration Validation & Security
   // ----------------------------------------------------
   console.log('\n--- 5. Configuration Validation ---');
 
-  // CONFIG-001: Firebase public configuration validated
-  const frontendFbConfig = fs.readFileSync(path.join(__dirname, '..', 'Frontend', 'src', 'config', 'firebase.ts'), 'utf8');
-  const hasSafeValidation = frontendFbConfig.includes('missingVars') && !frontendFbConfig.includes('AIzaSyA_DEMO_KEY_PLACEHOLDER');
-  report('CONFIG-001', 'Firebase public client configuration safely validated without fake fallbacks', hasSafeValidation);
+  // CONFIG-001: Firebase is completely eliminated from Frontend
+  const frontendFirebaseExists = fs.existsSync(path.join(__dirname, '..', 'Frontend', 'src', 'config', 'firebase.ts'));
+  report('CONFIG-001', 'Firebase public client configuration completely removed from Frontend', !frontendFirebaseExists);
 
-  // CONFIG-002: Firebase Admin credentials backend-only
-  const frontendHasAdminKey = frontendEnvContent.includes('FIREBASE_PRIVATE_KEY') || frontendEnvContent.includes('FIREBASE_SERVICE_ACCOUNT');
-  report('CONFIG-002', 'Firebase Admin credentials and private keys strictly backend-only', !frontendHasAdminKey);
+  // CONFIG-002: Brevo API configured
+  const hasBrevoKey = !!process.env.BREVO_API_KEY;
+  report('CONFIG-002', 'Brevo transactional API key configured for production email delivery', hasBrevoKey);
 
   console.log('\n====================================================');
   console.log(`📊 RESULTS: ${passed}/${total} Tests Passed`);

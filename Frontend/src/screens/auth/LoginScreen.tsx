@@ -18,6 +18,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as LocalAuthentication from 'expo-local-authentication';
 import * as WebBrowser from 'expo-web-browser';
 import * as Google from 'expo-auth-session/providers/google';
+import * as AuthSession from 'expo-auth-session';
 import { colors, typography, layout } from '../../theme';
 import { InputField, PrimaryButton, Toast, NetworkErrorScreen } from '../../components';
 import { authService } from '../../services/apiService';
@@ -45,23 +46,27 @@ export const LoginScreen = () => {
   const [isNetworkError, setIsNetworkError] = useState(false);
 
   // Google OAuth Configuration
-  // WEB Client ID  — used by the backend to verify id_token audience
+  // Web Client ID is used for browser-based authorization-code flow with PKCE (avoiding Error 400 on Android)
   const googleWebClientId =
     process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID ||
     '614054153944-7figt10pghsb14tg764jj3hfnktkqnbt.apps.googleusercontent.com';
 
-  // ANDROID Client ID — created in Google Cloud Console (Application type: Android)
-  // Package: com.michael_clerans.SmartLankaTrade
-  // SHA-1: 54:26:99:6C:4D:70:2C:5B:B9:CF:41:5D:6C:5F:B5:08:3D:76:0A:E8
   const googleAndroidClientId =
     process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID ||
-    '614054153944-t0flbk67jqulktrs8uf7gnghds8eeh15.apps.googleusercontent.com';
+    '614054153944-uipn34jn1loslr40qe15i99upspv4l7j.apps.googleusercontent.com';
 
-  const [request, response, promptAsync] = Google.useIdTokenAuthRequest({
-    clientId: googleWebClientId,          // Web client — needed to get an id_token
-    webClientId: googleWebClientId,       // Explicit web client ID
-    androidClientId: googleAndroidClientId, // Android-specific client ID
-    selectAccount: true,
+  // Authorization Code Flow with PKCE
+  const androidScheme = (googleAndroidClientId || '').replace('.apps.googleusercontent.com', '');
+  const androidRedirectUri = `com.googleusercontent.apps.${androidScheme}:/oauth2redirect`;
+  const defaultRedirectUri = AuthSession.makeRedirectUri({ scheme: 'smartlankatrade' });
+  const redirectUri = Platform.OS === 'android' ? androidRedirectUri : defaultRedirectUri;
+
+  const [request, response, promptAsync] = Google.useAuthRequest({
+    clientId: googleWebClientId,
+    webClientId: googleWebClientId,
+    androidClientId: googleAndroidClientId,
+    scopes: ['openid', 'profile', 'email'],
+    redirectUri,
   });
 
   // Load saved credentials on mount
@@ -83,7 +88,6 @@ export const LoginScreen = () => {
     loadSavedCredentials();
   }, []);
 
-  // Handle Google OAuth response
   const showToast = useCallback((message: string, type: 'success' | 'error' | 'warning') => {
     setToastMessage(message);
     setToastType(type);
@@ -98,9 +102,14 @@ export const LoginScreen = () => {
         const isEnrolled = await LocalAuthentication.isEnrolledAsync().catch(() => false);
 
         if (hasHardware && isEnrolled) {
+          const types: LocalAuthentication.AuthenticationType[] = await LocalAuthentication.supportedAuthenticationTypesAsync();
+          const label = types.includes(LocalAuthentication.AuthenticationType.FACIAL_RECOGNITION)
+            ? 'Fingerprint or Facial Recognition'
+            : 'Fingerprint';
+
           Alert.alert(
             'Enable Biometric Login',
-            'Would you like to enable fingerprint or Face ID for faster and secure future sign-ins?',
+            `Would you like to enable ${label} for faster and secure future sign-ins?`,
             [
               {
                 text: 'Not Now',
@@ -115,7 +124,7 @@ export const LoginScreen = () => {
                 onPress: async () => {
                   try {
                     const bioAuth = await LocalAuthentication.authenticateAsync({
-                      promptMessage: 'Authenticate with Fingerprint or Face ID',
+                      promptMessage: `Authenticate with ${label} to enable quick sign-in`,
                       fallbackLabel: 'Cancel',
                       disableDeviceFallback: true,
                     });
@@ -142,14 +151,16 @@ export const LoginScreen = () => {
     onComplete();
   };
 
-  const handleGoogleLogin = useCallback(async (idToken: string) => {
+  const handleGoogleLogin = useCallback(async (authParams: any) => {
     setLoading(true);
     setGoogleLoading(true);
     setIsNetworkError(false);
     try {
-      const authResult = await authService.googleLogin(idToken);
+      const authResult = await authService.googleLogin(authParams);
       if (authResult && authResult.token) {
         await AsyncStorage.setItem('rememberMe', 'true');
+        // Persist session specifically for biometric restoration
+        await storageService.saveBiometricSession(authResult.token, authResult.user);
         showToast('Successfully signed in with Google!', 'success');
         setTimeout(() => {
           checkAndOfferBiometrics(() => {
@@ -171,36 +182,62 @@ export const LoginScreen = () => {
     }
   }, [navigation, showToast]);
 
+  // Handle Google OAuth response
   useEffect(() => {
     if (!response) return;
 
     if (response.type === 'success') {
-      const idToken = response.params?.id_token;
-      if (idToken) {
-        handleGoogleLogin(idToken);
+      if (__DEV__) {
+        console.log('[OAuth Diagnostic] Stage: REDIRECT_CALLBACK received authorization success');
+      }
+      const code = response.params?.code;
+      const idToken = response.authentication?.idToken || response.params?.id_token;
+
+      if (code) {
+        handleGoogleLogin({
+          code,
+          codeVerifier: request?.codeVerifier,
+          redirectUri,
+          clientId: Platform.OS === 'android' ? googleAndroidClientId : googleWebClientId
+        });
+      } else if (idToken) {
+        handleGoogleLogin({ idToken });
       } else {
         showToast('Google authentication could not be verified. Please try again.', 'error');
         setGoogleLoading(false);
       }
     } else if (response.type === 'error') {
-      showToast('Google sign-in failed. Please try again.', 'error');
+      if (__DEV__) {
+        console.warn('[OAuth Diagnostic] Stage failed: REDIRECT_CALLBACK', response.error);
+      }
+      showToast(response.error?.message || 'Google sign-in failed. Please try again.', 'error');
       setGoogleLoading(false);
     } else if (response.type === 'cancel' || response.type === 'dismiss') {
-      // User cancelled gracefully - return smoothly to the login screen
+      if (__DEV__) {
+        console.log(`[OAuth Diagnostic] Stage: REDIRECT_CALLBACK user ${response.type}`);
+      }
       setGoogleLoading(false);
     }
-  }, [response, handleGoogleLogin, showToast]);
+  }, [response, request, redirectUri, googleWebClientId, googleAndroidClientId, handleGoogleLogin, showToast]);
 
   const handleGooglePress = async () => {
-    if (loading || googleLoading) return;
+    if (loading || googleLoading || !request) return;
     setGoogleLoading(true);
+    if (__DEV__) {
+      console.log('[OAuth Diagnostic] Stage: BROWSER_PROMPT initiating with Web Client ID');
+    }
     try {
       const result = await promptAsync();
+      if (__DEV__) {
+        console.log(`[OAuth Diagnostic] Stage: BROWSER_PROMPT returned result type: ${result?.type}`);
+      }
       if (result?.type !== 'success') {
         setGoogleLoading(false);
       }
     } catch (err) {
-      console.error('Google Sign-In prompt error:', err);
+      if (__DEV__) {
+        console.error('[OAuth Diagnostic] Stage failed: BROWSER_PROMPT', err);
+      }
       showToast('Google sign-in failed. Please try again.', 'error');
       setGoogleLoading(false);
     }
@@ -226,6 +263,8 @@ export const LoginScreen = () => {
           await AsyncStorage.removeItem('rememberMe');
           await AsyncStorage.removeItem('savedEmail');
         }
+        // Save session credentials for future biometric login
+        await storageService.saveBiometricSession(authResult.token, authResult.user);
         await checkAndOfferBiometrics(() => {
           navigation.replace('MainApp');
         });
@@ -255,33 +294,72 @@ export const LoginScreen = () => {
       const hasHardware = await LocalAuthentication.hasHardwareAsync();
       const isEnrolled = await LocalAuthentication.isEnrolledAsync();
 
-      if (!hasHardware || !isEnrolled) {
+      if (!hasHardware) {
         Alert.alert(
-          'Biometric Login',
-          'Biometric hardware or enrolled fingerprint/Face ID was not detected on this device. Please log in with your email and password first.'
+          'Biometrics Unavailable',
+          'Biometric hardware sensor was not detected on this device. Please sign in with your password or Google.'
         );
         return;
       }
 
+      if (!isEnrolled) {
+        Alert.alert(
+          'No Biometrics Enrolled',
+          'Please enroll fingerprint or facial recognition in your Android device settings first.'
+        );
+        return;
+      }
+
+      // Check if a usable session exists before prompting for local authentication
+      const hasSession = await storageService.hasBiometricSession();
+      if (!hasSession) {
+        Alert.alert(
+          'Sign In Required',
+          'No saved session found for biometric login on this device. Please sign in once with your password or Google to enable biometric access.',
+          [{ text: 'OK' }]
+        );
+        return;
+      }
+
+      const types = await LocalAuthentication.supportedAuthenticationTypesAsync();
+      const promptLabel = types.includes(LocalAuthentication.AuthenticationType.FACIAL_RECOGNITION)
+        ? 'Authenticate with Face or Fingerprint'
+        : 'Authenticate with Fingerprint';
+
       const result = await LocalAuthentication.authenticateAsync({
-        promptMessage: 'Authenticate with Fingerprint or Face ID to Login',
+        promptMessage: `${promptLabel} to sign in`,
         fallbackLabel: 'Use Password',
         disableDeviceFallback: false,
       });
 
       if (result.success) {
-        const storedToken = await storageService.getToken();
-        const storedUser = await storageService.getUserData();
+        setLoading(true);
+        const session = await storageService.getBiometricSession();
+        if (session && session.token) {
+          // Restore credentials into active session storage
+          await storageService.setToken(session.token);
+          if (session.user) {
+            await storageService.setUserData(session.user);
+          }
 
-        if (storedToken && storedUser) {
-          showToast('Biometric verified! Signing in...', 'success');
-          setTimeout(() => {
-            navigation.replace('MainApp');
-          }, 600);
-        } else if (email.trim() && password) {
-          handleLogin();
+          // Authoritatively validate the restored session with the backend
+          try {
+            const validation = await authService.validateToken();
+            if (validation && validation.success) {
+              showToast('Biometrics verified! Welcome back.', 'success');
+              setTimeout(() => {
+                navigation.replace('MainApp');
+              }, 500);
+              return;
+            }
+          } catch (valErr: any) {
+            console.warn('Biometric session expired or revoked:', valErr);
+            // Session revoked or expired beyond validity: clear obsolete biometric session
+            await storageService.clearBiometricSession();
+            showToast('Your session has expired. Please sign in with password or Google.', 'warning');
+          }
         } else {
-          showToast('Biometrics verified! Sign in once with password to save your session.', 'warning');
+          showToast('Could not retrieve saved credentials. Please sign in with password.', 'warning');
         }
       } else {
         if (result.error !== 'user_cancel' && result.error !== 'system_cancel') {
@@ -291,6 +369,8 @@ export const LoginScreen = () => {
     } catch (err: any) {
       console.error('Biometric auth error:', err);
       showToast('Biometric authentication encountered an error.', 'error');
+    } finally {
+      setLoading(false);
     }
   };
 

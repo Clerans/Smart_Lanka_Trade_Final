@@ -3,8 +3,9 @@ const app = require('./server');
 const userModel = require('./models/userModel');
 const authService = require('./services/authService');
 const bcrypt = require('bcryptjs');
-const { generateAccountUID } = require('./utils/uidGenerator');
-const oracledb = require('oracledb');
+const jwt = require('jsonwebtoken');
+
+const JWT_SECRET = process.env.JWT_SECRET || 'smartlanka-prod-trade-secret-2026-secure-key';
 
 async function runReleaseGateTests() {
   console.log('================================================================');
@@ -62,162 +63,49 @@ async function runReleaseGateTests() {
   };
 
   try {
-    console.log('--- 1. Verification of POST /api/auth/link-legacy-account ---');
+    // ----------------------------------------------------
+    // SECTION 1: JWT Authentication & Protected Endpoints
+    // ----------------------------------------------------
+    console.log('--- 1. Verification of JWT Authentication & Protected Routes ---');
 
-    // 1.1 Prove Firebase auth is required (No token -> 401)
-    const linkNoAuth = await request('/api/auth/link-legacy-account', 'POST', {}, {
-      legacyPassword: 'SomePassword123!'
+    // 1.1 Unauthenticated requests are rejected (401)
+    const noAuthRes = await request('/api/auth/profile');
+    report('AUTH-001', 'Unauthenticated Call to /profile Rejected', noAuthRes.status === 401, `Status: ${noAuthRes.status}`);
+
+    // 1.2 Malformed token is rejected (401)
+    const badTokenRes = await request('/api/auth/profile', 'GET', {
+      Authorization: 'Bearer malformed.invalid.token'
     });
-    report('LINK-001', 'Unauthenticated Call to /link-legacy-account Rejected', linkNoAuth.status === 401, `Status: ${linkNoAuth.status}`);
+    report('AUTH-002', 'Malformed Bearer Token Rejected', badTokenRes.status === 401, `Status: ${badTokenRes.status}`);
 
-    // 1.2 Prove Malformed token -> 401
-    const linkBadToken = await request('/api/auth/link-legacy-account', 'POST', {
-      Authorization: 'Bearer invalid.token'
-    }, {
-      legacyPassword: 'SomePassword123!'
+    // 1.3 Expired token is rejected (401)
+    const expiredToken = jwt.sign({ id: 1, email: 'test@example.com' }, JWT_SECRET, { expiresIn: '-10s' });
+    const expiredRes = await request('/api/auth/profile', 'GET', {
+      Authorization: `Bearer ${expiredToken}`
     });
-    report('LINK-002', 'Malformed Token to /link-legacy-account Rejected', linkBadToken.status === 401, `Status: ${linkBadToken.status}`);
+    report('AUTH-003', 'Expired Token Rejected', expiredRes.status === 401, `Status: ${expiredRes.status}`);
 
-    // 1.3 Direct Unit & Security Validation of authService.linkLegacyAccount
-    console.log('\n--- 2. Attacker Scenarios on Legacy Account Linking ---');
+    // ----------------------------------------------------
+    // SECTION 2: Google OAuth 2.0 Contract & Identity
+    // ----------------------------------------------------
+    console.log('\n--- 2. Google OAuth 2.0 Security & Identity Protection ---');
 
-    // Scenario A: Attacker tries to claim existing admin account
-    const dummyAdminPass = await bcrypt.hash('AdminPass123!', 10);
-    const mockAdminUser = {
-      ID: 9901,
-      EMAIL: 'admin_target@example.com',
-      ROLE: 'ADMIN',
-      PASSWORD: dummyAdminPass,
-      FIREBASE_UID: null
-    };
+    // 2.1 Missing params rejected
+    const emptyGoogleRes = await request('/api/auth/google-login', 'POST', {}, {});
+    report('OAUTH-001', 'Missing Google Auth Params Rejected (400)', emptyGoogleRes.status === 400);
 
-    let adminClaimBlocked = false;
-    try {
-      // Mock findByEmail to return admin
-      const origFindByEmail = userModel.findByEmail;
-      userModel.findByEmail = async () => mockAdminUser;
-      
-      try {
-        await authService.linkLegacyAccount('attacker_fb_uid', 'admin_target@example.com', 'AdminPass123!');
-      } catch (err) {
-        adminClaimBlocked = err.code === 'ADMIN_LINK_RESTRICTED';
-      }
-      userModel.findByEmail = origFindByEmail;
-    } catch (e) {
-      adminClaimBlocked = false;
-    }
-    report('LINK-003', 'Attacker Cannot Claim Existing Admin Account', adminClaimBlocked);
+    // 2.2 Invalid Google ID token rejected
+    const badGoogleRes = await request('/api/auth/google-login', 'POST', {}, { idToken: 'invalid.google.token' });
+    report('OAUTH-002', 'Invalid Google Token Rejected (401)', badGoogleRes.status === 401);
 
-    // Scenario B: Attacker provides WRONG legacy password
-    const dummyUserPass = await bcrypt.hash('VictimCorrectPass123!', 10);
-    const mockVictimUser = {
-      ID: 9902,
-      EMAIL: 'victim_user@example.com',
-      ROLE: 'USER',
-      PASSWORD: dummyUserPass,
-      FIREBASE_UID: null
-    };
+    // 2.3 Firebase is completely removed
+    const pkg = require('./package.json');
+    const hasFirebase = 'firebase' in (pkg.dependencies || {}) || 'firebase-admin' in (pkg.dependencies || {});
+    report('OAUTH-003', 'Zero Firebase Dependencies in Backend Manifest', !hasFirebase);
 
-    let wrongPasswordBlocked = false;
-    try {
-      const origFindByEmail = userModel.findByEmail;
-      userModel.findByEmail = async () => mockVictimUser;
-      
-      try {
-        await authService.linkLegacyAccount('attacker_fb_uid', 'victim_user@example.com', 'WrongPasswordAttempt');
-      } catch (err) {
-        wrongPasswordBlocked = err.code === 'INVALID_PASSWORD' && err.status === 401;
-      }
-      userModel.findByEmail = origFindByEmail;
-    } catch (e) {
-      wrongPasswordBlocked = false;
-    }
-    report('LINK-004', 'Wrong Legacy Password Attempt Rejected', wrongPasswordBlocked);
-
-    // Scenario C: Target account ALREADY has a Firebase UID (cannot overwrite)
-    const mockAlreadyLinkedUser = {
-      ID: 9903,
-      EMAIL: 'already_linked@example.com',
-      ROLE: 'USER',
-      PASSWORD: dummyUserPass,
-      FIREBASE_UID: 'legitimate_original_fb_uid'
-    };
-
-    let overwriteBlocked = false;
-    try {
-      const origFindByEmail = userModel.findByEmail;
-      userModel.findByEmail = async () => mockAlreadyLinkedUser;
-      
-      try {
-        await authService.linkLegacyAccount('evil_new_fb_uid', 'already_linked@example.com', 'VictimCorrectPass123!');
-      } catch (err) {
-        overwriteBlocked = err.code === 'ALREADY_LINKED';
-      }
-      userModel.findByEmail = origFindByEmail;
-    } catch (e) {
-      overwriteBlocked = false;
-    }
-    report('LINK-005', 'Cannot Overwrite Existing Firebase UID on Target Account', overwriteBlocked);
-
-    // Scenario D: Correct legacy password successfully links identity
-    let legitimateLinkSuccess = false;
-    try {
-      const origFindByEmail = userModel.findByEmail;
-      const origLinkFirebaseUid = userModel.linkFirebaseUid;
-      const origVerifyUser = userModel.verifyUser;
-      const origGetUserProfile = authService.getUserProfile;
-
-      let linkedUserId = null;
-      let linkedFbUid = null;
-
-      userModel.findByEmail = async () => mockVictimUser;
-      userModel.linkFirebaseUid = async (uid, fbUid) => {
-        linkedUserId = uid;
-        linkedFbUid = fbUid;
-        return { ID: uid, FIREBASE_UID: fbUid };
-      };
-      userModel.verifyUser = async () => {};
-      authService.getUserProfile = async (id) => ({ id, email: mockVictimUser.EMAIL });
-
-      const profile = await authService.linkLegacyAccount('legitimate_fb_uid_123', 'victim_user@example.com', 'VictimCorrectPass123!');
-      legitimateLinkSuccess = linkedUserId === 9902 && linkedFbUid === 'legitimate_fb_uid_123' && profile.id === 9902;
-
-      userModel.findByEmail = origFindByEmail;
-      userModel.linkFirebaseUid = origLinkFirebaseUid;
-      userModel.verifyUser = origVerifyUser;
-      authService.getUserProfile = origGetUserProfile;
-    } catch (e) {
-      legitimateLinkSuccess = false;
-    }
-    report('LINK-006', 'Correct Password Links Only Authenticated Firebase UID', legitimateLinkSuccess);
-
-    // Scenario E: Email equality alone CANNOT auto-link (createOrSyncFirebaseUser rejects with MIGRATION_REQUIRED)
-    let autoLinkBlocked = false;
-    try {
-      const origFindByFirebaseUid = userModel.findByFirebaseUid;
-      const origFindByEmail = userModel.findByEmail;
-
-      userModel.findByFirebaseUid = async () => null;
-      userModel.findByEmail = async () => mockVictimUser;
-
-      try {
-        await userModel.createOrSyncFirebaseUser({
-          firebaseUid: 'unauthorized_auto_link_uid',
-          email: 'victim_user@example.com',
-          name: 'Attacker',
-          emailVerified: true
-        });
-      } catch (err) {
-        autoLinkBlocked = err.code === 'MIGRATION_REQUIRED' && err.status === 409;
-      }
-
-      userModel.findByFirebaseUid = origFindByFirebaseUid;
-      userModel.findByEmail = origFindByEmail;
-    } catch (e) {
-      autoLinkBlocked = false;
-    }
-    report('LINK-007', 'Email Matching Alone CANNOT Auto-Link Account (ATO Protected)', autoLinkBlocked);
-
+    // ----------------------------------------------------
+    // SECTION 3: User Isolation & Parameter Tampering Guard
+    // ----------------------------------------------------
     console.log('\n--- 3. User Isolation & Parameter Tampering Guard ---');
 
     // 3.1 Transfer endpoint rejects client-supplied senderUserId
@@ -242,6 +130,9 @@ async function runReleaseGateTests() {
     const transactionsRes = await request('/api/transactions');
     report('ISO-004', 'Transactions Access Strictly Requires Verified Token', transactionsRes.status === 401);
 
+    // ----------------------------------------------------
+    // SECTION 4: Role-Based Access Control (RBAC)
+    // ----------------------------------------------------
     console.log('\n--- 4. Role-Based Access Control (RBAC) ---');
     const adminKycRes = await request('/api/admin/kyc/pending');
     report('RBAC-001', 'Admin KYC Queue Guarded', adminKycRes.status === 401);
@@ -268,4 +159,3 @@ runReleaseGateTests().catch(err => {
   console.error('Fatal release gate test error:', err);
   process.exit(1);
 });
-
