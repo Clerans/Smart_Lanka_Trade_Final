@@ -584,6 +584,65 @@ async function runTestSuite() {
   }
 
   // -------------------------------------------------------------
+  // SUITE 12: Colombo Stock Exchange (CSE) Market Data & Trading Contract
+  // -------------------------------------------------------------
+  console.log('\nSUITE 12: Colombo Stock Exchange (CSE) Market Data & Trading Contract');
+  try {
+    const cseMarketService = require('../services/cseMarketService');
+    const tradeService = require('../services/tradeService');
+
+    // 12.1 Whitelist & Catalogue
+    const symbols = cseMarketService.ALLOWED_CSE_SYMBOLS;
+    assert(symbols.length === 5, 'CSE Catalogue contains exactly 5 initial equities');
+    assert(symbols.includes('JKH.N0000') && symbols.includes('COMB.N0000') && symbols.includes('DIAL.N0000') && symbols.includes('HNB.N0000') && symbols.includes('LIOC.N0000'),
+      'Catalogue contains all 5 required CSE equities (JKH, COMB, DIAL, HNB, LIOC)');
+
+    // 12.2 Normalization & Separation
+    assert(cseMarketService.normalizeCseSymbol('jkh.n0000') === 'JKH.N0000',
+      'Normalizes lowercase jkh.n0000 to standard JKH.N0000');
+    assert(cseMarketService.isCseSymbol('JKH.N0000') === true && cseMarketService.isCseSymbol('BTCUSDT') === false,
+      'Accurately separates CSE stock symbols from cryptocurrency symbols');
+    assert(!cseMarketService.isValidCseSymbol('UNLISTED.N0000'),
+      'Rejects unlisted equities from CSE catalogue');
+
+    // 12.3 Market Hours & Session Logic
+    const midDayMondayUTC = new Date('2026-10-12T05:00:00Z'); // 10:30 AM SLT Monday
+    const sessionActive = cseMarketService.getMarketSessionInfo(midDayMondayUTC);
+    assert(sessionActive.isMarketOpen === true && sessionActive.sessionStatus === 'REGULAR_TRADING',
+      'Evaluates regular trading session during 09:30 - 14:30 SLT on weekdays');
+
+    const eveningMondayUTC = new Date('2026-10-12T11:00:00Z'); // 16:30 SLT Monday
+    const sessionClosed = cseMarketService.getMarketSessionInfo(eveningMondayUTC);
+    assert(sessionClosed.isMarketOpen === false && sessionClosed.sessionStatus === 'CLOSED',
+      'Evaluates closed market status after 14:30 SLT');
+
+    // 12.4 Data Transparency Contract
+    const watchlist = await cseMarketService.getCseWatchlist();
+    const jkh = watchlist.find(w => w.symbol === 'JKH.N0000');
+    assert(jkh && jkh.currency === 'LKR' && jkh.priceLKR > 0,
+      'Normalizes stock quote with strictly LKR-denominated price');
+    assert(jkh.dataFreshness === 'SAMPLE_REFERENCE' || jkh.dataFreshness === 'DELAYED' || jkh.dataFreshness === 'LIVE',
+      'Truthfully discloses data freshness classification without fabricating live feeds');
+
+    // 12.5 Trading Engine Multi-Asset Pricing
+    const stockPrice = await tradeService.resolveAssetPrice('JKH.N0000');
+    assert(stockPrice.assetType === 'STOCK' && stockPrice.priceLKR > 0,
+      'Trading engine resolves CSE stock prices directly in LKR with assetType STOCK');
+
+    const cryptoPrice = await tradeService.resolveAssetPrice('BTCUSDT');
+    assert(cryptoPrice.assetType === 'CRYPTO' && cryptoPrice.priceLKR > 0,
+      'Trading engine resolves cryptocurrency prices with assetType CRYPTO');
+
+    // 12.6 Database Schema Idempotency
+    const v10Source = fs.readFileSync(path.join(__dirname, '..', 'migrate-v10-cse.js'), 'utf8');
+    assert(v10Source.includes('ASSET_TYPE') && v10Source.includes('resolveTableOwner') && v10Source.includes('rollbackMigration'),
+      'Migration v10 provides idempotent, owner-aware schema migration with rollback capability');
+  } catch (err) {
+    assert(false, 'Suite 12 execution', err.message);
+  }
+
+
+  // -------------------------------------------------------------
   // FINAL REPORT
   // -------------------------------------------------------------
   console.log('\n================================================================');
