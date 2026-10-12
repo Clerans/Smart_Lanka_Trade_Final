@@ -4,8 +4,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { colors, typography, layout, SCREEN_PADDING, TAB_BAR_BOTTOM_OFFSET } from '../../theme';
-import { PrimaryButton, Card } from '../../components';
-import { marketService, aiService } from '../../services/apiService';
+import { PrimaryButton, Card, Toast } from '../../components';
+import { marketService, aiService, tradeService, transactionService } from '../../services/apiService';
 import { formatLKR } from '../../utils/formatters';
 const { useState, useEffect, useCallback } = React;
 
@@ -24,6 +24,19 @@ export const TradingTerminalScreen = () => {
   const [showPicker, setShowPicker] = useState(false);
   const [allCoins, setAllCoins] = useState<any[]>([]);
   const [pickerSearchQuery, setPickerSearchQuery] = useState('');
+
+  // Order execution & Toast states
+  const [submittingOrder, setSubmittingOrder] = useState(false);
+  const [toastVisible, setToastVisible] = useState(false);
+  const [toastMessage, setToastMessage] = useState('');
+  const [toastType, setToastType] = useState<'success' | 'error' | 'warning'>('success');
+  const [recentTransactions, setRecentTransactions] = useState<any[]>([]);
+
+  const showToast = useCallback((message: string, type: 'success' | 'error' | 'warning') => {
+    setToastMessage(message);
+    setToastType(type);
+    setToastVisible(true);
+  }, []);
 
   const fetchPriceAndAI = useCallback(async () => {
     try {
@@ -51,6 +64,61 @@ export const TradingTerminalScreen = () => {
     }
   }, [selectedSymbol]);
 
+  const fetchRecentTransactions = useCallback(async () => {
+    try {
+      const res = await transactionService.getTransactions();
+      if (res?.success && Array.isArray(res.data)) {
+        setRecentTransactions(res.data);
+      }
+    } catch (e) {
+      console.warn('Failed to fetch recent transactions:', e);
+    }
+  }, []);
+
+  const handleConfirmOrder = async () => {
+    if (submittingOrder) return;
+
+    const numQty = parseFloat(quantity);
+    const numPrice = parseFloat(limitPrice);
+
+    if (isNaN(numQty) || numQty <= 0) {
+      showToast('Please enter a valid order quantity', 'warning');
+      return;
+    }
+
+    if (isNaN(numPrice) || numPrice <= 0) {
+      showToast('Please enter a valid limit price in LKR', 'warning');
+      return;
+    }
+
+    const orderTotalLKR = numQty * numPrice;
+    if (orderTotalLKR <= 0) {
+      showToast('Estimated total must be greater than 0', 'warning');
+      return;
+    }
+
+    setSubmittingOrder(true);
+    try {
+      let result;
+      if (tradeType === 'BUY') {
+        result = await tradeService.buy(selectedSymbol, orderTotalLKR);
+      } else {
+        result = await tradeService.sell(selectedSymbol, numQty);
+      }
+
+      showToast(result.message || `${tradeType} order confirmed successfully!`, 'success');
+      await Promise.allSettled([
+        fetchRecentTransactions(),
+        fetchPriceAndAI()
+      ]);
+    } catch (err: any) {
+      console.error('Order confirmation failed:', err);
+      showToast(err.message || 'Order execution failed. Please check balance and quantity.', 'error');
+    } finally {
+      setSubmittingOrder(false);
+    }
+  };
+
   useEffect(() => {
     const fetchInitialData = async () => {
       try {
@@ -63,7 +131,8 @@ export const TradingTerminalScreen = () => {
       }
     };
     fetchInitialData();
-  }, []);
+    fetchRecentTransactions();
+  }, [fetchRecentTransactions]);
 
   useEffect(() => {
     fetchPriceAndAI();
@@ -74,6 +143,7 @@ export const TradingTerminalScreen = () => {
   const onRefresh = () => {
     setRefreshing(true);
     fetchPriceAndAI();
+    fetchRecentTransactions();
   };
 
   const filteredPickerCoins = allCoins.filter(coin =>

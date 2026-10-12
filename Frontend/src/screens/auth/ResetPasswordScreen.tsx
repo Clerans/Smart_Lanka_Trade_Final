@@ -14,11 +14,17 @@ export const ResetPasswordScreen = () => {
 
   const [step, setStep] = useState<1 | 2>(1);
   const [otp, setOtp] = useState<string>('');
+  const [resetToken, setResetToken] = useState<string | null>(null);
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [resending, setResending] = useState(false);
+
+  // 60-second resend cooldown timer
+  const [countdown, setCountdown] = useState(60);
+  const [canResend, setCanResend] = useState(false);
 
   // Toast & Network error states
   const [toastVisible, setToastVisible] = useState(false);
@@ -26,6 +32,23 @@ export const ResetPasswordScreen = () => {
   const [toastType, setToastType] = useState<'success' | 'error' | 'warning'>('success');
   const [isNetworkError, setIsNetworkError] = useState(false);
   const [lastAction, setLastAction] = useState<'verify_otp' | 'reset_password'>('verify_otp');
+
+  // Timer effect
+  React.useEffect(() => {
+    let timer: any;
+    if (countdown > 0 && !canResend) {
+      timer = setInterval(() => {
+        setCountdown(prev => {
+          if (prev <= 1) {
+            setCanResend(true);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }
+    return () => clearInterval(timer);
+  }, [countdown, canResend]);
 
   // Password requirements checks
   const hasMinLength = password.length >= 8;
@@ -64,6 +87,22 @@ export const ResetPasswordScreen = () => {
     }
   };
 
+  const handleResendCode = async () => {
+    if (!canResend || resending) return;
+    setResending(true);
+    try {
+      await authService.forgotPassword(email);
+      showToast('A new 6-digit code has been sent to your email.', 'success');
+      setOtp('');
+      setCountdown(60);
+      setCanResend(false);
+    } catch (error: any) {
+      showToast(error.message || 'Failed to resend code. Please try again.', 'error');
+    } finally {
+      setResending(false);
+    }
+  };
+
   const handleVerifyOTP = async () => {
     if (otp.length < 6) {
       showToast('Please enter the 6-digit OTP code', 'warning');
@@ -74,11 +113,14 @@ export const ResetPasswordScreen = () => {
     setIsNetworkError(false);
     setLastAction('verify_otp');
     try {
-      await authService.verifyResetOTP(email, otp);
+      const res = await authService.verifyResetOTP(email, otp);
+      if (res?.resetToken) {
+        setResetToken(res.resetToken);
+      }
       showToast('Code verified successfully!', 'success');
       setTimeout(() => {
         setStep(2);
-      }, 1000);
+      }, 800);
     } catch (error: any) {
       if (error.code === 'NETWORK_ERROR') {
         setIsNetworkError(true);
@@ -110,11 +152,11 @@ export const ResetPasswordScreen = () => {
     setIsNetworkError(false);
     setLastAction('reset_password');
     try {
-      const response = await authService.resetPassword(email, otp, password);
-      showToast(response.message || 'Password reset successful!', 'success');
+      const response = await authService.resetPassword(email, otp, password, resetToken || undefined);
+      showToast(response.message || 'Password reset successful! You can now log in.', 'success');
       setTimeout(() => {
         navigation.navigate('Login');
-      }, 2000);
+      }, 1500);
     } catch (error: any) {
       if (error.code === 'NETWORK_ERROR') {
         setIsNetworkError(true);
@@ -185,7 +227,7 @@ export const ResetPasswordScreen = () => {
             </View>
 
             {loading ? (
-              <ActivityIndicator color={colors.accent} size="large" style={{ marginBottom: 32 }} />
+              <ActivityIndicator color={colors.accent} size="large" style={{ marginBottom: 20 }} />
             ) : (
               <PrimaryButton
                 title="Verify Reset Code →"
@@ -193,6 +235,24 @@ export const ResetPasswordScreen = () => {
                 style={styles.actionBtn}
               />
             )}
+
+            {/* Resend Link with Cooldown */}
+            <View style={styles.resendContainer}>
+              <Text style={styles.resendLabel}>Didn't receive the code? </Text>
+              <TouchableOpacity
+                disabled={!canResend || resending}
+                onPress={handleResendCode}
+                style={styles.resendTouch}
+              >
+                {resending ? (
+                  <ActivityIndicator size="small" color={colors.accent} />
+                ) : (
+                  <Text style={[styles.resendAction, !canResend && styles.resendActionDisabled]}>
+                    {canResend ? 'Resend Code' : `Resend in ${countdown}s`}
+                  </Text>
+                )}
+              </TouchableOpacity>
+            </View>
 
             {/* Custom Keypad */}
             <View style={styles.keypadContainer}>
@@ -501,5 +561,31 @@ const styles = StyleSheet.create({
   },
   checklistTextActive: {
     color: colors.accent,
+  },
+  resendContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
+    marginTop: 4,
+  },
+  resendLabel: {
+    ...typography.bodySmall,
+    color: colors.textSecondary,
+    fontSize: 13,
+  },
+  resendTouch: {
+    paddingVertical: 4,
+    paddingHorizontal: 4,
+  },
+  resendAction: {
+    ...typography.bodySmall,
+    color: colors.accent,
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  resendActionDisabled: {
+    color: colors.textMuted,
+    fontWeight: '500',
   },
 });
