@@ -23,6 +23,7 @@ interface HoldingItem {
   coin: string;
   symbol: string;
   name: string;
+  assetType?: 'CRYPTO' | 'STOCK';
   quantity: number;
   averageBuyPrice: number;
   currentPrice: number;
@@ -31,6 +32,7 @@ interface HoldingItem {
   profitPercent: number;
   color: string;
   letter: string;
+  dataFreshness?: string;
 }
 
 const COIN_METADATA: Record<string, { name: string; color: string; letter: string }> = {
@@ -43,6 +45,12 @@ const COIN_METADATA: Record<string, { name: string; color: string; letter: strin
   DOGE: { name: 'Dogecoin', color: '#C2A633', letter: 'D' },
   LKR: { name: 'Sri Lankan Rupee', color: '#00E676', letter: 'Rs' },
   USDT: { name: 'Tether USD', color: '#26A17B', letter: 'T' },
+  // Colombo Stock Exchange (CSE) equities
+  JKH: { name: 'John Keells Holdings', color: '#00A86B', letter: 'J' },
+  COMB: { name: 'Commercial Bank', color: '#0052CC', letter: 'C' },
+  DIAL: { name: 'Dialog Axiata', color: '#E60000', letter: 'D' },
+  HNB: { name: 'Hatton National Bank', color: '#FF8C00', letter: 'H' },
+  LIOC: { name: 'Lanka IOC', color: '#008080', letter: 'L' },
 };
 
 export const PortfolioScreen: React.FC = () => {
@@ -51,7 +59,8 @@ export const PortfolioScreen: React.FC = () => {
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [selectedFilter, setSelectedFilter] = useState<'ALL' | 'CRYPTO' | 'CASH'>('ALL');
+  const [selectedFilter, setSelectedFilter] = useState<'ALL' | 'CRYPTO' | 'STOCKS' | 'CASH'>('ALL');
+
 
   // Portfolio data states
   const [totalValue, setTotalValue] = useState<number>(0);
@@ -114,10 +123,11 @@ export const PortfolioScreen: React.FC = () => {
 
       let totalHoldingsSum = 0;
       const formattedHoldings: HoldingItem[] = rawHoldings.map((h: any) => {
-        const coinCode = (h.coin || h.symbol?.replace('USDT', '') || 'COIN').toUpperCase();
+        const isStock = h.assetType === 'STOCK' || h.symbol?.includes('.') || h.symbol?.endsWith('0000');
+        const coinCode = (h.coin || (isStock ? h.symbol?.split('.')[0] : h.symbol?.replace('USDT', '')) || 'ASSET').toUpperCase();
         const meta = COIN_METADATA[coinCode] || {
-          name: coinCode,
-          color: '#00E676',
+          name: h.name || coinCode,
+          color: isStock ? '#00A86B' : '#00E676',
           letter: coinCode.charAt(0),
         };
 
@@ -132,8 +142,9 @@ export const PortfolioScreen: React.FC = () => {
 
         return {
           coin: coinCode,
-          symbol: h.symbol || `${coinCode}USDT`,
-          name: meta.name,
+          symbol: h.symbol || (isStock ? `${coinCode}.N0000` : `${coinCode}USDT`),
+          name: h.name || meta.name,
+          assetType: isStock ? 'STOCK' : 'CRYPTO',
           quantity: qty,
           averageBuyPrice: avgBuy,
           currentPrice: curPrice,
@@ -142,6 +153,7 @@ export const PortfolioScreen: React.FC = () => {
           profitPercent: pnlPct,
           color: meta.color,
           letter: meta.letter,
+          dataFreshness: h.dataFreshness
         };
       });
 
@@ -182,7 +194,7 @@ export const PortfolioScreen: React.FC = () => {
       });
     }
 
-    // Crypto holdings sorted by value
+    // Crypto & Stock holdings sorted by value
     const sorted = [...holdings].sort((a, b) => b.currentValue - a.currentValue);
     sorted.forEach((item) => {
       if (item.currentValue > 0) {
@@ -202,8 +214,11 @@ export const PortfolioScreen: React.FC = () => {
   // Filtered holdings list
   const displayedHoldings = useMemo(() => {
     if (selectedFilter === 'CASH') return [];
+    if (selectedFilter === 'CRYPTO') return holdings.filter(h => h.assetType !== 'STOCK');
+    if (selectedFilter === 'STOCKS') return holdings.filter(h => h.assetType === 'STOCK');
     return holdings;
   }, [selectedFilter, holdings]);
+
 
   const isProfit = totalProfitLoss >= 0;
   const totalInUSDT = usdToLkr > 0 ? totalValue / usdToLkr : totalValue / 331.27;
@@ -438,6 +453,23 @@ export const PortfolioScreen: React.FC = () => {
             <TouchableOpacity
               style={[
                 styles.filterPill,
+                selectedFilter === 'STOCKS' && styles.filterPillActive,
+              ]}
+              onPress={() => setSelectedFilter('STOCKS')}
+            >
+              <Text
+                style={[
+                  styles.filterPillText,
+                  selectedFilter === 'STOCKS' && styles.filterPillTextActive,
+                ]}
+              >
+                Stocks
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.filterPill,
                 selectedFilter === 'CASH' && styles.filterPillActive,
               ]}
               onPress={() => setSelectedFilter('CASH')}
@@ -494,13 +526,15 @@ export const PortfolioScreen: React.FC = () => {
         ) : displayedHoldings.length === 0 && selectedFilter !== 'CASH' ? (
           <Card style={styles.emptyCard}>
             <MaterialIcons name="pie-chart-outline" size={44} color={colors.textSecondary} style={{ marginBottom: 12 }} />
-            <Text style={styles.emptyTitle}>No Crypto Holdings Yet</Text>
+            <Text style={styles.emptyTitle}>No {selectedFilter === 'STOCKS' ? 'Stock' : 'Crypto'} Holdings Yet</Text>
             <Text style={styles.emptySub}>
-              Start trading Bitcoin, Ethereum, and other crypto assets directly using your LKR balance.
+              {selectedFilter === 'STOCKS'
+                ? 'Start simulated trading in CSE equities like JKH, COMB, and DIAL directly in LKR.'
+                : 'Start trading Bitcoin, Ethereum, and other crypto assets directly using your LKR balance.'}
             </Text>
             <PrimaryButton
-              title="Start Trading Crypto ⚡"
-              onPress={() => navigation.navigate('MainApp', { screen: 'Trade' })}
+              title={selectedFilter === 'STOCKS' ? "Trade CSE Stocks ⚡" : "Start Trading Crypto ⚡"}
+              onPress={() => navigation.navigate('MainApp', { screen: selectedFilter === 'STOCKS' ? 'Market' : 'Trade' })}
               style={{ marginTop: 16 }}
             />
           </Card>
@@ -513,7 +547,13 @@ export const PortfolioScreen: React.FC = () => {
               <TouchableOpacity
                 key={item.coin + idx}
                 style={styles.holdingCard}
-                onPress={() => navigation.navigate('AssetDetails', { symbol: item.symbol, coin: item.coin })}
+                onPress={() => {
+                  if (item.assetType === 'STOCK') {
+                    navigation.navigate('DemoTrading', { initialSymbol: item.symbol });
+                  } else {
+                    navigation.navigate('AssetDetails', { symbol: item.symbol, coin: item.coin });
+                  }
+                }}
                 activeOpacity={0.8}
               >
                 {/* Top Row: Coin Icon, Name, Quantity, Value */}
@@ -530,8 +570,15 @@ export const PortfolioScreen: React.FC = () => {
                       </Text>
                     </View>
                     <View>
-                      <Text style={styles.coinName}>{item.name}</Text>
-                      <Text style={styles.coinTicker}>{item.symbol.replace('USDT', '')} / LKR</Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                        <Text style={styles.coinName}>{item.name}</Text>
+                        {item.assetType === 'STOCK' && (
+                          <View style={{ backgroundColor: '#00A86B22', paddingHorizontal: 5, paddingVertical: 1, borderRadius: 4, marginLeft: 6 }}>
+                            <Text style={{ color: '#00A86B', fontSize: 9, fontWeight: '800' }}>CSE</Text>
+                          </View>
+                        )}
+                      </View>
+                      <Text style={styles.coinTicker}>{item.assetType === 'STOCK' ? item.symbol : `${item.symbol.replace('USDT', '')} / LKR`}</Text>
                     </View>
                   </View>
 
@@ -540,10 +587,11 @@ export const PortfolioScreen: React.FC = () => {
                       LKR {formatNumber(item.currentValue, 2)}
                     </Text>
                     <Text style={styles.coinQuantitySub}>
-                      {item.quantity.toFixed(6)} {item.coin}
+                      {item.assetType === 'STOCK' ? `${item.quantity.toFixed(4)} Shares` : `${item.quantity.toFixed(6)} ${item.coin}`}
                     </Text>
                   </View>
                 </View>
+
 
                 {/* Divider */}
                 <View style={styles.holdingCardDivider} />

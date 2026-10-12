@@ -408,7 +408,8 @@ const styles = StyleSheet.create({
     fontSize: 26,
   },
   headerSubtitle: {
-    ...typography.caption,
+    ...typography.bodySmall,
+    fontSize: 12,
     color: colors.textSecondary,
     marginTop: 2,
   },
@@ -596,7 +597,7 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   modalContent: {
-    backgroundColor: colors.card,
+    backgroundColor: colors.bgCard,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     padding: 24,
@@ -622,7 +623,8 @@ const styles = StyleSheet.create({
     color: '#FFF',
   },
   modalStockSymbol: {
-    ...typography.caption,
+    ...typography.bodySmall,
+    fontSize: 12,
     color: colors.textSecondary,
     marginTop: 2,
   },
@@ -653,9 +655,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   gridLabel: {
-    ...typography.caption,
-    color: colors.textSecondary,
+    ...typography.bodySmall,
     fontSize: 11,
+    color: colors.textSecondary,
   },
   gridValue: {
     ...typography.bodySmall,
@@ -674,10 +676,10 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(0, 230, 118, 0.2)',
   },
   noticeText: {
-    ...typography.caption,
+    ...typography.bodySmall,
+    fontSize: 11,
     color: colors.textSecondary,
     flex: 1,
-    fontSize: 11,
   },
   tradeDemoBtn: {
     flexDirection: 'row',
@@ -688,8 +690,9 @@ const styles = StyleSheet.create({
     borderRadius: layout.borderRadiusPill,
   },
   tradeDemoBtnText: {
-    ...typography.button,
+    ...typography.body,
     color: '#000',
     fontWeight: '800',
   },
 });
+

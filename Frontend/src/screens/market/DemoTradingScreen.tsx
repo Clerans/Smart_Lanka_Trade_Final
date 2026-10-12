@@ -239,9 +239,23 @@ export const DemoTradingScreen = () => {
     }
   };
 
-  const filteredPickerCoins = liveCoins.filter((coin) =>
-    coin.coin.toLowerCase().includes(pickerSearchQuery.toLowerCase())
-  );
+  const isStock = selectedSymbol.includes('.') || selectedSymbol.endsWith('0000');
+  const activeAsset = liveCoins.find((c: any) => c.symbol === selectedSymbol);
+  const displayTicker = isStock ? (activeAsset?.coin || selectedSymbol.split('.')[0]) : selectedSymbol.replace('USDT', '');
+
+  const filteredPickerCoins = liveCoins.filter((coin) => {
+    const q = pickerSearchQuery.toLowerCase().trim();
+    const matchesSearch = !q || 
+      coin.coin.toLowerCase().includes(q) || 
+      (coin.name && coin.name.toLowerCase().includes(q)) || 
+      coin.symbol.toLowerCase().includes(q);
+
+    let matchesCat = true;
+    if (pickerCategory === 'CRYPTO') matchesCat = coin.assetType === 'CRYPTO';
+    if (pickerCategory === 'STOCKS') matchesCat = coin.assetType === 'STOCK';
+
+    return matchesSearch && matchesCat;
+  });
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
@@ -282,7 +296,7 @@ export const DemoTradingScreen = () => {
                 activeOpacity={0.7}
               >
                 <Text style={styles.headerTitle}>
-                  {selectedSymbol.replace('USDT', '')} / LKR
+                  {displayTicker} / LKR {isStock ? '(CSE)' : ''}
                 </Text>
                 <MaterialIcons
                   name={pickerVisible ? 'keyboard-arrow-up' : 'keyboard-arrow-down'}
@@ -297,20 +311,44 @@ export const DemoTradingScreen = () => {
               </View>
             </View>
 
-            {/* Coin Picker Dropdown (Floating Overlay) */}
+            {/* Asset Picker Dropdown (Floating Overlay) */}
             {pickerVisible && (
               <View style={styles.pickerDropdownFloating}>
                 <View style={styles.pickerSearchContainer}>
                   <MaterialIcons name="search" size={20} color={colors.textSecondary} />
                   <TextInput
                     style={styles.pickerSearchInput}
-                    placeholder="Search symbols..."
+                    placeholder="Search stocks or crypto..."
                     placeholderTextColor={colors.textSecondary}
                     value={pickerSearchQuery}
                     onChangeText={setPickerSearchQuery}
                     autoFocus
                   />
                 </View>
+
+                {/* Picker Category Filter Tabs */}
+                <View style={styles.pickerCategoryRow}>
+                  {(['ALL', 'CRYPTO', 'STOCKS'] as const).map((cat) => (
+                    <TouchableOpacity
+                      key={cat}
+                      style={[
+                        styles.pickerCatPill,
+                        pickerCategory === cat && styles.pickerCatPillActive,
+                      ]}
+                      onPress={() => setPickerCategory(cat)}
+                    >
+                      <Text
+                        style={[
+                          styles.pickerCatPillText,
+                          pickerCategory === cat && styles.pickerCatPillTextActive,
+                        ]}
+                      >
+                        {cat === 'ALL' ? 'All' : cat === 'CRYPTO' ? 'Crypto' : 'CSE Stocks'}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+
                 <ScrollView style={{ maxHeight: 240 }} keyboardShouldPersistTaps="handled">
                   {filteredPickerCoins.map((coin) => (
                     <TouchableOpacity
@@ -323,14 +361,35 @@ export const DemoTradingScreen = () => {
                         setLoading(true);
                       }}
                     >
-                      <Text
-                        style={[
-                          styles.pickerItemText,
-                          selectedSymbol === coin.symbol && { color: colors.accent },
-                        ]}
-                      >
-                        {coin.coin} / LKR
-                      </Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                        <Text
+                          style={[
+                            styles.pickerItemText,
+                            selectedSymbol === coin.symbol && { color: colors.accent },
+                          ]}
+                        >
+                          {coin.coin} / LKR
+                        </Text>
+                        <View
+                          style={[
+                            styles.itemTypeBadge,
+                            coin.assetType === 'STOCK'
+                              ? { backgroundColor: '#00A86B22' }
+                              : { backgroundColor: '#627EEA22' },
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.itemTypeBadgeText,
+                              coin.assetType === 'STOCK'
+                                ? { color: '#00A86B' }
+                                : { color: '#627EEA' },
+                            ]}
+                          >
+                            {coin.assetType === 'STOCK' ? 'CSE' : 'CRYPTO'}
+                          </Text>
+                        </View>
+                      </View>
                       <Text style={styles.pickerItemPrice}>
                         Rs {formatLKR(coin.priceLKR, 2)}
                       </Text>
@@ -339,6 +398,7 @@ export const DemoTradingScreen = () => {
                 </ScrollView>
               </View>
             )}
+
 
             <ScrollView
               contentContainerStyle={[
@@ -486,13 +546,13 @@ export const DemoTradingScreen = () => {
                 <View style={styles.inputRow}>
                   <View style={styles.inputGroup}>
                     <Text style={styles.inputLabel}>
-                      AMOUNT ({selectedSymbol.replace('USDT', '')})
+                      {isStock ? `SHARES (${displayTicker})` : `AMOUNT (${displayTicker})`}
                     </Text>
                     <TextInput
                       style={styles.input}
                       value={quantityCoin}
                       onChangeText={handleQuantityCoinChange}
-                      placeholder="0.00"
+                      placeholder={isStock ? "1" : "0.00"}
                       keyboardType="numeric"
                       placeholderTextColor={colors.textSecondary}
                     />
@@ -515,7 +575,7 @@ export const DemoTradingScreen = () => {
                   <Text style={styles.availableText}>
                     {tradeType === 'BUY'
                       ? `Available: ${formatNumber(walletDetails?.availableBalance ?? 1000000, 0)} LKR`
-                      : `Holding: ${getOwnedQuantity().toFixed(6)} ${selectedSymbol.replace('USDT', '')}`}
+                      : `Holding: ${getOwnedQuantity().toFixed(isStock ? 4 : 6)} ${displayTicker}`}
                   </Text>
                   <TouchableOpacity
                     onPress={() => {
@@ -544,7 +604,7 @@ export const DemoTradingScreen = () => {
                   />
                 ) : (
                   <PrimaryButton
-                    title={tradeType === 'BUY' ? 'EXECUTE VIRTUAL BUY ⚡' : 'EXECUTE VIRTUAL SELL ⚡'}
+                    title={tradeType === 'BUY' ? `EXECUTE VIRTUAL BUY ⚡` : `EXECUTE VIRTUAL SELL ⚡`}
                     onPress={handleOpenConfirmation}
                     style={tradeType === 'SELL' && { backgroundColor: colors.red }}
                   />
@@ -631,18 +691,23 @@ export const DemoTradingScreen = () => {
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Confirm Simulated Order</Text>
+            <Text style={styles.modalTitle}>Confirm Simulated {isStock ? 'CSE Stock' : 'Crypto'} Order</Text>
             <Text style={styles.modalText}>
               Are you sure you want to {tradeType === 'BUY' ? 'buy' : 'sell'}{' '}
               <Text style={{ fontWeight: '700', color: colors.accent }}>
-                {parseFloat(quantityCoin || '0').toFixed(6)}{' '}
-                {selectedSymbol.replace('USDT', '')}
+                {parseFloat(quantityCoin || '0').toFixed(isStock ? 4 : 6)}{' '}
+                {isStock ? `${displayTicker} shares` : displayTicker}
               </Text>{' '}
               for{' '}
               <Text style={{ fontWeight: '700', color: colors.accent }}>
                 LKR {formatLKR(amountLKR, 2)}
               </Text>
               ?
+            </Text>
+            <Text style={{ color: colors.textSecondary, fontSize: 11, textAlign: 'center', marginBottom: 16 }}>
+              {isStock 
+                ? 'Simulated equity order executed at reference CSE price in LKR. No order is sent to the Colombo Stock Exchange.' 
+                : 'Simulated cryptocurrency order executed in virtual sandbox.'}
             </Text>
             <View style={styles.modalButtons}>
               <TouchableOpacity
@@ -664,6 +729,7 @@ export const DemoTradingScreen = () => {
           </View>
         </View>
       </Modal>
+
     </SafeAreaView>
   );
 };
@@ -1008,6 +1074,43 @@ const styles = StyleSheet.create({
     flex: 1,
     marginLeft: 6,
     color: colors.textPrimary,
+  },
+  pickerCategoryRow: {
+    flexDirection: 'row',
+    paddingHorizontal: 6,
+    paddingBottom: 6,
+    gap: 6,
+  },
+  pickerCatPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    backgroundColor: colors.bgInput,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  pickerCatPillActive: {
+    backgroundColor: colors.accent,
+    borderColor: colors.accent,
+  },
+  pickerCatPillText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: colors.textSecondary,
+  },
+  pickerCatPillTextActive: {
+    color: '#000',
+    fontWeight: '800',
+  },
+  itemTypeBadge: {
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: 4,
+    marginLeft: 6,
+  },
+  itemTypeBadgeText: {
+    fontSize: 9,
+    fontWeight: '800',
   },
   modalOverlay: {
     flex: 1,
