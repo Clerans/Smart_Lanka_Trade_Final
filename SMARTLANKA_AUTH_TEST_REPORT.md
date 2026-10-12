@@ -2,7 +2,7 @@
 
 **Date:** October 12, 2026  
 **Environment:** Node.js v24.19.0, Expo SDK 55, React Native 0.83.10, React 19.2.0, Oracle DB  
-**Status:** ✅ ALL AUTOMATED SUITES PASSED (94/94 Tests Passing, Zero TypeScript Errors)
+**Status:** ✅ ALL AUTOMATED SUITES PASSED (133/133 Tests Passing, Zero TypeScript Errors)
 
 ---
 
@@ -10,17 +10,19 @@
 
 | Test Suite File | Domain | Tests Run | Passed | Failed | Exit Code |
 |---|---|:---:|:---:|:---:|:---:|
-| `Backend/scripts/run-all-tests.js` | Core Backend Security, Bcrypt, KYC, High-Value PIN, DB Health | 50 | 50 | 0 | 0 |
+| `Backend/scripts/run-all-tests.js` | Core Security, Bcrypt, KYC, High-Value PIN, DB Health | 50 | 50 | 0 | 0 |
+| `Backend/test-otp-flow.js` | Master OTP Lifecycle, Cryptographic Security & Brevo API | 27 | 27 | 0 | 0 |
 | `Backend/test-security-lifecycle.js` | Phase 8 Security Lifecycle (OAuth, Biometrics, Lockout, Financial Rules) | 25 | 25 | 0 | 0 |
 | `Backend/test-google-oauth.js` | Google OAuth 2.0 Token Contracts, Audiences, & JWT Issuance | 19 | 19 | 0 | 0 |
+| `Backend/test-release-gate.js` | Production Release Gate (JWT, Tampering Guards, RBAC) | 12 | 12 | 0 | 0 |
 | `Frontend/ (npx tsc --noEmit)` | Frontend TypeScript Type Safety & React Native Compilation | N/A | N/A | 0 | 0 |
-| **Total Test Count** | | **94** | **94** | **0** | **0** |
+| **Total Test Count** | | **133** | **133** | **0** | **0** |
 
 ---
 
 ## 2. Test Suite Breakdown
 
-### 2.1 Backend Core Verification (`Backend/scripts/run-all-tests.js`)
+### 2.1 Backend Core Verification (`Backend/scripts/run-all-tests.js` — 50 Tests)
 * **Suite 1: Cryptographic Security & OTP Lifecycle (9 Tests)**
   - CSPRNG high-entropy 6-digit numeric generation.
   - HMAC-SHA256 OTP hashing & verification.
@@ -57,7 +59,7 @@
 * **Suite 8: Oracle DB Health Probe Contract (2 Tests)**
   - Probes live database via `SELECT 1 FROM DUAL`, reports degraded status truthfully on failure.
 
-### 2.2 Phase 8 Security Lifecycle (`Backend/test-security-lifecycle.js`)
+### 2.2 Phase 8 Security Lifecycle (`Backend/test-security-lifecycle.js` — 25 Tests)
 * **Google OAuth 2.0 (9 Tests)**
   - Empty/missing token rejection.
   - Invalid JWT format rejection.
@@ -87,8 +89,21 @@
   - Modifying existing PIN requires current PIN authorization.
   - Direct API requests attempting to bypass frontend checks are blocked by the backend.
 
-### 2.3 Google OAuth Contract Tests (`Backend/test-google-oauth.js`)
-- 19 passed tests verifying Google Web Client ID, Android Client ID, `OAuth2Client` token verification, audience matching, and user profile provisioning.
+### 2.3 Master OTP & Brevo Delivery (`Backend/test-otp-flow.js` — 27 Tests)
+- Cryptographic OTP generation and timing-safe comparisons.
+- Oracle database storage in `SL_EMAIL_VERIFICATION` and `SL_PASSWORD_RESET`.
+- Cooldown timers and rate-limit guards.
+- Brevo transactional email delivery and safe error handling.
+- Verification that deleted `firebase.ts` is not accessed and Firebase is eliminated.
+
+### 2.4 Production Release Gate (`Backend/test-release-gate.js` — 12 Tests)
+- JWT authorization on protected endpoints.
+- Parameter tampering guards on transfer and wallet operations.
+- Role-based access control (RBAC) on admin endpoints.
+
+### 2.5 Google OAuth Contract Tests (`Backend/test-google-oauth.js` — 19 Tests)
+- Google Web Client ID and Android Client ID verification.
+- `OAuth2Client` token verification, audience matching, and user profile provisioning.
 
 ---
 
@@ -103,6 +118,7 @@
 | **Oracle Database** | Live connection test with mock fallback | Live in Render environment | Local environment lacks cloud wallet (`/etc/secrets/tnsnames.ora`) |
 | **Bcrypt & Lockout Logic** | Real cryptographic execution | Real execution | Fully executed and validated live |
 | **Financial Threshold Rules** | Real execution in `walletFundingService` | Real execution | Fully executed and validated live |
+| **Brevo Transactional Email** | Live API dispatch via Brevo HTTP API | Live execution | Real message sent and validated |
 
 ---
 
@@ -114,7 +130,7 @@ To verify the installation on an actual Android device with hardware biometrics:
    - [ ] Tap "Continue with Google" on `LoginScreen`.
    - [ ] Confirm the browser/modal opens without `Error 400: invalid_request`.
    - [ ] Select a Google Account authorized in Google Cloud Console.
-   - [ ] Confirm Google redirects back to the app via `com.googleusercontent.apps...:/oauth2redirect`.
+   - [ ] Confirm Google redirects back to the app.
    - [ ] Confirm the user reaches the SmartLanka Trade dashboard with an authoritative session.
 
 2. **First Authenticated Password Login & Biometric Prompt:**

@@ -382,7 +382,7 @@ exports.getUsers = async (req, res) => {
 
 exports.googleLogin = async (req, res) => {
   try {
-    const { idToken, code, codeVerifier, redirectUri } = req.body;
+    const { idToken, code, codeVerifier, redirectUri, clientId } = req.body;
     if (!idToken && !code) {
       return res.status(400).json({
         success: false,
@@ -395,7 +395,8 @@ exports.googleLogin = async (req, res) => {
       idToken,
       code,
       codeVerifier,
-      redirectUri
+      redirectUri,
+      clientId
     });
 
     res.json({
@@ -404,6 +405,9 @@ exports.googleLogin = async (req, res) => {
       user: data.user
     });
   } catch (err) {
+    if (process.env.NODE_ENV !== 'production') {
+      console.error(`[OAuth Diagnostic] Controller error: [${err.code || 'SERVER_ERROR'}] ${err.message}`);
+    }
     res.status(err.status || 500).json({
       success: false,
       code: err.code || 'SERVER_ERROR',

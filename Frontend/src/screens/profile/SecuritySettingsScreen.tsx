@@ -47,11 +47,10 @@ export const SecuritySettingsScreen = () => {
   const [passwordModalVisible, setPasswordModalVisible] = useState(false);
   const [devicesModalVisible, setDevicesModalVisible] = useState(false);
 
-  // PIN Form
+  // PIN Form (Transient input state only - never stored locally)
   const [currentPin, setCurrentPin] = useState('');
   const [pin, setPin] = useState('');
   const [confirmPin, setConfirmPin] = useState('');
-  const [savedPin, setSavedPin] = useState<string | null>(null);
 
   // Password Form
   const [currentPassword, setCurrentPassword] = useState('');
@@ -103,11 +102,6 @@ export const SecuritySettingsScreen = () => {
       const face = await AsyncStorage.getItem('@pref_face_id');
       if (face !== null) {
         setFaceIdEnabled(face === 'true');
-      }
-
-      const storedPin = await storageService.getPin();
-      if (storedPin) {
-        setSavedPin(storedPin);
       }
 
       // Sync authoritative 2FA and transaction PIN status from backend
@@ -300,8 +294,6 @@ export const SecuritySettingsScreen = () => {
 
       const res = await authService.updateSecuritySettings(payload);
       if (res?.success) {
-        await storageService.setPin(cleanPin);
-        setSavedPin(cleanPin);
         setHasServerPin(true);
         setPinModalVisible(false);
         setPin('');

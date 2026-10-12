@@ -8,174 +8,120 @@
 
 ## 1. Executive Summary
 
-A comprehensive, zero-shortcut audit and repair of the authentication, biometric session restoration, and financial transaction security systems was executed across the **SmartLanka Trade** platform (`Frontend/` and `Backend/`). 
+A comprehensive, zero-shortcut audit and repair of Google OAuth 2.0, biometric session restoration, transaction PIN security, and complete removal of obsolete Firebase remnants was executed across the **SmartLanka Trade** platform (`Frontend/` and `Backend/`).
 
 ### Core Deficiencies Addressed:
-1. **Google OAuth 2.0 Error 400 (`invalid_request` / `Access blocked`):** Fixed legacy implicit-grant misconfiguration (`Google.useIdTokenAuthRequest`) with non-standard scheme (`smartlankatrade:/`) by upgrading to RFC 7636 Authorization Code Flow with PKCE and the Google-compliant reverse client ID redirect scheme.
-2. **Biometric Premature Prompt & Session Amnesia:** Corrected `SplashScreen.tsx` token purging bug and `LoginScreen.tsx` inverted biometric flow where the fingerprint sensor was engaged prior to verifying whether saved session credentials existed.
-3. **Insecure PIN Fallbacks & Bypass Vulnerability:** Removed hardcoded `'1234'` fallback in `userModel.js`, upgraded low-entropy PIN storage to salted `bcrypt` with automatic legacy SHA-256 migration, implemented 5-attempt rate-limiting with 15-minute lockout, and fixed the truthy object bug in `walletFundingService.js` that previously allowed high-value transactions without PIN authorization.
-4. **Hardware-Aware Biometrics & Server-Enforced Settings:** Enforced real device biometric capability detection (handling devices lacking facial recognition hardware) and wired `SecuritySettingsScreen.tsx` to authoritatively synchronize with the Oracle backend.
+1. **Google OAuth 2.0 Error 400 (`invalid_request` / `Access blocked: Authorization Error`):** 
+   - Root Cause: The mobile application was passing an **Android OAuth Client ID** (`614054153944-t0flbk67jqulktrs8uf7gnghds8eeh15`) to Google's web-based authorization endpoint (`https://accounts.google.com/o/oauth2/v2/auth`). Google Cloud's web OAuth endpoint explicitly rejects Android client IDs with `Error 400: invalid_request`, as Android client IDs are strictly reserved for native Google Play Services APIs.
+   - Solution: For the Expo browser-based authorization code flow with PKCE, configured `LoginScreen.tsx` to use the **Web Client ID** (`614054153944-7figt10pghsb14tg764jj3hfnktkqnbt.apps.googleusercontent.com`) for the authorization request and code exchange, while keeping the Android Client ID registered for audience validation and native capabilities.
+2. **Biometric Premature Prompt & Session Amnesia:**
+   - Root Cause: `SplashScreen.tsx` was calling `authService.logout()` on cold boots when `rememberMe !== 'true'`, wiping SecureStore credentials. Furthermore, `storageService.ts` was catching and swallowing errors in `setToken()`, `setUserData()`, and `saveBiometricSession()`, masking persistence failures.
+   - Solution: Removed destructive boot logout; made storage writes propagate failures; verified that credentials can be retrieved immediately after saving; and pre-checked hardware and saved session before prompting the biometric sensor.
+3. **Insecure Transaction PIN Storage & Bypasses:**
+   - Root Cause: `storageService.ts` was storing raw PINs locally in SecureStore (`userSecurityPin`), and `userModel.js` allowed default `'1234'`.
+   - Solution: Completely removed raw PIN storage and retrieval from the frontend. Transaction PIN is now strictly transient in input state, sent over TLS to the backend, hashed with salted `bcrypt`, rate-limited (5 attempts, 15-minute lockout), and authoritatively enforced on the backend for transactions $\ge$ LKR 100,000.
+4. **Complete Elimination of Obsolete Firebase Remnants:**
+   - Removed obsolete Firebase UID linking (`linkLegacyAccount`, `linkFirebaseUid`, `findByFirebaseUid`, and `firebaseUid` from middleware). Updated test suites (`test-release-gate.js`, `test-otp-flow.js`) to validate native JWT, Google OAuth, and Brevo email OTP.
 
 ---
 
-## 2. Root Cause Analysis
+## 2. Root Cause Analysis & Deep Dive
 
 ### 2.1 Google OAuth 2.0 Failure (`Error 400: invalid_request`)
-* **Root Cause:** 
-  The frontend was previously using `Google.useIdTokenAuthRequest` which requested `response_type=id_token` (Implicit Flow) targeting the Android OAuth Client ID (`614054153944-t0flbk67jqulktrs8uf7gnghds8eeh15.apps.googleusercontent.com`) with redirect URI `smartlankatrade:/`.
-* **Google Policy Violation:**
-  Google Cloud OAuth 2.0 has deprecated the implicit grant flow for native mobile applications and strictly prohibits arbitrary custom URL schemes for Android client IDs. Google expects the reverse client ID scheme:
+* **Verified Technical Cause:**
+  When using `expo-auth-session` / `Google.useAuthRequest`, the app launches an in-app browser (Chrome Custom Tabs) to Google's authorization endpoint:
   ```
-  com.googleusercontent.apps.614054153944-t0flbk67jqulktrs8uf7gnghds8eeh15:/oauth2redirect
+  https://accounts.google.com/o/oauth2/v2/auth
   ```
-  Requesting an ID token directly over a browser redirect with an unrecognized scheme caused Google's authorization endpoint to return:
-  `"Access blocked: Authorization Error"` and `"Error 400: invalid_request"`.
+  In `LoginScreen.tsx`, passing `androidClientId: googleAndroidClientId` caused `expo-auth-session`'s platform resolver to select the Android Client ID (`614054153944-t0flbk67jqulktrs8uf7gnghds8eeh15`) as the `client_id` parameter.
+* **Google Cloud OAuth Policy Constraint:**
+  Google Cloud Console defines Android Client IDs by package name (`com.michael_clerans.SmartLankaTrade`) and SHA-1 certificate fingerprint. Android Client IDs do **not** have redirect URIs and cannot be processed by the browser authorization endpoint (`/o/oauth2/v2/auth`).
+  When Google's authorization server receives an authorization request specifying an Android client ID over the web endpoint, it halts with:
+  ```
+  Access blocked: Authorization Error
+  Error 400: invalid_request
+  ```
+* **Implemented Architectural Resolution:**
+  1. The browser-based authorization request in `LoginScreen.tsx` uses the **Google Web Client ID** (`614054153944-7figt10pghsb14tg764jj3hfnktkqnbt.apps.googleusercontent.com`).
+  2. The PKCE authorization code exchange at `https://oauth2.googleapis.com/token` uses the matching Web Client ID and redirect URI.
+  3. The backend ID-token validation accepts both the Web Client ID and the Android Client ID in `acceptedAudiences`.
+  4. Added non-sensitive stage diagnostics tracing: `BROWSER_PROMPT`, `REDIRECT_CALLBACK`, `CODE_EXCHANGE`, `TOKEN_VALIDATION`, `ORACLE_USER_LOOKUP`, and `JWT_ISSUANCE`.
 
-### 2.2 Biometric Session Restoration & "Sign In Once" Warning
-* **Root Cause 1 (`SplashScreen.tsx`):**
-  On application cold start, `SplashScreen.tsx` executed:
-  ```typescript
-  if (rememberMe !== 'true') {
-    await authService.logout(); // Purged token from SecureStore!
-  }
-  ```
-  Because `rememberMe` was not set to `'true'` during normal logins, every app launch silently cleared SecureStore credentials before the user ever reached the login screen.
-* **Root Cause 2 (`LoginScreen.tsx`):**
-  The Biometric button directly invoked `LocalAuthentication.authenticateAsync()` *before* checking if any token was saved in SecureStore. When the user successfully scanned their fingerprint, the code checked `storageService.getToken()` and, finding `null`, displayed:
-  `"Biometrics verified! Sign in once with password to save your session."`
-* **Root Cause 3 (Token Validation):**
-  Restored sessions were navigating to `MainApp` without verifying the token against the backend (`/api/auth/validate-token`). Expired tokens resulted in broken dashboard screens.
+### 2.2 Biometric Session Restoration & Silent Storage Failures
+* **Failure Modes Identified:**
+  1. Silent Error Swallowing: `storageService.ts` wrapped `SecureStore.setItemAsync` in a try/catch block that merely logged to `console.error` and returned `undefined`. The caller believed the session was securely saved even when SecureStore threw an exception (e.g. key-store initialization failure or locked keychain).
+  2. Cold Launch Purge: `SplashScreen.tsx` called `authService.logout()` if `rememberMe !== 'true'`, wiping valid tokens.
+  3. Premature Sensor Prompt: `LoginScreen.tsx` triggered the biometric sensor before verifying whether a session existed, resulting in the message: *"Biometrics verified! Sign in once with password to save your session."*
+* **Implemented Architectural Resolution:**
+  1. `storageService.setToken`, `setUserData`, and `saveBiometricSession` now throw if writing fails, and perform a read-back verification before returning.
+  2. `LoginScreen.tsx` checks `storageService.hasBiometricSession()`, `hasHardwareAsync()`, and `isEnrolledAsync()` before opening the sensor. If no session is saved, it informs the user to log in once with password or Google.
+  3. Restored tokens are validated live via `/api/auth/validate-token` before routing to `MainApp`.
+  4. User logout (`UserProfileScreen.tsx`) purges both active tokens and biometric session credentials.
 
-### 2.3 PIN Security Vulnerabilities & Financial Bypass
-* **Hardcoded Default PIN:**
-  `userModel.js` contained:
-  ```javascript
-  if (!row || !row.PIN_HASH) return String(plainPin).trim() === '1234';
-  ```
-  Any user who had not configured a PIN could authorize high-value transactions with the default PIN `'1234'`.
-* **Truthy Object Evaluation Bug:**
-  `walletFundingService.js` executed:
-  ```javascript
-  const isPinValid = await userModel.verifyPin(userId, pin);
-  if (!isPinValid) { ... }
-  ```
-  Because `verifyPin` returned an object `{ valid: false, message: '...' }`, JavaScript evaluated this object as truthy! Consequently, invalid PINs were accepted as valid for transactions exceeding LKR 100,000.
-* **Low Entropy Hashing:**
-  Plain SHA-256 without salting was used, making 4-digit PINs vulnerable to rainbow table precomputation.
+### 2.3 Transaction PIN Hardening & Removal of Local PIN Storage
+* **Vulnerabilities Resolved:**
+  1. Frontend PIN Persistence: Previously, `storageService.ts` persisted `userSecurityPin` in SecureStore, exposing low-entropy PINs to local storage attacks.
+  2. Hardcoded Default: `userModel.js` previously accepted `'1234'` for accounts without a PIN.
+  3. Truthy Object Bug: `walletFundingService.js` evaluated `!pinResult.valid` incorrectly.
+* **Implemented Architectural Resolution:**
+  1. Completely deleted `getPin()`, `setPin()`, and `deletePin()` from `storageService.ts`.
+  2. Removed `savedPin` from `SecuritySettingsScreen.tsx`. PIN input state is transient only during modal interaction, sent over TLS, and wiped immediately.
+  3. Backend hashes PINs using salted `bcrypt` (work factor 10) with automatic legacy SHA-256 upgrade.
+  4. 5-attempt progressive lockout enforced for 15 minutes (`PIN_FAILED_ATTEMPTS`, `PIN_LOCKED_UNTIL`).
+  5. Transactions $\ge$ LKR 100,000 authoritatively require a verified PIN.
+
+### 2.4 Removal of Obsolete Firebase Remnants
+* Deleted obsolete executable methods:
+  - `authService.linkLegacyAccount`
+  - `userModel.findByFirebaseUid`
+  - `userModel.linkFirebaseUid`
+  - `firebaseUid` from `req.user` in `authMiddleware.js`
+  - `firebaseUid` parameter from `authService.verifyOtp`
+* Updated `test-release-gate.js` and `test-otp-flow.js` to eliminate dependencies on deleted Firebase configuration files.
 
 ---
 
-## 3. Implemented Solutions
+## 3. Google Cloud Console Configuration Guide
 
-### 3.1 Google OAuth 2.0 (PKCE & Backend Validation)
-* **Mobile Frontend (`LoginScreen.tsx`):**
-  - Migrated from `Google.useIdTokenAuthRequest` to `Google.useAuthRequest` configured with PKCE (`code_challenge_method=S256`) and `response_type=code`.
-  - Configured redirect URI:
-    `com.googleusercontent.apps.614054153944-t0flbk67jqulktrs8uf7gnghds8eeh15:/oauth2redirect`
-  - Registered the reverse client ID custom scheme in `Frontend/app.json`.
-* **Backend Validation (`authService.js`):**
-  - Added support for PKCE authorization code exchange via Google's token endpoint:
-    `https://oauth2.googleapis.com/token`.
-  - Securely validates Google tokens using `google-auth-library` (`OAuth2Client.verifyIdToken`).
-  - Verifies:
-    1. Issuer: `https://accounts.google.com` or `accounts.google.com`.
-    2. Audience: Verified against both Web Client ID (`614054153944-7figt10pghsbfsm7l30o76r98eou6pbb`) and Android Client ID (`614054153944-t0flbk67jqulktrs8uf7gnghds8eeh15`).
-    3. Expiry: Checked against current epoch time.
-    4. Verified Email: Requires `payload.email_verified === true`.
-  - Safely auto-provisions or links Oracle user accounts in `SL_USERS` and automatically initializes `WALLETS`.
-  - Issues SmartLanka Trade's own signed JWT.
-
-### 3.2 Biometric Session Restoration Lifecycle
-* **Session Persistence (`storageService.ts`):**
-  - Added dedicated hardware SecureStore methods: `saveBiometricSession`, `getBiometricSession`, `hasBiometricSession`, `clearBiometricSession`.
-* **Clean Cold Boot (`SplashScreen.tsx`):**
-  - Removed destructive `authService.logout()` call. Tokens persist across app launches.
-* **Pre-Flight Hardware & Session Verification (`LoginScreen.tsx`):**
-  - Checks `storageService.hasBiometricSession()`, `hasHardwareAsync()`, and `isEnrolledAsync()` *prior* to prompting the sensor.
-  - If no session exists, instructs the user to sign in once with password/Google.
-  - Once fingerprint/face is verified, retrieves token, authoritatively verifies it via `/api/auth/validate-token`, and navigates to `MainApp`.
-* **Logout Clearance (`UserProfileScreen.tsx` & `storageService.ts`):**
-  - Explicit logout wipes both active tokens and saved biometric credentials, preventing unauthorized biometric session restoration.
-
-### 3.3 PIN Security Hardening & Authorization
-* **Oracle Database Migration (`Backend/migrate-v7-security-pin.js` & `schema.sql`):**
-  - Added `PIN_HASH VARCHAR2(255)`, `TWO_FACTOR_ENABLED NUMBER(1) DEFAULT 0`, `PIN_FAILED_ATTEMPTS NUMBER DEFAULT 0`, and `PIN_LOCKED_UNTIL TIMESTAMP` to `SL_USERS`.
-* **Bcrypt & Legacy Migration (`userModel.js`):**
-  - Stored PINs use salted `bcrypt` (work factor 10).
-  - Automatically identifies 64-character hex strings (legacy SHA-256) upon first login and upgrades them transparently to bcrypt.
-* **Progressive Lockout Rate-Limiting:**
-  - 5 consecutive failed attempts lock PIN verification for 15 minutes.
-* **Financial Threshold Enforcement (`walletFundingService.js`):**
-  - Authoritatively checks `amount >= 100000` LKR for both `executeInternalTransfer` and `requestWithdrawal`.
-  - Evaluates `!pinResult.valid` properly.
-  - Rejects missing PIN with `HIGH_VALUE_PIN_REQUIRED` (422).
-  - Rejects users without configured PIN with `PIN_SETUP_REQUIRED` (422).
-  - Enforces lockout with HTTP 403.
-* **PIN Change Authorization (`authController.js`):**
-  - Requires `currentPin` validation before allowing existing PIN modification.
-
-### 3.4 Hardware-Aware Security Settings (`SecuritySettingsScreen.tsx`)
-* Detects hardware capabilities with `LocalAuthentication.supportedAuthenticationTypesAsync()`.
-* Disables Facial Recognition toggle if hardware lacks `FACIAL_RECOGNITION`, preventing simulated Face ID.
-* Synchronizes 2FA and transaction PIN status authoritatively with the backend.
-
----
-
-## 4. Google Cloud Console Configuration Guide
-
-To ensure zero runtime mismatch between Google Cloud Console and the SmartLanka Trade application, verify the following settings in the [Google Cloud Console](https://console.cloud.google.com/apis/credentials):
+To ensure zero mismatch in Google Cloud Console, verify the following configuration:
 
 1. **OAuth Consent Screen:**
    - User Type: **External**
-   - App Name: `SmartLanka Trade`
-   - User Support Email: Developer/Support email
-   - Authorized Domains: `smartlankatrade.com`, `onrender.com`
+   - Application Name: `SmartLanka Trade`
    - Scopes: `openid`, `.../auth/userinfo.email`, `.../auth/userinfo.profile`
-   - Publishing Status: **Testing** (Ensure tester Gmail accounts are added) or **In Production**
+   - Publishing Status: **Testing** (Add tester Gmail accounts under Test Users) or **In Production**
 
-2. **Android OAuth Client ID:**
-   - Client ID: `614054153944-t0flbk67jqulktrs8uf7gnghds8eeh15.apps.googleusercontent.com`
-   - Package Name: `com.smartlankatrade.app`
-   - SHA-1 Certificate Fingerprint: 
-     - Debug keystore SHA-1 (for local Expo development)
-     - EAS Production SHA-1 (from `eas credentials`)
-
-3. **Web Application OAuth Client ID:**
-   - Client ID: `614054153944-7figt10pghsbfsm7l30o76r98eou6pbb.apps.googleusercontent.com`
+2. **Web Application OAuth Client ID:**
+   - Client ID: `614054153944-7figt10pghsb14tg764jj3hfnktkqnbt.apps.googleusercontent.com`
    - Authorized Redirect URIs:
      - `https://smart-lanka-trade-final.onrender.com/api/auth/google/callback`
-     - `com.googleusercontent.apps.614054153944-t0flbk67jqulktrs8uf7gnghds8eeh15:/oauth2redirect`
+     - `https://auth.expo.io/@michael_clerans/SmartLankaTrade` (if using Expo Proxy)
+
+3. **Android OAuth Client ID:**
+   - Client ID: `614054153944-t0flbk67jqulktrs8uf7gnghds8eeh15.apps.googleusercontent.com`
+   - Package Name: `com.michael_clerans.SmartLankaTrade`
+   - SHA-1 Fingerprint: Debug and Production keystore fingerprints (from `eas credentials`).
 
 ---
 
-## 5. Summary of Modified Files
+## 4. Summary of Modified Files
 
-| Component | File Path | Modifications |
+| Component | File Path | Summary of Modifications |
 |---|---|---|
-| Frontend | `Frontend/app.json` | Registered reverse client ID custom scheme for Android browser redirects |
-| Frontend | `Frontend/src/services/storageService.ts` | Added hardware-backed biometric session methods & complete logout clearing |
-| Frontend | `Frontend/src/services/apiService.ts` | Updated `googleLogin` for PKCE code payload & `updateSecuritySettings` for `currentPin` |
-| Frontend | `Frontend/src/screens/splash/SplashScreen.tsx` | Removed destructive `logout()` on app boot |
-| Frontend | `Frontend/src/screens/auth/LoginScreen.tsx` | Migrated to `Google.useAuthRequest` (PKCE), pre-checks biometrics before prompt, validates token with backend |
-| Frontend | `Frontend/src/screens/profile/SecuritySettingsScreen.tsx` | Added hardware detection, face recognition capability check, server 2FA sync, and bcrypt PIN change |
-| Backend | `Backend/schema.sql` | Added `PIN_HASH`, `TWO_FACTOR_ENABLED`, `PIN_FAILED_ATTEMPTS`, `PIN_LOCKED_UNTIL` to `SL_USERS` |
-| Backend | `Backend/migrate-v7-security-pin.js` | Database migration script for Oracle table column additions |
-| Backend | `Backend/models/userModel.js` | Removed `'1234'` fallback, added bcrypt hashing, legacy SHA-256 upgrade, 5-attempt lockout |
-| Backend | `Backend/controllers/authController.js` | Updated `googleLogin`, `updateSecuritySettings` (current PIN check), and `verifyPin` (401/403 responses) |
-| Backend | `Backend/services/authService.js` | Added PKCE code exchange with Google, ID token verification, and Oracle user provisioning |
-| Backend | `Backend/services/walletFundingService.js` | Fixed high-value transaction check (`amount >= 100000`), object truthy bug, and PIN requirements |
-| Backend | `Backend/routes/authRoutes.js` | Added rate-limiting (`authLimiter`) to `/google-login`, `/login`, and `/verify-pin` |
-| Backend | `Backend/test-security-lifecycle.js` | 25 automated unit tests for Phase 8 security verification |
-| Backend | `Backend/test-google-oauth.js` | 19 automated tests for Google OAuth verification |
-| Backend | `Backend/scripts/run-all-tests.js` | 50 comprehensive backend automated tests across 8 suites |
+| Frontend | `Frontend/src/services/storageService.ts` | Propagates write failures, verifies session write integrity, and deletes raw PIN persistence |
+| Frontend | `Frontend/src/screens/profile/SecuritySettingsScreen.tsx` | Removed local PIN storage; PIN input is strictly transient; facial hardware check enforced |
+| Frontend | `Frontend/src/screens/auth/LoginScreen.tsx` | Uses Web Client ID for browser PKCE; adds stage diagnostics; pre-checks session before biometrics |
+| Backend | `Backend/services/authService.js` | Removed `linkLegacyAccount`; updated `googleLoginUser` diagnostics and client ID selection |
+| Backend | `Backend/controllers/authController.js` | Passes `clientId` to auth service; adds stage error logging without leaking secrets |
+| Backend | `Backend/models/userModel.js` | Removed obsolete `findByFirebaseUid` and `linkFirebaseUid`; salted bcrypt PIN verification |
+| Backend | `Backend/middleware/authMiddleware.js` | Removed `firebaseUid` from `req.user` payload |
+| Backend | `Backend/test-release-gate.js` | Updated release gate tests to validate JWT, Google OAuth, and RBAC without Firebase |
+| Backend | `Backend/test-otp-flow.js` | Removed check for deleted `firebase.ts`; validates Brevo email OTP |
 
 ---
 
-## 6. Remaining Risks & Operational Notes
+## 5. Remaining Risks & Operational Notes
 
-1. **Google Cloud Publishing Status:**
-   If the OAuth Consent Screen is in "Testing" mode, only Gmail accounts explicitly listed under "Test Users" in Google Cloud Console can sign in. Ensure live testers are added or the app is published.
-2. **EAS Keystore SHA-1 Fingerprint:**
-   When building a standalone APK/AAB via `eas build`, ensure the release keystore's SHA-1 fingerprint matches the Android Client ID in Google Cloud Console.
-3. **Oracle Cloud Wallet:**
-   Local testing uses graceful offline fallback because `/etc/secrets/tnsnames.ora` is specific to the Render production environment. In production, the Oracle connection pool operates with high availability.
+1. **Google Cloud Publishing Status:** If in "Testing" mode, only Gmail accounts explicitly listed under "Test Users" can sign in.
+2. **EAS Keystore SHA-1:** The release keystore fingerprint must match the Android Client ID in Google Cloud Console.
+3. **Oracle Wallet:** Local testing uses offline mocks for Autonomous DB; production runs on high-availability Oracle Cloud connection pooling.

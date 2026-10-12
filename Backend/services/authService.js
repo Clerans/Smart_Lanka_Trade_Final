@@ -348,7 +348,7 @@ exports.googleLoginUser = async (authInput) => {
       // Exchange Authorization Code with Google Token Endpoint using PKCE
       const googleWebClientId = process.env.GOOGLE_CLIENT_ID;
       const googleAndroidClientId = process.env.GOOGLE_ANDROID_CLIENT_ID || googleWebClientId;
-      const clientId = authInput.clientId || googleAndroidClientId || googleWebClientId;
+      const clientId = authInput.clientId || googleWebClientId || googleAndroidClientId;
 
       const tokenParams = {
         code: authInput.code.trim(),
@@ -362,6 +362,10 @@ exports.googleLoginUser = async (authInput) => {
       }
       if (process.env.GOOGLE_CLIENT_SECRET) {
         tokenParams.client_secret = process.env.GOOGLE_CLIENT_SECRET;
+      }
+
+      if (process.env.NODE_ENV !== 'production') {
+        console.log('[OAuth Diagnostic] Stage: CODE_EXCHANGE initiating with Google token endpoint');
       }
 
       try {
@@ -379,11 +383,13 @@ exports.googleLoginUser = async (authInput) => {
         if (tokenExchangeRes.data && tokenExchangeRes.data.id_token) {
           idToken = tokenExchangeRes.data.id_token;
         } else {
-          throw createError('GOOGLE_EXCHANGE_FAILED', 'Google did not return a valid ID token.', 401);
+          throw createError('GOOGLE_EXCHANGE_FAILED', 'Google token endpoint did not return an ID token.', 401);
         }
       } catch (exchangeErr) {
-        const errMsg = exchangeErr.response?.data?.error_description || exchangeErr.message;
-        throw createError('GOOGLE_EXCHANGE_FAILED', `Google authorization code exchange failed: ${errMsg}`, 401);
+        if (process.env.NODE_ENV !== 'production') {
+          console.error('[OAuth Diagnostic] Stage failed: CODE_EXCHANGE', exchangeErr.response?.data?.error || exchangeErr.message);
+        }
+        throw createError('GOOGLE_EXCHANGE_FAILED', 'Google authorization code exchange failed. Please re-authenticate.', 401);
       }
     }
   }
@@ -403,6 +409,10 @@ exports.googleLoginUser = async (authInput) => {
     googleAndroidClientId,
   ].filter(Boolean);
 
+  if (process.env.NODE_ENV !== 'production') {
+    console.log('[OAuth Diagnostic] Stage: TOKEN_VALIDATION verifying token signature and audience');
+  }
+
   let payload;
   try {
     const client = new OAuth2Client();
@@ -412,6 +422,9 @@ exports.googleLoginUser = async (authInput) => {
     });
     payload = ticket.getPayload();
   } catch (verifyErr) {
+    if (process.env.NODE_ENV !== 'production') {
+      console.error('[OAuth Diagnostic] Stage failed: TOKEN_VALIDATION', verifyErr.message);
+    }
     throw createError('INVALID_GOOGLE_TOKEN', 'Google authentication failed: Invalid or expired ID token.', 401);
   }
 

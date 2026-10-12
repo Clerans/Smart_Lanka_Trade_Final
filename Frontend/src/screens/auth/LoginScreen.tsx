@@ -46,6 +46,7 @@ export const LoginScreen = () => {
   const [isNetworkError, setIsNetworkError] = useState(false);
 
   // Google OAuth Configuration
+  // Web Client ID is used for browser-based authorization-code flow with PKCE (avoiding Error 400 on Android)
   const googleWebClientId =
     process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID ||
     '614054153944-7figt10pghsb14tg764jj3hfnktkqnbt.apps.googleusercontent.com';
@@ -54,7 +55,7 @@ export const LoginScreen = () => {
     process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID ||
     '614054153944-t0flbk67jqulktrs8uf7gnghds8eeh15.apps.googleusercontent.com';
 
-  // Authorization Code Flow with PKCE using reverse Google Client ID scheme for native Android
+  // Authorization Code Flow with PKCE
   const androidRedirectUri = 'com.googleusercontent.apps.614054153944-t0flbk67jqulktrs8uf7gnghds8eeh15:/oauth2redirect';
   const defaultRedirectUri = AuthSession.makeRedirectUri({ scheme: 'smartlankatrade' });
   const redirectUri = Platform.OS === 'android' ? androidRedirectUri : defaultRedirectUri;
@@ -62,7 +63,6 @@ export const LoginScreen = () => {
   const [request, response, promptAsync] = Google.useAuthRequest({
     clientId: googleWebClientId,
     webClientId: googleWebClientId,
-    androidClientId: googleAndroidClientId,
     scopes: ['openid', 'profile', 'email'],
     redirectUri,
   });
@@ -185,6 +185,9 @@ export const LoginScreen = () => {
     if (!response) return;
 
     if (response.type === 'success') {
+      if (__DEV__) {
+        console.log('[OAuth Diagnostic] Stage: REDIRECT_CALLBACK received authorization success');
+      }
       const code = response.params?.code;
       const idToken = response.authentication?.idToken || response.params?.id_token;
 
@@ -193,7 +196,7 @@ export const LoginScreen = () => {
           code,
           codeVerifier: request?.codeVerifier,
           redirectUri,
-          clientId: Platform.OS === 'android' ? googleAndroidClientId : googleWebClientId
+          clientId: googleWebClientId
         });
       } else if (idToken) {
         handleGoogleLogin({ idToken });
@@ -202,25 +205,37 @@ export const LoginScreen = () => {
         setGoogleLoading(false);
       }
     } else if (response.type === 'error') {
-      console.warn('Google OAuth error:', response.error);
+      if (__DEV__) {
+        console.warn('[OAuth Diagnostic] Stage failed: REDIRECT_CALLBACK', response.error);
+      }
       showToast(response.error?.message || 'Google sign-in failed. Please try again.', 'error');
       setGoogleLoading(false);
     } else if (response.type === 'cancel' || response.type === 'dismiss') {
-      // User cancelled gracefully - return smoothly to the login screen
+      if (__DEV__) {
+        console.log(`[OAuth Diagnostic] Stage: REDIRECT_CALLBACK user ${response.type}`);
+      }
       setGoogleLoading(false);
     }
-  }, [response, request, redirectUri, googleAndroidClientId, googleWebClientId, handleGoogleLogin, showToast]);
+  }, [response, request, redirectUri, googleWebClientId, handleGoogleLogin, showToast]);
 
   const handleGooglePress = async () => {
-    if (loading || googleLoading) return;
+    if (loading || googleLoading || !request) return;
     setGoogleLoading(true);
+    if (__DEV__) {
+      console.log('[OAuth Diagnostic] Stage: BROWSER_PROMPT initiating with Web Client ID');
+    }
     try {
       const result = await promptAsync();
+      if (__DEV__) {
+        console.log(`[OAuth Diagnostic] Stage: BROWSER_PROMPT returned result type: ${result?.type}`);
+      }
       if (result?.type !== 'success') {
         setGoogleLoading(false);
       }
     } catch (err) {
-      console.error('Google Sign-In prompt error:', err);
+      if (__DEV__) {
+        console.error('[OAuth Diagnostic] Stage failed: BROWSER_PROMPT', err);
+      }
       showToast('Google sign-in failed. Please try again.', 'error');
       setGoogleLoading(false);
     }
