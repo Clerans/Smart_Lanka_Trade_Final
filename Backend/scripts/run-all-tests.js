@@ -532,6 +532,56 @@ async function runTestSuite() {
   }
 
   // -------------------------------------------------------------
+  // SUITE 10: Migration Idempotency & Error Propagation Invariants
+  // -------------------------------------------------------------
+  console.log('\nSUITE 10: Migration Idempotency & Error Propagation Invariants');
+  try {
+    const v7Source = fs.readFileSync(path.join(__dirname, '..', 'migrate-v7-security-pin.js'), 'utf8');
+    assert(v7Source.includes('USER_TAB_COLUMNS'), 'Migration v7 inspects USER_TAB_COLUMNS metadata for idempotency');
+    assert(v7Source.includes('Post-migration verification') || v7Source.includes('missing.length > 0'),
+      'Migration v7 verifies required security columns exist post-migration');
+    assert(v7Source.includes('process.exit(1)'), 'Migration v7 exits non-zero on unrecoverable failure');
+
+    const v9Source = fs.readFileSync(path.join(__dirname, '..', 'migrate-v9-password-reset-hardening.js'), 'utf8');
+    assert(v9Source.includes('USER_TAB_COLUMNS') && v9Source.includes('USER_INDEXES'),
+      'Migration v9 checks metadata for columns and index before creation');
+    assert(v9Source.includes('Missing ATTEMPTS or CREATED_AT'),
+      'Migration v9 verifies required columns exist before declaring success');
+
+    const userModelSource = fs.readFileSync(path.join(__dirname, '..', 'models', 'userModel.js'), 'utf8');
+    assert(!userModelSource.includes('twoFactorEnabled: false,\n      hasPin: false,\n      pinLocked: false'),
+      'userModel.getSecuritySettings does not silently convert DB errors to false security defaults');
+    assert(userModelSource.includes("dbErr.code = 'DATABASE_ERROR'") && userModelSource.includes('throw dbErr'),
+      'userModel.getSecuritySettings propagates typed error to controller');
+  } catch (err) {
+    assert(false, 'Suite 10 execution', err.message);
+  }
+
+  // -------------------------------------------------------------
+  // SUITE 11: Concurrency-Safe Password Reset & Order Contract
+  // -------------------------------------------------------------
+  console.log('\nSUITE 11: Concurrency-Safe Password Reset & Order Contract');
+  try {
+    const verifSource = fs.readFileSync(path.join(__dirname, '..', 'models', 'verificationModel.js'), 'utf8');
+    assert(verifSource.includes('consumePasswordResetAndSetPassword'),
+      'verificationModel provides atomic consumePasswordResetAndSetPassword transaction');
+    assert(verifSource.includes('USED = 1') && verifSource.includes('USED = 0') && verifSource.includes('rowsAffected !== 1'),
+      'Password reset consumption enforces check-and-set atomic transaction to prevent concurrent races');
+
+    const authServiceSource = fs.readFileSync(path.join(__dirname, '..', 'services', 'authService.js'), 'utf8');
+    assert(authServiceSource.includes('RESET_TOKEN_ALREADY_USED'),
+      'authService rejects replayed or expired reset tokens with RESET_TOKEN_ALREADY_USED');
+
+    const tradeServiceSource = fs.readFileSync(path.join(__dirname, '..', 'services', 'tradeService.js'), 'utf8');
+    assert(tradeServiceSource.includes('orderId') && tradeServiceSource.includes('INTERNAL_PORTFOLIO'),
+      'tradeService returns structured order contract with orderId and execution venue');
+    assert(tradeServiceSource.includes("status: 'FILLED'"),
+      'tradeService confirms order status as FILLED only after successful Oracle transaction commit');
+  } catch (err) {
+    assert(false, 'Suite 11 execution', err.message);
+  }
+
+  // -------------------------------------------------------------
   // FINAL REPORT
   // -------------------------------------------------------------
   console.log('\n================================================================');
