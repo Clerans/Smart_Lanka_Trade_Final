@@ -127,12 +127,13 @@ export const authService = {
       throw error;
     }
   },
-  resetPassword: async (email: string, otp: string, password: string) => {
+  resetPassword: async (email: string, otp: string, password: string, resetToken?: string) => {
     try {
       const response = await api.post('/auth/reset-password', {
         email: email.trim().toLowerCase(),
-        otp: otp.trim(),
-        password
+        otp: otp ? otp.trim() : undefined,
+        password,
+        resetToken
       });
       return response.data;
     } catch (error: any) {

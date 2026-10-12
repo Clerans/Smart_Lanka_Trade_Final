@@ -40,14 +40,17 @@ export const ForgotPasswordScreen = () => {
     setLoading(true);
     setIsNetworkError(false);
     try {
-      await authService.forgotPassword(email.trim());
-      setSent(true);
-      showToast('Password reset link sent to your email!', 'success');
+      const cleanEmail = email.trim().toLowerCase();
+      await authService.forgotPassword(cleanEmail);
+      showToast('Verification code sent to your email!', 'success');
+      setTimeout(() => {
+        navigation.navigate('ResetPassword', { email: cleanEmail });
+      }, 700);
     } catch (error: any) {
       if (error.code === 'NETWORK_ERROR') {
         setIsNetworkError(true);
       } else {
-        showToast(error.message || 'Failed to send reset link.', 'error');
+        showToast(error.message || 'Failed to send verification code.', 'error');
       }
     } finally {
       setLoading(false);
@@ -89,56 +92,40 @@ export const ForgotPasswordScreen = () => {
           {/* Icon section */}
           <View style={styles.iconSection}>
             <View style={styles.iconContainer}>
-              <MaterialIcons name={sent ? "mark-email-read" : "lock-reset"} size={48} color={colors.accent} />
+              <MaterialIcons name="lock-reset" size={48} color={colors.accent} />
             </View>
-            <Text style={styles.title}>{sent ? "Check Your Inbox" : "Reset Password"}</Text>
+            <Text style={styles.title}>Reset Password</Text>
             <Text style={styles.subtitle}>
-              {sent
-                ? `We've sent a password reset link to ${email.trim()}. Follow the instructions in the email to set a new password.`
-                : "Enter your registered email address below. We'll send you a password reset link to securely restore access to your account."
-              }
+              Enter your registered email address below. We'll send you a 6-digit verification code to securely restore access to your account.
             </Text>
           </View>
 
           <View style={styles.spacer} />
 
           {/* Form */}
-          {!sent ? (
-            <View style={styles.formSection}>
-              <Text style={styles.label}>EMAIL ADDRESS</Text>
-              <InputField
-                placeholder="yourname@example.com"
-                keyboardType="email-address"
-                autoCapitalize="none"
-                value={email}
-                onChangeText={setEmail}
-                iconLeft={<MaterialIcons name="mail-outline" size={20} color={colors.textSecondary} />}
-              />
+          <View style={styles.formSection}>
+            <Text style={styles.label}>EMAIL ADDRESS</Text>
+            <InputField
+              placeholder="yourname@example.com"
+              keyboardType="email-address"
+              autoCapitalize="none"
+              value={email}
+              onChangeText={setEmail}
+              iconLeft={<MaterialIcons name="mail-outline" size={20} color={colors.textSecondary} />}
+            />
 
-              <View style={styles.smallSpacer} />
+            <View style={styles.smallSpacer} />
 
-              {loading ? (
-                <ActivityIndicator color={colors.accent} size="large" style={{ marginVertical: 20 }} />
-              ) : (
-                <PrimaryButton
-                  title="Send Password Reset Link →"
-                  onPress={handleSendResetEmail}
-                  style={styles.actionBtn}
-                />
-              )}
-            </View>
-          ) : (
-            <View style={styles.formSection}>
+            {loading ? (
+              <ActivityIndicator color={colors.accent} size="large" style={{ marginVertical: 20 }} />
+            ) : (
               <PrimaryButton
-                title="Back to Log In"
-                onPress={() => navigation.navigate('Login')}
+                title="Send Verification Code →"
+                onPress={handleSendResetEmail}
                 style={styles.actionBtn}
               />
-              <TouchableOpacity onPress={() => setSent(false)} style={styles.resendBtn}>
-                <Text style={styles.resendBtnText}>Try another email address</Text>
-              </TouchableOpacity>
-            </View>
-          )}
+            )}
+          </View>
 
           <View style={styles.spacer} />
           <View style={styles.spacer} />

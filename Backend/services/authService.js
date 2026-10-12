@@ -257,72 +257,215 @@ exports.loginUser = async (email, password) => {
 
 
 exports.forgotPassword = async (email) => {
-  const user = await userModel.findByEmail(email);
+  const cleanEmail = (email || '').trim().toLowerCase();
+  if (!cleanEmail || !validateEmail(cleanEmail)) {
+    throw createError('INVALID_EMAIL', 'Please provide a valid email address.', 422);
+  }
+
+  const user = await userModel.findByEmail(cleanEmail);
   if (!user) {
-    throw createError('USER_NOT_FOUND', 'User with this email does not exist.', 404);
+    // Non-revealing response to prevent email enumeration
+    return {
+      success: true,
+      message: 'If an account exists with this email address, a verification code has been sent.'
+    };
+  }
+
+  // Enforce 60-second cooldown per user
+  const latestAttempt = await verificationModel.getLatestPasswordResetOTP(user.ID);
+  if (latestAttempt && latestAttempt.CREATED_AT) {
+    const elapsedMs = Date.now() - new Date(latestAttempt.CREATED_AT).getTime();
+    if (elapsedMs < 60 * 1000) {
+      const waitSec = Math.ceil((60 * 1000 - elapsedMs) / 1000);
+      throw createError(
+        'COOLDOWN_ACTIVE',
+        `Please wait ${waitSec} second(s) before requesting another verification code.`,
+        429
+      );
+    }
   }
 
   const otp = crypto.randomInt(100000, 1000000).toString();
-  const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
+  const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
   await verificationModel.createPasswordResetOTP(user.ID, otp, expiresAt);
 
-  if (process.env.NODE_ENV !== 'production') {
-    console.log(`🔑 Generated password reset OTP for ${email} (dispatching via Resend)`);
+  // Send branded password reset OTP email via Brevo
+  try {
+    await sendPasswordResetOTPEmail(cleanEmail, otp);
+  } catch (emailErr) {
+    console.error('Brevo email dispatch failed during forgotPassword:', emailErr.message);
+    throw createError(
+      'EMAIL_SEND_FAILED',
+      'Unable to deliver password reset email at this time. Please try again later.',
+      503
+    );
   }
 
-  // Send password reset OTP email (awaited)
-  await sendPasswordResetOTPEmail(email, otp);
-
-  return { success: true };
+  return {
+    success: true,
+    message: 'Verification code sent successfully.'
+  };
 };
 
 exports.verifyResetOTP = async (email, otp) => {
-  const user = await userModel.findByEmail(email);
+  const cleanEmail = (email || '').trim().toLowerCase();
+  const cleanOtp = (otp || '').toString().trim();
+
+  if (!cleanEmail || !validateEmail(cleanEmail)) {
+    throw createError('INVALID_EMAIL', 'Please provide a valid email address.', 422);
+  }
+
+  if (!cleanOtp || cleanOtp.length !== 6 || !/^\d{6}$/.test(cleanOtp)) {
+    throw createError('INVALID_OTP_FORMAT', 'Verification code must be exactly 6 digits.', 422);
+  }
+
+  const user = await userModel.findByEmail(cleanEmail);
   if (!user) {
-    throw createError('USER_NOT_FOUND', 'User with this email does not exist.', 404);
+    throw createError('OTP_INVALID', 'Invalid or expired verification code.', 422);
   }
 
-  const record = await verificationModel.findPasswordResetOTP(email, otp);
-  if (!record) {
-    throw createError('OTP_INVALID', 'Invalid OTP code.', 422);
+  const activeRecord = await verificationModel.findActivePasswordResetByUser(cleanEmail);
+  if (!activeRecord) {
+    throw createError('OTP_INVALID', 'Invalid or expired verification code.', 422);
   }
 
-  if (new Date(record.EXPIRES_AT) < new Date()) {
-    throw createError('OTP_EXPIRED', 'OTP has expired (valid for 5 minutes).', 422);
+  // Check attempt limit (max 5 attempts)
+  if (activeRecord.ATTEMPTS >= 5) {
+    await verificationModel.invalidatePasswordResetOTP(activeRecord.ID);
+    throw createError(
+      'OTP_MAX_ATTEMPTS',
+      'Maximum verification attempts exceeded. Please request a new verification code.',
+      429
+    );
   }
 
-  return { message: 'OTP is valid.' };
+  // Check expiration (10 minutes)
+  if (new Date(activeRecord.EXPIRES_AT) < new Date()) {
+    await verificationModel.invalidatePasswordResetOTP(activeRecord.ID);
+    throw createError(
+      'OTP_EXPIRED',
+      'Your verification code has expired. Please request a new code.',
+      422
+    );
+  }
+
+  // Timing-safe SHA-256 verification
+  const candidateHash = crypto.createHash('sha256').update(cleanOtp).digest('hex');
+  const storedHash = activeRecord.OTP;
+  let isMatch = false;
+
+  try {
+    const candidateBuf = Buffer.from(candidateHash, 'hex');
+    const storedBuf = Buffer.from(storedHash, 'hex');
+    if (candidateBuf.length === storedBuf.length) {
+      isMatch = crypto.timingSafeEqual(candidateBuf, storedBuf);
+    }
+  } catch {
+    isMatch = (candidateHash === storedHash || cleanOtp === storedHash);
+  }
+
+  if (!isMatch) {
+    await verificationModel.incrementPasswordResetAttempts(activeRecord.ID);
+    const remainingAttempts = Math.max(0, 5 - (activeRecord.ATTEMPTS + 1));
+    if (remainingAttempts === 0) {
+      await verificationModel.invalidatePasswordResetOTP(activeRecord.ID);
+      throw createError(
+        'OTP_MAX_ATTEMPTS',
+        'Maximum verification attempts exceeded. Please request a new verification code.',
+        429
+      );
+    }
+    throw createError(
+      'OTP_INVALID',
+      `Invalid verification code. ${remainingAttempts} attempt(s) remaining.`,
+      422
+    );
+  }
+
+  // Issue server-authorized short-lived resetToken (10m)
+  const resetToken = jwt.sign(
+    {
+      userId: user.ID,
+      email: user.EMAIL,
+      purpose: 'PASSWORD_RESET',
+      resetId: activeRecord.ID
+    },
+    process.env.JWT_SECRET,
+    { expiresIn: '10m' }
+  );
+
+  return {
+    success: true,
+    message: 'Verification code verified successfully.',
+    resetToken
+  };
 };
 
-exports.resetPassword = async (email, otp, newPassword) => {
-  const user = await userModel.findByEmail(email);
-  if (!user) {
-    throw createError('USER_NOT_FOUND', 'User with this email does not exist.', 404);
-  }
+exports.resetPassword = async (email, otp, newPassword, resetToken) => {
+  const cleanEmail = (email || '').trim().toLowerCase();
 
-  const record = await verificationModel.findPasswordResetOTP(email, otp);
-  if (!record) {
-    throw createError('OTP_INVALID', 'Invalid or expired OTP code.', 422);
-  }
-
-  if (new Date(record.EXPIRES_AT) < new Date()) {
-    throw createError('OTP_EXPIRED', 'OTP code has expired (valid for 5 minutes).', 422);
-  }
-
-  // Validate password strength
+  // Validate password strength first
   if (!validatePassword(newPassword)) {
-    throw createError('PASSWORD_TOO_WEAK', 'Password is too weak. Must be at least 8 characters, and contain uppercase, lowercase, numbers, and special characters.', 422);
+    throw createError(
+      'PASSWORD_TOO_WEAK',
+      'Password is too weak. Must be at least 8 characters, and contain uppercase, lowercase, numbers, and special characters.',
+      422
+    );
   }
 
-  // Hash new password and update user
+  const user = await userModel.findByEmail(cleanEmail);
+  if (!user) {
+    throw createError('USER_NOT_FOUND', 'User account not found.', 404);
+  }
+
+  let resetRecordId = null;
+
+  // 1. Verify via server-issued resetToken credentials if provided
+  if (resetToken && typeof resetToken === 'string') {
+    try {
+      const decoded = jwt.verify(resetToken, process.env.JWT_SECRET);
+      if (decoded.purpose !== 'PASSWORD_RESET' || decoded.email.toLowerCase() !== cleanEmail) {
+        throw createError('INVALID_RESET_TOKEN', 'Invalid reset token authorization.', 403);
+      }
+      const record = await verificationModel.findPasswordResetOTPById(decoded.resetId);
+      if (!record || record.USED !== 0 || new Date(record.EXPIRES_AT) < new Date()) {
+        throw createError('RESET_TOKEN_EXPIRED', 'Password reset session has expired or was already used.', 403);
+      }
+      resetRecordId = record.ID;
+    } catch (tokenErr) {
+      if (tokenErr.code) throw tokenErr;
+      throw createError('INVALID_RESET_TOKEN', 'Invalid or expired password reset session.', 403);
+    }
+  } else if (otp) {
+    // 2. Fallback to direct OTP verification
+    const record = await verificationModel.findPasswordResetOTP(cleanEmail, otp);
+    if (!record || record.USED !== 0) {
+      throw createError('OTP_INVALID', 'Invalid or expired verification code.', 422);
+    }
+    if (new Date(record.EXPIRES_AT) < new Date()) {
+      throw createError('OTP_EXPIRED', 'Verification code has expired.', 422);
+    }
+    resetRecordId = record.ID;
+  } else {
+    throw createError('MISSING_CREDENTIALS', 'Server-authorized reset token or OTP code is required.', 422);
+  }
+
+  // Hash new password and update user record in Oracle SL_USERS
   const hashedPassword = await bcrypt.hash(newPassword, 10);
   await userModel.updatePassword(user.ID, hashedPassword);
-  await verificationModel.markPasswordResetOTPUsed(record.ID);
 
-  // Reset failed login attempts and lockout when password is successfully reset
+  // Invalidate the reset OTP record so it cannot be replayed
+  if (resetRecordId) {
+    await verificationModel.markPasswordResetOTPUsed(resetRecordId);
+  }
+
+  // Reset failed login attempts and unlock user account
   await userModel.resetFailedAttemptsAndLogLogin(user.ID);
 
-  return { message: 'Password reset successful. You can now log in.' };
+  return {
+    success: true,
+    message: 'Password reset successful! You can now log in.'
+  };
 };
 
 exports.verifyEmailToken = async (token) => {

@@ -188,14 +188,15 @@ exports.verifyResetOTP = async (req, res) => {
       return res.status(422).json({
         success: false,
         code: 'MISSING_FIELDS',
-        message: 'Email and OTP code are required.'
+        message: 'Email and 6-digit verification code are required.'
       });
     }
 
     const result = await authService.verifyResetOTP(email, otp);
     res.json({
       success: true,
-      message: result.message
+      message: result.message,
+      resetToken: result.resetToken
     });
   } catch (err) {
     res.status(err.status || 500).json({
@@ -208,16 +209,16 @@ exports.verifyResetOTP = async (req, res) => {
 
 exports.resetPassword = async (req, res) => {
   try {
-    const { email, otp, password } = req.body;
-    if (!email || !otp || !password) {
+    const { email, otp, password, resetToken } = req.body;
+    if (!email || (!otp && !resetToken) || !password) {
       return res.status(422).json({
         success: false,
         code: 'MISSING_FIELDS',
-        message: 'Email, OTP, and new password are required.'
+        message: 'Email, verification credential, and new password are required.'
       });
     }
 
-    const result = await authService.resetPassword(email, otp, password);
+    const result = await authService.resetPassword(email, otp, password, resetToken);
     res.json({
       success: true,
       message: result.message
