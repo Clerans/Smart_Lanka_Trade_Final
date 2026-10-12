@@ -16,7 +16,7 @@ console.log('📡 SmartLanka Trade Frontend API Base URL:', BASE_URL);
 
 const api = axios.create({
   baseURL: BASE_URL,
-  timeout: 30000,
+  timeout: 60000, // 60 seconds to accommodate Render free-tier cold starts
   headers: {
     'Content-Type': 'application/json',
   },
@@ -36,11 +36,15 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (!error.response) {
-      // Network Error
+      // Network Error (Timeout, DNS, Offline)
+      const isTimeout = error.code === 'ECONNABORTED' || error.message?.includes('timeout');
+      console.warn(`⚠️ Network Error [${error.code || 'UNKNOWN'}]: ${error.message} (Target: ${error.config?.baseURL}${error.config?.url})`);
       const networkError = {
         success: false,
-        code: 'NETWORK_ERROR',
-        message: 'Unable to connect to SmartLanka Trade. Check your internet connection.'
+        code: isTimeout ? 'TIMEOUT_ERROR' : 'NETWORK_ERROR',
+        message: isTimeout
+          ? 'Server is waking up from idle. Please pull to refresh in a moment.'
+          : 'Unable to connect to SmartLanka Trade. Check your internet connection.'
       };
       return Promise.reject(networkError);
     }
