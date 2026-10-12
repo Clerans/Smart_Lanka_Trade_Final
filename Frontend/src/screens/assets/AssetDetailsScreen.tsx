@@ -217,13 +217,13 @@ export const AssetDetailsScreen = () => {
         <PrimaryButton
           title="SELL"
           style={styles.sellBtn}
-          onPress={() => navigation.navigate('Trade', { symbol, action: 'SELL' })}
+          onPress={() => navigation.navigate('MainApp', { screen: 'Trade', params: { symbol, action: 'SELL' } })}
         />
         <View style={{ width: 14 }} />
         <PrimaryButton
           title={`BUY ${coin}`}
           style={styles.buyBtn}
-          onPress={() => navigation.navigate('Trade', { symbol, action: 'BUY' })}
+          onPress={() => navigation.navigate('MainApp', { screen: 'Trade', params: { symbol, action: 'BUY' } })}
         />
       </View>
     </SafeAreaView>
