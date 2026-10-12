@@ -1,14 +1,14 @@
 const oracledb = require('oracledb');
 
-const createTransaction = async (connection, userId, symbol, type, quantity, price, totalAmount, status = 'COMPLETED') => {
+const createTransaction = async (connection, userId, symbol, type, quantity, price, totalAmount, status = 'COMPLETED', assetType = 'CRYPTO') => {
   const conn = connection || (await oracledb.getConnection());
   try {
     const result = await conn.execute(
-      `INSERT INTO TRANSACTIONS (USER_ID, SYMBOL, TRANSACTION_TYPE, QUANTITY, PRICE, TOTAL_AMOUNT, STATUS) 
-       VALUES (:userId, :symbol, :type, :quantity, :price, :totalAmount, :status)
+      `INSERT INTO TRANSACTIONS (USER_ID, SYMBOL, TRANSACTION_TYPE, QUANTITY, PRICE, TOTAL_AMOUNT, STATUS, ASSET_TYPE) 
+       VALUES (:userId, :symbol, :type, :quantity, :price, :totalAmount, :status, :assetType)
        RETURNING TRANSACTION_ID INTO :txId`,
       {
-        userId, symbol, type, quantity, price, totalAmount, status,
+        userId, symbol, type, quantity, price, totalAmount, status, assetType,
         txId: { type: oracledb.NUMBER, dir: oracledb.BIND_OUT }
       }
     );
@@ -30,7 +30,7 @@ const getTransactionsByUserId = async (userId) => {
   try {
     connection = await oracledb.getConnection();
     const result = await connection.execute(
-      `SELECT TRANSACTION_ID, USER_ID, SYMBOL, TRANSACTION_TYPE, QUANTITY, PRICE, TOTAL_AMOUNT, STATUS, CREATED_AT 
+      `SELECT TRANSACTION_ID, USER_ID, SYMBOL, TRANSACTION_TYPE, QUANTITY, PRICE, TOTAL_AMOUNT, STATUS, ASSET_TYPE, CREATED_AT 
        FROM TRANSACTIONS 
        WHERE USER_ID = :userId 
        ORDER BY CREATED_AT DESC`,
