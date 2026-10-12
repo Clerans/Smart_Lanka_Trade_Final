@@ -328,19 +328,32 @@ exports.getSecuritySettings = async (userId) => {
   try {
     connection = await oracledb.getConnection();
     const result = await connection.execute(
-      `SELECT NVL(TWO_FACTOR_ENABLED, 0) AS TWO_FACTOR_ENABLED, PIN_HASH FROM SL_USERS WHERE ID = :userId`,
+      `SELECT NVL(TWO_FACTOR_ENABLED, 0) AS TWO_FACTOR_ENABLED, 
+              PIN_HASH, 
+              NVL(PIN_FAILED_ATTEMPTS, 0) AS PIN_FAILED_ATTEMPTS, 
+              PIN_LOCKED_UNTIL 
+       FROM SL_USERS WHERE ID = :userId`,
       [userId],
       { outFormat: oracledb.OUT_FORMAT_OBJECT }
     );
     const row = result.rows[0];
+    const isLocked = row?.PIN_LOCKED_UNTIL ? new Date(row.PIN_LOCKED_UNTIL) > new Date() : false;
+    const minutesRemaining = isLocked 
+      ? Math.max(1, Math.ceil((new Date(row.PIN_LOCKED_UNTIL) - Date.now()) / (60 * 1000))) 
+      : 0;
+
     return {
       twoFactorEnabled: row ? row.TWO_FACTOR_ENABLED === 1 : false,
-      hasPin: row ? !!row.PIN_HASH : false
+      hasPin: row ? !!row.PIN_HASH : false,
+      pinLocked: isLocked,
+      pinLockMinutesRemaining: minutesRemaining
     };
   } catch (err) {
     return {
       twoFactorEnabled: false,
-      hasPin: false
+      hasPin: false,
+      pinLocked: false,
+      pinLockMinutesRemaining: 0
     };
   } finally {
     if (connection) await connection.close();
@@ -350,7 +363,7 @@ exports.getSecuritySettings = async (userId) => {
 /**
  * Update User Security Settings (2FA & Security PIN)
  */
-exports.updateSecuritySettings = async (userId, { twoFactorEnabled, pinHash }) => {
+exports.updateSecuritySettings = async (userId, { twoFactorEnabled, pinHash, resetLockout }) => {
   let connection;
   try {
     connection = await oracledb.getConnection();
@@ -364,6 +377,11 @@ exports.updateSecuritySettings = async (userId, { twoFactorEnabled, pinHash }) =
     if (pinHash !== undefined) {
       updates.push('PIN_HASH = :pinHash');
       binds.pinHash = pinHash;
+      updates.push('PIN_FAILED_ATTEMPTS = 0');
+      updates.push('PIN_LOCKED_UNTIL = NULL');
+    } else if (resetLockout) {
+      updates.push('PIN_FAILED_ATTEMPTS = 0');
+      updates.push('PIN_LOCKED_UNTIL = NULL');
     }
 
     if (updates.length > 0) {
@@ -381,26 +399,114 @@ exports.updateSecuritySettings = async (userId, { twoFactorEnabled, pinHash }) =
 
 /**
  * Authoritative Server-Side Security PIN Verification
+ * - Never falls back to default '1234'
+ * - Detects and upgrades legacy SHA-256 hashes to bcrypt seamlessly
+ * - Enforces 5-attempt rate limit and 15-minute progressive lockout
  */
 exports.verifyPin = async (userId, plainPin) => {
-  if (!plainPin) return false;
+  if (!plainPin) {
+    return { valid: false, code: 'MISSING_PIN', message: 'Security PIN is required.' };
+  }
+
+  const cleanPin = String(plainPin).trim();
   let connection;
   try {
     connection = await oracledb.getConnection();
     const result = await connection.execute(
-      `SELECT PIN_HASH FROM SL_USERS WHERE ID = :userId`,
+      `SELECT PIN_HASH, NVL(PIN_FAILED_ATTEMPTS, 0) AS PIN_FAILED_ATTEMPTS, PIN_LOCKED_UNTIL 
+       FROM SL_USERS WHERE ID = :userId`,
       [userId],
       { outFormat: oracledb.OUT_FORMAT_OBJECT }
     );
-    const row = result.rows[0];
+    const row = result.rows && result.rows[0];
+
     if (!row || !row.PIN_HASH) {
-      // Default initial PIN '1234' for accounts before explicit PIN creation
-      return String(plainPin).trim() === '1234';
+      return { 
+        valid: false, 
+        code: 'PIN_NOT_SET', 
+        message: 'Security PIN has not been set up for this account. Please configure it in Security Settings.' 
+      };
     }
+
+    // Check lockout
+    if (row.PIN_LOCKED_UNTIL && new Date(row.PIN_LOCKED_UNTIL) > new Date()) {
+      const minutesLeft = Math.max(1, Math.ceil((new Date(row.PIN_LOCKED_UNTIL) - Date.now()) / (60 * 1000)));
+      return {
+        valid: false,
+        code: 'PIN_LOCKED',
+        message: `Security PIN is locked due to too many failed attempts. Try again in ${minutesLeft} minute(s).`
+      };
+    }
+
+    let isMatch = false;
+    const storedHash = row.PIN_HASH;
     const bcrypt = require('bcryptjs');
-    return await bcrypt.compare(String(plainPin).trim(), row.PIN_HASH);
+    const crypto = require('crypto');
+
+    // Check if stored hash is legacy SHA-256 (64 hex characters)
+    const isLegacySha256 = /^[a-f0-9]{64}$/i.test(storedHash);
+    if (isLegacySha256) {
+      const computedSha256 = crypto.createHash('sha256').update(cleanPin).digest('hex');
+      if (computedSha256.toLowerCase() === storedHash.toLowerCase()) {
+        isMatch = true;
+        // Seamless migration: upgrade legacy SHA-256 hash to salted bcrypt
+        try {
+          const newBcryptHash = await bcrypt.hash(cleanPin, 10);
+          await connection.execute(
+            `UPDATE SL_USERS SET PIN_HASH = :newHash, PIN_FAILED_ATTEMPTS = 0, PIN_LOCKED_UNTIL = NULL, UPDATED_AT = CURRENT_TIMESTAMP WHERE ID = :userId`,
+            { newHash: newBcryptHash, userId }
+          );
+          await connection.commit();
+        } catch (upgradeErr) {
+          console.warn('⚠️ Legacy PIN hash upgrade notice:', upgradeErr.message);
+        }
+      }
+    } else {
+      isMatch = await bcrypt.compare(cleanPin, storedHash);
+    }
+
+    if (isMatch) {
+      // Reset failed attempts on success
+      if (row.PIN_FAILED_ATTEMPTS > 0 || row.PIN_LOCKED_UNTIL) {
+        await connection.execute(
+          `UPDATE SL_USERS SET PIN_FAILED_ATTEMPTS = 0, PIN_LOCKED_UNTIL = NULL WHERE ID = :userId`,
+          { userId }
+        );
+        await connection.commit();
+      }
+      return { valid: true };
+    } else {
+      // Record failed attempt
+      const newAttempts = Number(row.PIN_FAILED_ATTEMPTS || 0) + 1;
+      if (newAttempts >= 5) {
+        const lockUntil = new Date(Date.now() + 15 * 60 * 1000); // 15 minute lockout
+        await connection.execute(
+          `UPDATE SL_USERS SET PIN_FAILED_ATTEMPTS = :attempts, PIN_LOCKED_UNTIL = :lockUntil WHERE ID = :userId`,
+          { attempts: newAttempts, lockUntil, userId }
+        );
+        await connection.commit();
+        return {
+          valid: false,
+          code: 'PIN_LOCKED',
+          message: 'Security PIN has been temporarily locked due to 5 consecutive incorrect attempts. Try again in 15 minutes.'
+        };
+      } else {
+        await connection.execute(
+          `UPDATE SL_USERS SET PIN_FAILED_ATTEMPTS = :attempts WHERE ID = :userId`,
+          { attempts: newAttempts, userId }
+        );
+        await connection.commit();
+        const remaining = 5 - newAttempts;
+        return {
+          valid: false,
+          code: 'INVALID_PIN',
+          message: `Incorrect security PIN. ${remaining} attempt(s) remaining before account lockout.`
+        };
+      }
+    }
   } catch (err) {
-    return String(plainPin).trim() === '1234';
+    console.error('Error verifying PIN:', err.message);
+    return { valid: false, code: 'PIN_VERIFY_ERROR', message: 'Unable to verify security PIN at this time.' };
   } finally {
     if (connection) await connection.close();
   }

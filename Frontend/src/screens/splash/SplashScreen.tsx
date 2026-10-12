@@ -37,12 +37,9 @@ export const SplashScreen = () => {
                 return;
               }
             } catch {
-              console.log('Stored token is invalid or expired. Clearing storage.');
-              await authService.logout();
+              console.log('Stored active token is invalid or expired.');
+              await storageService.deleteToken();
             }
-          } else {
-            // Clean up session if not remembering
-            await authService.logout();
           }
         } catch (storageErr) {
           console.error('Storage check failed:', storageErr);

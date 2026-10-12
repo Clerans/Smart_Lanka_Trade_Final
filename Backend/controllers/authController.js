@@ -273,7 +273,7 @@ exports.getSecuritySettings = async (req, res) => {
 
 exports.updateSecuritySettings = async (req, res) => {
   try {
-    const { twoFactorEnabled, pin } = req.body;
+    const { twoFactorEnabled, pin, currentPin } = req.body;
     const userModel = require('../models/userModel');
     const bcrypt = require('bcryptjs');
 
@@ -281,15 +281,38 @@ exports.updateSecuritySettings = async (req, res) => {
     if (twoFactorEnabled !== undefined) {
       updatePayload.twoFactorEnabled = !!twoFactorEnabled;
     }
-    if (pin) {
+
+    if (pin !== undefined && pin !== null && String(pin).trim() !== '') {
       const cleanPin = String(pin).trim();
       if (!/^\d{4,6}$/.test(cleanPin)) {
         return res.status(422).json({
           success: false,
           code: 'INVALID_PIN_FORMAT',
-          message: 'Security PIN must be 4 to 6 digits.'
+          message: 'Security PIN must be exactly 4 to 6 numeric digits.'
         });
       }
+
+      // If the user already has a configured PIN, require current PIN authorization
+      const existingSettings = await userModel.getSecuritySettings(req.user.id);
+      if (existingSettings && existingSettings.hasPin) {
+        if (!currentPin) {
+          return res.status(422).json({
+            success: false,
+            code: 'CURRENT_PIN_REQUIRED',
+            message: 'Current PIN is required to change your transaction PIN.'
+          });
+        }
+        const verifyCurrent = await userModel.verifyPin(req.user.id, currentPin);
+        if (!verifyCurrent.valid) {
+          return res.status(verifyCurrent.code === 'PIN_LOCKED' ? 403 : 401).json({
+            success: false,
+            code: verifyCurrent.code || 'INVALID_CURRENT_PIN',
+            message: verifyCurrent.message || 'Current security PIN is incorrect.'
+          });
+        }
+      }
+
+      // Hash PIN with salted bcrypt
       updatePayload.pinHash = await bcrypt.hash(cleanPin, 10);
     }
 
@@ -320,12 +343,13 @@ exports.verifyPin = async (req, res) => {
     }
 
     const userModel = require('../models/userModel');
-    const isValid = await userModel.verifyPin(req.user.id, pin);
-    if (!isValid) {
-      return res.status(401).json({
+    const result = await userModel.verifyPin(req.user.id, pin);
+    if (!result.valid) {
+      const statusCode = result.code === 'PIN_LOCKED' ? 403 : 401;
+      return res.status(statusCode).json({
         success: false,
-        code: 'INVALID_PIN',
-        message: 'Incorrect security PIN.'
+        code: result.code || 'INVALID_PIN',
+        message: result.message || 'Incorrect security PIN.'
       });
     }
 
@@ -341,7 +365,6 @@ exports.verifyPin = async (req, res) => {
     });
   }
 };
-
 
 exports.getUsers = async (req, res) => {
   try {
@@ -359,16 +382,22 @@ exports.getUsers = async (req, res) => {
 
 exports.googleLogin = async (req, res) => {
   try {
-    const { idToken } = req.body;
-    if (!idToken) {
+    const { idToken, code, codeVerifier, redirectUri } = req.body;
+    if (!idToken && !code) {
       return res.status(400).json({
         success: false,
-        code: 'MISSING_ID_TOKEN',
-        message: 'Google ID token is required.'
+        code: 'MISSING_AUTH_PARAMS',
+        message: 'Google authentication requires either an ID token or an authorization code with PKCE.'
       });
     }
 
-    const data = await authService.googleLoginUser(idToken);
+    const data = await authService.googleLoginUser({
+      idToken,
+      code,
+      codeVerifier,
+      redirectUri
+    });
+
     res.json({
       success: true,
       token: data.token,

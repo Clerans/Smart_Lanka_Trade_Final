@@ -1,6 +1,7 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
+const axios = require('axios');
 const { OAuth2Client } = require('google-auth-library');
 const userModel = require('../models/userModel');
 const otpModel = require('../models/otpModel');
@@ -334,9 +335,61 @@ exports.verifyEmailToken = async (token) => {
   return { message: 'Email verified successfully! You can now log in.' };
 };
 
-exports.googleLoginUser = async (idToken) => {
+exports.googleLoginUser = async (authInput) => {
+  let idToken = null;
+
+  // Handle both string idToken and object { idToken, code, codeVerifier, redirectUri }
+  if (typeof authInput === 'string') {
+    idToken = authInput.trim();
+  } else if (authInput && typeof authInput === 'object') {
+    if (authInput.idToken && typeof authInput.idToken === 'string') {
+      idToken = authInput.idToken.trim();
+    } else if (authInput.code && typeof authInput.code === 'string') {
+      // Exchange Authorization Code with Google Token Endpoint using PKCE
+      const googleWebClientId = process.env.GOOGLE_CLIENT_ID;
+      const googleAndroidClientId = process.env.GOOGLE_ANDROID_CLIENT_ID || googleWebClientId;
+      const clientId = authInput.clientId || googleAndroidClientId || googleWebClientId;
+
+      const tokenParams = {
+        code: authInput.code.trim(),
+        client_id: clientId,
+        grant_type: 'authorization_code',
+        redirect_uri: authInput.redirectUri || 'com.googleusercontent.apps.614054153944-t0flbk67jqulktrs8uf7gnghds8eeh15:/oauth2redirect'
+      };
+
+      if (authInput.codeVerifier) {
+        tokenParams.code_verifier = authInput.codeVerifier;
+      }
+      if (process.env.GOOGLE_CLIENT_SECRET) {
+        tokenParams.client_secret = process.env.GOOGLE_CLIENT_SECRET;
+      }
+
+      try {
+        const tokenExchangeRes = await axios.post(
+          'https://oauth2.googleapis.com/token',
+          new URLSearchParams(tokenParams).toString(),
+          {
+            headers: {
+              'Content-Type': 'application/x-www-form-urlencoded'
+            },
+            timeout: 10000
+          }
+        );
+
+        if (tokenExchangeRes.data && tokenExchangeRes.data.id_token) {
+          idToken = tokenExchangeRes.data.id_token;
+        } else {
+          throw createError('GOOGLE_EXCHANGE_FAILED', 'Google did not return a valid ID token.', 401);
+        }
+      } catch (exchangeErr) {
+        const errMsg = exchangeErr.response?.data?.error_description || exchangeErr.message;
+        throw createError('GOOGLE_EXCHANGE_FAILED', `Google authorization code exchange failed: ${errMsg}`, 401);
+      }
+    }
+  }
+
   if (!idToken || typeof idToken !== 'string') {
-    throw createError('MISSING_TOKEN', 'Google ID token is required.', 400);
+    throw createError('MISSING_TOKEN', 'Google ID token or authorization code is required.', 400);
   }
 
   const googleWebClientId = process.env.GOOGLE_CLIENT_ID;
@@ -344,12 +397,7 @@ exports.googleLoginUser = async (idToken) => {
     throw createError('SERVER_CONFIG_ERROR', 'Google OAuth client ID is not configured on the server.', 500);
   }
 
-  // Accept tokens from both the Web Client ID and the Android Client ID.
-  // The Android client ID may differ from the web client ID; if not configured
-  // separately it falls back to the web client ID.
-  const googleAndroidClientId =
-    process.env.GOOGLE_ANDROID_CLIENT_ID || googleWebClientId;
-
+  const googleAndroidClientId = process.env.GOOGLE_ANDROID_CLIENT_ID || googleWebClientId;
   const acceptedAudiences = [
     googleWebClientId,
     googleAndroidClientId,
@@ -371,6 +419,18 @@ exports.googleLoginUser = async (idToken) => {
     throw createError('INVALID_GOOGLE_TOKEN', 'Google token payload is missing email.', 401);
   }
 
+  // Validate issuer
+  const validIssuers = ['https://accounts.google.com', 'accounts.google.com'];
+  if (!validIssuers.includes(payload.iss)) {
+    throw createError('INVALID_GOOGLE_TOKEN', 'Google token issuer is invalid.', 401);
+  }
+
+  // Validate expiration
+  if (payload.exp && payload.exp * 1000 < Date.now()) {
+    throw createError('INVALID_GOOGLE_TOKEN', 'Google token has expired.', 401);
+  }
+
+  // Verify email is verified by Google
   if (payload.email_verified === false) {
     throw createError('UNVERIFIED_EMAIL', 'Google email is not verified.', 401);
   }
@@ -380,16 +440,47 @@ exports.googleLoginUser = async (idToken) => {
 
   let user = await userModel.findByEmail(email);
   if (!user) {
-    // Create a new user with random password, automatically verified
+    // Safe user creation with secure random password and auto-verification
     const randomPassword = crypto.randomBytes(16).toString('hex');
     const hashedPassword = await bcrypt.hash(randomPassword, 10);
     const token = crypto.randomBytes(32).toString('hex');
     const userId = await userModel.createUser(name, email, hashedPassword, token);
     await userModel.verifyUser(userId);
+
+    // Initialize user wallet if not existing
+    try {
+      const oracledb = require('oracledb');
+      const conn = await oracledb.getConnection();
+      try {
+        const walletCheck = await conn.execute(
+          `SELECT USER_ID FROM WALLETS WHERE USER_ID = :userId`,
+          [userId]
+        );
+        if (!walletCheck.rows || walletCheck.rows.length === 0) {
+          await conn.execute(
+            `INSERT INTO WALLETS (USER_ID, BALANCE_LKR) VALUES (:userId, 1000000.00)`,
+            { userId }
+          );
+          await conn.commit();
+        }
+      } catch (wErr) {
+        // Silently skip if WALLETS table not yet ready or handled by trigger
+      } finally {
+        await conn.close();
+      }
+    } catch (connErr) {
+      // Wallet initialization handled gracefully
+    }
+
     user = await userModel.findByEmail(email);
+  } else {
+    // Existing user: ensure marked verified if Google email is verified
+    if (user.IS_VERIFIED === 0 || user.EMAIL_VERIFIED === 0) {
+      await userModel.verifyUser(user.ID);
+    }
   }
 
-  // Ensure not locked
+  // Check account lockout status
   if (user.ACCOUNT_LOCKED_UNTIL) {
     const lockTime = new Date(user.ACCOUNT_LOCKED_UNTIL);
     if (lockTime > new Date()) {
@@ -402,7 +493,7 @@ exports.googleLoginUser = async (idToken) => {
     }
   }
 
-  // Reset attempts and log login timestamp
+  // Reset failed attempts and log login timestamp
   await userModel.resetFailedAttemptsAndLogLogin(user.ID);
 
   const userRole = user.ROLE || 'USER';

@@ -54,19 +54,26 @@ class WalletFundingService {
     const numAmount = parseFloat(amount);
     const cleanRecipientUid = (recipientUid || '').trim().toUpperCase();
 
-    // Server-enforced High-Value Transaction Rule (> LKR 100,000)
-    if (numAmount > 100000) {
+    // Server-enforced High-Value Transaction Rule (>= LKR 100,000)
+    if (numAmount >= 100000) {
       if (!pin) {
-        const err = new Error('High-value transfers exceeding LKR 100,000 require security PIN verification.');
+        const secSettings = await userModel.getSecuritySettings(senderUserId);
+        if (!secSettings || !secSettings.hasPin) {
+          const err = new Error('PIN setup is required for transactions of LKR 100,000 or more. Please configure your transaction PIN in Security Settings.');
+          err.code = 'PIN_SETUP_REQUIRED';
+          err.status = 422;
+          throw err;
+        }
+        const err = new Error('Transaction PIN is required for transfers of LKR 100,000 or more.');
         err.code = 'HIGH_VALUE_PIN_REQUIRED';
-        err.status = 403;
+        err.status = 422;
         throw err;
       }
-      const isPinValid = await userModel.verifyPin(senderUserId, pin);
-      if (!isPinValid) {
-        const err = new Error('Invalid security PIN for high-value transfer authorization.');
-        err.code = 'INVALID_SECURITY_PIN';
-        err.status = 401;
+      const pinResult = await userModel.verifyPin(senderUserId, pin);
+      if (!pinResult.valid) {
+        const err = new Error(pinResult.message || 'Incorrect transaction PIN.');
+        err.code = pinResult.code || 'INVALID_PIN';
+        err.status = pinResult.code === 'PIN_LOCKED' ? 403 : 401;
         throw err;
       }
     }
@@ -298,19 +305,26 @@ class WalletFundingService {
 
     const numAmount = parseFloat(amount);
 
-    // Server-enforced High-Value Transaction Rule (> LKR 100,000)
-    if (numAmount > 100000) {
+    // Server-enforced High-Value Transaction Rule (>= LKR 100,000)
+    if (numAmount >= 100000) {
       if (!pin) {
-        const err = new Error('High-value withdrawals exceeding LKR 100,000 require security PIN verification.');
+        const secSettings = await userModel.getSecuritySettings(userId);
+        if (!secSettings || !secSettings.hasPin) {
+          const err = new Error('PIN setup is required for transactions of LKR 100,000 or more. Please configure your transaction PIN in Security Settings.');
+          err.code = 'PIN_SETUP_REQUIRED';
+          err.status = 422;
+          throw err;
+        }
+        const err = new Error('Transaction PIN is required for withdrawals of LKR 100,000 or more.');
         err.code = 'HIGH_VALUE_PIN_REQUIRED';
-        err.status = 403;
+        err.status = 422;
         throw err;
       }
-      const isPinValid = await userModel.verifyPin(userId, pin);
-      if (!isPinValid) {
-        const err = new Error('Invalid security PIN for high-value withdrawal authorization.');
-        err.code = 'INVALID_SECURITY_PIN';
-        err.status = 401;
+      const pinResult = await userModel.verifyPin(userId, pin);
+      if (!pinResult.valid) {
+        const err = new Error(pinResult.message || 'Incorrect transaction PIN.');
+        err.code = pinResult.code || 'INVALID_PIN';
+        err.status = pinResult.code === 'PIN_LOCKED' ? 403 : 401;
         throw err;
       }
     }

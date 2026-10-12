@@ -213,9 +213,10 @@ export const authService = {
       throw error;
     }
   },
-  googleLogin: async (idToken: string) => {
+  googleLogin: async (authParams: string | { idToken?: string; code?: string; codeVerifier?: string; redirectUri?: string; clientId?: string }) => {
     try {
-      const response = await api.post('/auth/google-login', { idToken });
+      const payload = typeof authParams === 'string' ? { idToken: authParams } : authParams;
+      const response = await api.post('/auth/google-login', payload);
       if (response.data && response.data.token) {
         await storageService.setToken(response.data.token);
         if (response.data.user) {
@@ -268,7 +269,7 @@ export const authService = {
       throw error;
     }
   },
-  updateSecuritySettings: async (settings: { twoFactorEnabled?: boolean; pin?: string }) => {
+  updateSecuritySettings: async (settings: { twoFactorEnabled?: boolean; pin?: string; currentPin?: string }) => {
     try {
       const response = await api.put('/auth/security-settings', settings);
       return response.data;
