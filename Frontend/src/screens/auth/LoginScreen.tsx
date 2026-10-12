@@ -25,7 +25,7 @@ import { storageService } from '../../services/storageService';
 // Configure Native Google Sign-In with Web Client ID for server authorization
 const GOOGLE_WEB_CLIENT_ID =
   process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID ||
-  '614054153944-7figt10pghsb14tg764jj3hfnktkqnbt.apps.googleusercontent.com';
+  '614054153944-tsftd7h3hmj1d43ave18m0cnrfmpf8v1.apps.googleusercontent.com';
 
 // Expo Go sandbox does not include custom native modules like RNGoogleSignin.
 // We dynamically require GoogleSignin only in standalone / bare / dev builds to prevent runtime crashes in Expo Go.

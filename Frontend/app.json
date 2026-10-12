@@ -24,6 +24,7 @@
       },
       "predictiveBackGestureEnabled": false,
       "package": "com.michael_clerans.SmartLankaTrade",
+      "versionCode": 2,
       "permissions": [
         "USE_BIOMETRIC",
         "USE_FINGERPRINT",

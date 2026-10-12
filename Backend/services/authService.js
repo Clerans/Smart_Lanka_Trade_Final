@@ -554,6 +554,7 @@ exports.googleLoginUser = async (authInput) => {
   const acceptedAudiences = Array.from(new Set([
     googleWebClientId,
     googleAndroidClientId,
+    '614054153944-tsftd7h3hmj1d43ave18m0cnrfmpf8v1.apps.googleusercontent.com',
     '614054153944-7figt10pghsb14tg764jj3hfnktkqnbt.apps.googleusercontent.com',
     '614054153944-39dgjpn4vskvm4e494ajiip01gaks2cs.apps.googleusercontent.com',
     '614054153944-t0flbk67jqulktrs8uf7gnghds8eeh15.apps.googleusercontent.com',
