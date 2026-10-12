@@ -481,6 +481,57 @@ async function runTestSuite() {
   }
 
   // -------------------------------------------------------------
+  // SUITE 9: Firebase Complete Deprecation & Removal Invariants
+  // -------------------------------------------------------------
+  console.log('\nSUITE 9: Complete Firebase Absence & Native Auth Invariants');
+  try {
+    const fs = require('fs');
+    const path = require('path');
+
+    // 9.1 Manifest checks
+    const backendPkg = require('../package.json');
+    const backendDeps = { ...backendPkg.dependencies, ...backendPkg.devDependencies };
+    assert(!('firebase' in backendDeps), 'Backend dependencies contain zero "firebase" packages');
+    assert(!('firebase-admin' in backendDeps), 'Backend dependencies contain zero "firebase-admin" packages');
+
+    const frontendPkgPath = path.join(__dirname, '..', '..', 'Frontend', 'package.json');
+    if (fs.existsSync(frontendPkgPath)) {
+      const frontendPkg = JSON.parse(fs.readFileSync(frontendPkgPath, 'utf8'));
+      const frontendDeps = { ...frontendPkg.dependencies, ...frontendPkg.devDependencies };
+      assert(!('firebase' in frontendDeps), 'Frontend dependencies contain zero "firebase" packages');
+      assert(!('@react-native-firebase/app' in frontendDeps), 'Frontend contains zero @react-native-firebase packages');
+    }
+
+    // 9.2 Obsolete config files absence
+    const obsoleteFiles = [
+      path.join(__dirname, '..', '..', 'Frontend', 'src', 'config', 'firebase.ts'),
+      path.join(__dirname, '..', '..', 'Frontend', 'src', 'services', 'firebaseAuthService.ts'),
+      path.join(__dirname, '..', '..', 'Frontend', 'google-services.json'),
+      path.join(__dirname, '..', 'config', 'firebaseAdmin.js'),
+      path.join(__dirname, '..', 'middleware', 'firebaseAuthMiddleware.js')
+    ];
+    let allObsoleteFilesAbsent = true;
+    for (const f of obsoleteFiles) {
+      if (fs.existsSync(f)) {
+        allObsoleteFilesAbsent = false;
+        break;
+      }
+    }
+    assert(allObsoleteFilesAbsent, 'All obsolete Firebase configuration files and services deleted');
+
+    // 9.3 Middleware & UserModel decoupling
+    const middlewareSource = fs.readFileSync(path.join(__dirname, '..', 'middleware', 'authMiddleware.js'), 'utf8');
+    assert(!middlewareSource.includes('firebaseUid') && !middlewareSource.includes('FIREBASE_UID'),
+      'Auth middleware verifies application JWT with zero firebaseUid references');
+
+    const userModelSource = fs.readFileSync(path.join(__dirname, '..', 'models', 'userModel.js'), 'utf8');
+    assert(!userModelSource.includes('findByFirebaseUid') && !userModelSource.includes('linkFirebaseUid') && !userModelSource.includes('FIREBASE_UID'),
+      'UserModel queries Oracle SL_USERS with zero FIREBASE_UID dependencies');
+  } catch (err) {
+    assert(false, 'Suite 9 execution', err.message);
+  }
+
+  // -------------------------------------------------------------
   // FINAL REPORT
   // -------------------------------------------------------------
   console.log('\n================================================================');
