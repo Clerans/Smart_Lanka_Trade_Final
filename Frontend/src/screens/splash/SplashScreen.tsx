@@ -28,6 +28,13 @@ export const SplashScreen = () => {
           const { storageService } = require('../../services/storageService');
           const rememberMe = await AsyncStorage.getItem('rememberMe');
           const token = await storageService.getToken();
+          const bioPref = await AsyncStorage.getItem('@pref_biometric');
+
+          // If biometric security is enabled, never bypass - route to Login for biometric challenge
+          if (bioPref === 'true') {
+            navigation.replace('Login');
+            return;
+          }
 
           if (rememberMe === 'true' && token) {
             try {

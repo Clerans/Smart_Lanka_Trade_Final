@@ -154,6 +154,12 @@ export const TradingTerminalScreen = () => {
 
   return (
     <SafeAreaView style={styles.safeArea}>
+      <Toast
+        visible={toastVisible}
+        message={toastMessage}
+        type={toastType}
+        onDismiss={() => setToastVisible(false)}
+      />
       <KeyboardAvoidingView
         style={styles.keyboardAvoiding}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -351,8 +357,15 @@ export const TradingTerminalScreen = () => {
             </Card>
 
             <PrimaryButton
-              title={tradeType === 'BUY' ? 'CONFIRM BUY ORDER →' : 'CONFIRM SELL ORDER →'}
-              onPress={() => { }}
+              title={
+                submittingOrder
+                  ? 'EXECUTING ORDER...'
+                  : tradeType === 'BUY'
+                  ? 'CONFIRM BUY ORDER →'
+                  : 'CONFIRM SELL ORDER →'
+              }
+              onPress={handleConfirmOrder}
+              disabled={submittingOrder}
               style={tradeType === 'SELL' ? { backgroundColor: colors.red } : {}}
             />
           </View>
@@ -361,40 +374,58 @@ export const TradingTerminalScreen = () => {
           <View style={styles.recentSection}>
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>Recent Transactions</Text>
-              <TouchableOpacity><Text style={styles.seeAllText}>View All</Text></TouchableOpacity>
+              <TouchableOpacity onPress={() => navigation.navigate('WalletTab')}>
+                <Text style={styles.seeAllText}>View All</Text>
+              </TouchableOpacity>
             </View>
 
-            {[
-              { id: 1, type: 'Buy', pair: 'BTC/LKR', amount: '+0.0015 BTC', status: 'Completed', isBuy: true },
-              { id: 2, type: 'Sell', pair: 'ETH/LKR', amount: '-0.2400 ETH', status: 'Pending', isBuy: false },
-              { id: 3, type: 'Buy', pair: 'SOL/LKR', amount: '+12.50 SOL', status: 'Completed', isBuy: true },
-            ].map((tx) => (
-              <View key={tx.id} style={styles.txRow}>
-                <View style={styles.txLeft}>
-                  <View style={[styles.txIconContainer, tx.isBuy ? styles.txBgGreen : styles.txBgRed]}>
-                    <MaterialIcons
-                      name={tx.isBuy ? 'call-received' : 'call-made'}
-                      size={20}
-                      color={tx.isBuy ? colors.accent : colors.red}
-                    />
+            {recentTransactions.length > 0 ? (
+              recentTransactions.slice(0, 5).map((tx) => {
+                const isBuy = tx.action === 'BUY' || tx.action === 'DEPOSIT';
+                const pair = tx.coin ? `${tx.coin}/LKR` : 'LKR';
+                const typeLabel = tx.action === 'BUY' ? 'Buy' : tx.action === 'SELL' ? 'Sell' : tx.action;
+                const formattedDate = tx.date ? new Date(tx.date).toLocaleDateString() : 'Today';
+                const formattedAmt = `${isBuy ? '+' : '-'}${
+                  tx.quantity ? tx.quantity.toFixed(4) + ' ' + (tx.coin || '') : formatLKR(tx.total, 2) + ' LKR'
+                }`;
+                const isCompleted = (tx.status || '').toUpperCase() === 'COMPLETED';
+
+                return (
+                  <View key={tx.id} style={styles.txRow}>
+                    <View style={styles.txLeft}>
+                      <View style={[styles.txIconContainer, isBuy ? styles.txBgGreen : styles.txBgRed]}>
+                        <MaterialIcons
+                          name={isBuy ? 'call-received' : 'call-made'}
+                          size={20}
+                          color={isBuy ? colors.accent : colors.red}
+                        />
+                      </View>
+                      <View>
+                        <Text style={styles.txPair}>{pair}</Text>
+                        <Text style={styles.txTime}>{formattedDate}, {typeLabel}</Text>
+                      </View>
+                    </View>
+                    <View style={styles.txRight}>
+                      <Text style={[styles.txAmount, isBuy ? styles.txAmountGreen : styles.txAmountRed]}>
+                        {formattedAmt}
+                      </Text>
+                      <View style={[styles.statusBadge, isCompleted ? styles.statusCompleted : styles.statusPending]}>
+                        <Text style={[styles.statusText, isCompleted ? styles.statusTextCompleted : styles.statusTextPending]}>
+                          {tx.status || 'Completed'}
+                        </Text>
+                      </View>
+                    </View>
                   </View>
-                  <View>
-                    <Text style={styles.txPair}>{tx.pair}</Text>
-                    <Text style={styles.txTime}>Today, {tx.type}</Text>
-                  </View>
-                </View>
-                <View style={styles.txRight}>
-                  <Text style={[styles.txAmount, tx.isBuy ? styles.txAmountGreen : styles.txAmountRed]}>
-                    {tx.amount}
-                  </Text>
-                  <View style={[styles.statusBadge, tx.status === 'Completed' ? styles.statusCompleted : styles.statusPending]}>
-                    <Text style={[styles.statusText, tx.status === 'Completed' ? styles.statusTextCompleted : styles.statusTextPending]}>
-                      {tx.status}
-                    </Text>
-                  </View>
-                </View>
+                );
+              })
+            ) : (
+              <View style={{ paddingVertical: 24, alignItems: 'center' }}>
+                <MaterialIcons name="receipt-long" size={36} color={colors.textMuted} />
+                <Text style={{ color: colors.textSecondary, marginTop: 8, fontSize: 13 }}>
+                  No recent orders recorded yet.
+                </Text>
               </View>
-            ))}
+            )}
           </View>
 
         </ScrollView>

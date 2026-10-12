@@ -374,6 +374,30 @@ export const LoginScreen = () => {
     }
   };
 
+  const hasPromptedAutoBiometrics = useRef(false);
+
+  useEffect(() => {
+    const triggerAutoBiometrics = async () => {
+      if (hasPromptedAutoBiometrics.current) return;
+      try {
+        const bioPref = await AsyncStorage.getItem('@pref_biometric');
+        if (bioPref === 'true') {
+          const hasSession = await storageService.hasBiometricSession();
+          if (hasSession) {
+            hasPromptedAutoBiometrics.current = true;
+            setTimeout(() => {
+              handleBiometricLogin();
+            }, 350);
+          }
+        }
+      } catch (err) {
+        console.warn('Auto biometric prompt error:', err);
+      }
+    };
+
+    triggerAutoBiometrics();
+  }, []);
+
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right', 'bottom']}>
       {isNetworkError && (
