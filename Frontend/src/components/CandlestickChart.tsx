@@ -117,13 +117,14 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
     const liveTimer = setInterval(async () => {
       try {
         const liveRes = await marketService.getPriceLKR(symbol);
-        if (liveRes && liveRes.priceUSDT) {
-          const currentUSD = liveRes.priceUSDT;
-          const currentRate = liveRes.usdToLkr || usdToLkr;
-          const currentLKR = liveRes.priceLKR || (currentUSD * currentRate);
+        const payload = liveRes?.data || liveRes;
+        if (payload && (payload.priceUSDT || payload.priceLKR)) {
+          const currentUSD = payload.priceUSDT || (payload.priceLKR / (payload.usdToLkr || usdToLkr));
+          const currentRate = payload.usdToLkr || usdToLkr;
+          const currentLKR = payload.priceLKR || (currentUSD * currentRate);
 
           if (onPriceUpdate) {
-            onPriceUpdate(currentLKR, liveRes.changePercent ?? 0);
+            onPriceUpdate(currentLKR, payload.changePercent ?? 0);
           }
 
           // Dynamically update the currently active candle in the series
