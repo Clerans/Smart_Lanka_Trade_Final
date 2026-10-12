@@ -37,10 +37,12 @@ export const SecuritySettingsScreen = () => {
   const [supportsFingerprint, setSupportsFingerprint] = useState(false);
   const [hasBiometricSession, setHasBiometricSession] = useState(false);
 
-  // Loading States
+  // Loading & Sync States
   const [isUpdating2FA, setIsUpdating2FA] = useState(false);
   const [isSavingPin, setIsSavingPin] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [serverSyncLoaded, setServerSyncLoaded] = useState(false);
+  const [serverSyncError, setServerSyncError] = useState<string | null>(null);
 
   // Modal States
   const [pinModalVisible, setPinModalVisible] = useState(false);
@@ -110,20 +112,17 @@ export const SecuritySettingsScreen = () => {
         if (secRes?.success && secRes?.data) {
           setTwoFactorEnabled(!!secRes.data.twoFactorEnabled);
           setHasServerPin(!!secRes.data.hasPin);
+          setServerSyncLoaded(true);
+          setServerSyncError(null);
           await AsyncStorage.setItem('@pref_2fa', String(secRes.data.twoFactorEnabled));
         } else {
           throw new Error(secRes?.message || 'Server returned invalid security configuration');
         }
       } catch (secErr: any) {
-        console.warn('Could not fetch authoritative security settings:', secErr.message);
-        const tfa = await AsyncStorage.getItem('@pref_2fa');
-        if (tfa !== null) {
-          setTwoFactorEnabled(tfa === 'true');
-        }
-        Alert.alert(
-          'Security Settings Notice',
-          'Unable to verify live security settings from the server. Using cached configuration.'
-        );
+        const errMsg = secErr?.response?.data?.message || secErr?.message || 'Security server synchronization failed';
+        console.warn('Could not fetch authoritative security settings:', errMsg);
+        setServerSyncLoaded(false);
+        setServerSyncError(errMsg);
       }
     } catch {
       // ignore load errors
@@ -245,6 +244,14 @@ export const SecuritySettingsScreen = () => {
 
   // Authoritative Server-Enforced 2FA Toggle
   const handle2FAToggle = async (val: boolean) => {
+    if (!serverSyncLoaded) {
+      Alert.alert(
+        'Server Sync Required',
+        'Authoritative security settings could not be verified from the server. Please pull down to refresh before modifying Two-Factor Authentication.'
+      );
+      return;
+    }
+
     setIsUpdating2FA(true);
     try {
       const res = await authService.updateSecuritySettings({ twoFactorEnabled: val });
@@ -273,6 +280,14 @@ export const SecuritySettingsScreen = () => {
 
   // Backend Transaction PIN Submit (Enforced on Oracle backend with bcrypt & lockout)
   const handleSavePin = async () => {
+    if (!serverSyncLoaded) {
+      Alert.alert(
+        'Server Sync Required',
+        'Authoritative security settings could not be verified from the server. Please pull down to refresh before modifying your PIN.'
+      );
+      return;
+    }
+
     const cleanPin = pin.trim();
     const cleanConfirm = confirmPin.trim();
     const cleanCurrent = currentPin.trim();
@@ -394,6 +409,19 @@ export const SecuritySettingsScreen = () => {
           <View style={{ width: 24 }} />
         </View>
 
+        {/* Server Sync Error Alert Banner */}
+        {serverSyncError && (
+          <View style={styles.errorBanner}>
+            <MaterialIcons name="cloud-off" size={20} color={colors.red} style={{ marginRight: 10, marginTop: 2 }} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.errorBannerTitle}>Security Server Offline</Text>
+              <Text style={styles.errorBannerText}>
+                Authoritative security settings could not be verified from the server ({serverSyncError}). Sensitive setting changes are paused for your security. Pull down to retry.
+              </Text>
+            </View>
+          </View>
+        )}
+
         {/* Security Architecture Overview Info Box */}
         <View style={styles.infoBanner}>
           <MaterialIcons name="security" size={20} color={colors.accent} style={{ marginRight: 10, marginTop: 2 }} />
@@ -474,11 +502,13 @@ export const SecuritySettingsScreen = () => {
           <View style={styles.settingRow}>
             <View style={styles.settingLeft}>
               <View style={styles.iconBg}>
-                <MaterialIcons name="phonelink-lock" size={20} color={colors.accent} />
+                <MaterialIcons name="phonelink-lock" size={20} color={serverSyncLoaded ? colors.accent : colors.textSecondary} />
               </View>
               <View style={{ flex: 1, paddingRight: 8 }}>
                 <Text style={styles.settingText}>Two-Factor Auth (2FA)</Text>
-                <Text style={styles.subSettingText}>Server-verified OTP for high-value actions</Text>
+                <Text style={styles.subSettingText}>
+                  {!serverSyncLoaded ? 'Server sync required (Read-only)' : 'Server-verified OTP for high-value actions'}
+                </Text>
               </View>
             </View>
             {isUpdating2FA ? (
@@ -489,6 +519,7 @@ export const SecuritySettingsScreen = () => {
                 thumbColor={'#FFF'}
                 ios_backgroundColor="#3e3e3e"
                 value={twoFactorEnabled}
+                disabled={!serverSyncLoaded || isUpdating2FA}
                 onValueChange={handle2FAToggle}
               />
             )}
@@ -502,6 +533,13 @@ export const SecuritySettingsScreen = () => {
           <TouchableOpacity
             style={styles.actionRow}
             onPress={() => {
+              if (!serverSyncLoaded) {
+                Alert.alert(
+                  'Server Sync Required',
+                  'Unable to verify transaction PIN status from the server. Please pull down to refresh before modifying your PIN.'
+                );
+                return;
+              }
               setCurrentPin('');
               setPin('');
               setConfirmPin('');
@@ -517,7 +555,7 @@ export const SecuritySettingsScreen = () => {
                   {hasServerPin ? 'Change Transaction PIN' : 'Set Transaction PIN'}
                 </Text>
                 <Text style={[styles.actionSubtext, hasServerPin && { color: colors.accent }]}>
-                  {hasServerPin ? 'Server-Enforced PIN Configured' : 'Setup Required for ≥ 100K LKR'}
+                  {!serverSyncLoaded ? 'Server sync required' : hasServerPin ? 'Server-Enforced PIN Configured' : 'Setup Required for ≥ 100K LKR'}
                 </Text>
               </View>
             </View>
@@ -805,6 +843,29 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   infoBannerText: {
+    ...typography.bodySmall,
+    color: colors.textSecondary,
+    fontSize: 11,
+    lineHeight: 16,
+  },
+  errorBanner: {
+    flexDirection: 'row',
+    backgroundColor: 'rgba(255, 82, 82, 0.08)',
+    borderRadius: layout.borderRadius,
+    marginHorizontal: SCREEN_PADDING,
+    marginBottom: 16,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 82, 82, 0.3)',
+  },
+  errorBannerTitle: {
+    ...typography.body,
+    fontWeight: '700',
+    color: colors.red,
+    fontSize: 13,
+    marginBottom: 4,
+  },
+  errorBannerText: {
     ...typography.bodySmall,
     color: colors.textSecondary,
     fontSize: 11,
