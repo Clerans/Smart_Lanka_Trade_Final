@@ -278,8 +278,8 @@ exports.getSecuritySettings = async (userId) => {
       pinLockMinutesRemaining: minutesRemaining
     };
   } catch (err) {
-    console.error(`[userModel.getSecuritySettings] Database error fetching security settings for user ${userId}:`, err.message);
-    const dbErr = new Error(`Database error retrieving user security settings: ${err.message}`);
+    console.error(`[userModel.getSecuritySettings] Database error fetching security settings for user ${userId}:`, err);
+    const dbErr = new Error('Database error retrieving user security settings');
     dbErr.code = 'DATABASE_ERROR';
     dbErr.status = 500;
     throw dbErr;

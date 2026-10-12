@@ -190,7 +190,7 @@ exports.consumePasswordResetAndSetPassword = async (resetId, userId, hashedPassw
     }
 
     // 2. In the same atomic transaction, update the user's password and reset security lockout
-    await connection.execute(
+    const updateUserResult = await connection.execute(
       `UPDATE SL_USERS 
        SET PASSWORD = :hashedPassword, 
            FAILED_LOGIN_ATTEMPTS = 0, 
@@ -200,6 +200,11 @@ exports.consumePasswordResetAndSetPassword = async (resetId, userId, hashedPassw
        WHERE ID = :userId`,
       { hashedPassword, userId }
     );
+
+    if (!updateUserResult || updateUserResult.rowsAffected !== 1) {
+      await connection.rollback();
+      return { success: false, reason: 'USER_NOT_FOUND_OR_NOT_UPDATED' };
+    }
 
     // 3. Invalidate any other active reset tokens for this user to guarantee single-use lifecycle
     await connection.execute(

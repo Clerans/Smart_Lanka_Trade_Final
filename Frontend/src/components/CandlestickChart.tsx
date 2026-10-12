@@ -70,7 +70,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [isLkrMode, setIsLkrMode] = useState<boolean>(true);
-  const [connectionStatus, setConnectionStatus] = useState<'live' | 'stale' | 'disconnected'>('live');
+  const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'live' | 'stale' | 'disconnected'>('connecting');
   const [lastUpdated, setLastUpdated] = useState<number | null>(null);
   const consecutiveErrorsRef = useRef<number>(0);
 
@@ -91,21 +91,21 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
       const res = await marketService.getKlines(symbol, targetInterval, 45);
 
       if (res?.success && Array.isArray(res.data?.candles) && res.data.candles.length > 0) {
-        // Validate candle integrity & timestamps
+        // Validate candle integrity & timestamps & strict OHLC consistency
         const validCandles = res.data.candles
           .filter((c: Candle) => (
             typeof c.timestamp === 'number' &&
-            !isNaN(c.open) && !isNaN(c.high) && !isNaN(c.low) && !isNaN(c.close) &&
-            c.open > 0 && c.close > 0
+            Number.isFinite(c.open) && Number.isFinite(c.high) && Number.isFinite(c.low) && Number.isFinite(c.close) &&
+            c.open > 0 && c.close > 0 && c.high > 0 && c.low > 0 &&
+            c.high >= Math.max(c.open, c.close) &&
+            c.low <= Math.min(c.open, c.close) &&
+            c.high >= c.low
           ))
           .sort((a: Candle, b: Candle) => a.timestamp - b.timestamp);
 
         if (validCandles.length > 0) {
           setCandles(validCandles);
           if (res.data.usdToLkr) setUsdToLkr(res.data.usdToLkr);
-          setConnectionStatus('live');
-          setLastUpdated(Date.now());
-          consecutiveErrorsRef.current = 0;
 
           const last = validCandles[validCandles.length - 1];
           if (last && onPriceUpdate) {
@@ -143,36 +143,41 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
           const currentRate = payload.usdToLkr || usdToLkr;
           const currentLKR = payload.priceLKR || (currentUSD * currentRate);
 
-          if (onPriceUpdate) {
-            onPriceUpdate(currentLKR, payload.changePercent ?? 0);
-          }
-
-          // Dynamically update the currently active candle in the series
-          setCandles(prev => {
-            if (!prev || prev.length === 0) return prev;
-            const updated = [...prev];
-            const lastIdx = updated.length - 1;
-            const activeCandle = { ...updated[lastIdx] };
-
-            activeCandle.high = Math.max(activeCandle.high, currentUSD);
-            activeCandle.low = Math.min(activeCandle.low, currentUSD);
-            activeCandle.close = currentUSD;
-            activeCandle.highLKR = activeCandle.high * currentRate;
-            activeCandle.lowLKR = activeCandle.low * currentRate;
-            activeCandle.closeLKR = currentLKR;
-
-            // Update volume only from valid volume payload
-            if (typeof payload.volume === 'number' && payload.volume > 0) {
-              activeCandle.volume = payload.volume;
+          if (Number.isFinite(currentUSD) && currentUSD > 0 && Number.isFinite(currentLKR) && currentLKR > 0) {
+            if (onPriceUpdate) {
+              onPriceUpdate(currentLKR, payload.changePercent ?? 0);
             }
 
-            updated[lastIdx] = activeCandle;
-            return updated;
-          });
+            // Dynamically update the currently active candle in the series
+            setCandles(prev => {
+              if (!prev || prev.length === 0) return prev;
+              const updated = [...prev];
+              const lastIdx = updated.length - 1;
+              const activeCandle = { ...updated[lastIdx] };
 
-          setConnectionStatus('live');
-          setLastUpdated(Date.now());
-          consecutiveErrorsRef.current = 0;
+              activeCandle.high = Math.max(activeCandle.high, currentUSD);
+              activeCandle.low = Math.min(activeCandle.low, currentUSD);
+              activeCandle.close = currentUSD;
+              activeCandle.highLKR = activeCandle.high * currentRate;
+              activeCandle.lowLKR = activeCandle.low * currentRate;
+              activeCandle.closeLKR = currentLKR;
+
+              // Update volume only from valid volume payload
+              if (Number.isFinite(payload.volume) && payload.volume > 0) {
+                activeCandle.volume = payload.volume;
+              }
+
+              updated[lastIdx] = activeCandle;
+              return updated;
+            });
+
+            // Set connectionStatus to 'live' strictly after current ticker response arrives
+            setConnectionStatus('live');
+            setLastUpdated(Date.now());
+            consecutiveErrorsRef.current = 0;
+          } else {
+            throw new Error('Non-finite price received from ticker');
+          }
         } else {
           throw new Error('Incomplete ticker data received');
         }
@@ -650,6 +655,8 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
               styles.statusDot,
               connectionStatus === 'live'
                 ? styles.statusDotLive
+                : connectionStatus === 'connecting'
+                ? styles.statusDotStale
                 : connectionStatus === 'stale'
                 ? styles.statusDotStale
                 : styles.statusDotDisconnected
@@ -660,6 +667,8 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
               styles.liveIndicatorText,
               connectionStatus === 'live'
                 ? styles.liveTextGreen
+                : connectionStatus === 'connecting'
+                ? styles.liveTextAmber
                 : connectionStatus === 'stale'
                 ? styles.liveTextAmber
                 : styles.liveTextRed
@@ -667,6 +676,8 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
           >
             {connectionStatus === 'live'
               ? 'Binance Live'
+              : connectionStatus === 'connecting'
+              ? 'Connecting...'
               : connectionStatus === 'stale'
               ? 'Feed Stale'
               : 'Disconnected'}

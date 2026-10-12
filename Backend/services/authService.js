@@ -420,34 +420,28 @@ exports.resetPassword = async (email, otp, newPassword, resetToken) => {
 
   let resetRecordId = null;
 
-  // 1. Verify via server-issued resetToken credentials if provided
-  if (resetToken && typeof resetToken === 'string') {
-    try {
-      const decoded = jwt.verify(resetToken, process.env.JWT_SECRET);
-      if (decoded.purpose !== 'PASSWORD_RESET' || decoded.email.toLowerCase() !== cleanEmail) {
-        throw createError('INVALID_RESET_TOKEN', 'Invalid reset token authorization.', 403);
-      }
-      const record = await verificationModel.findPasswordResetOTPById(decoded.resetId);
-      if (!record || record.USED !== 0 || new Date(record.EXPIRES_AT) < new Date()) {
-        throw createError('RESET_TOKEN_EXPIRED', 'Password reset session has expired or was already used.', 403);
-      }
-      resetRecordId = record.ID;
-    } catch (tokenErr) {
-      if (tokenErr.code) throw tokenErr;
-      throw createError('INVALID_RESET_TOKEN', 'Invalid or expired password reset session.', 403);
+  // Require server-authorized resetToken issued upon successful cryptographic OTP verification
+  if (!resetToken || typeof resetToken !== 'string') {
+    throw createError(
+      'RESET_TOKEN_REQUIRED',
+      'A server-authorized password reset session token is required. Please verify your verification code first.',
+      403
+    );
+  }
+
+  try {
+    const decoded = jwt.verify(resetToken, process.env.JWT_SECRET);
+    if (decoded.purpose !== 'PASSWORD_RESET' || decoded.email.toLowerCase() !== cleanEmail) {
+      throw createError('INVALID_RESET_TOKEN', 'Invalid reset token authorization.', 403);
     }
-  } else if (otp) {
-    // 2. Fallback to direct OTP verification
-    const record = await verificationModel.findPasswordResetOTP(cleanEmail, otp);
-    if (!record || record.USED !== 0) {
-      throw createError('OTP_INVALID', 'Invalid or expired verification code.', 422);
-    }
-    if (new Date(record.EXPIRES_AT) < new Date()) {
-      throw createError('OTP_EXPIRED', 'Verification code has expired.', 422);
+    const record = await verificationModel.findPasswordResetOTPById(decoded.resetId);
+    if (!record || record.USED !== 0 || new Date(record.EXPIRES_AT) < new Date()) {
+      throw createError('RESET_TOKEN_EXPIRED', 'Password reset session has expired or was already used.', 403);
     }
     resetRecordId = record.ID;
-  } else {
-    throw createError('MISSING_CREDENTIALS', 'Server-authorized reset token or OTP code is required.', 422);
+  } catch (tokenErr) {
+    if (tokenErr.code) throw tokenErr;
+    throw createError('INVALID_RESET_TOKEN', 'Invalid or expired password reset session.', 403);
   }
 
   // Hash new password with salted bcrypt

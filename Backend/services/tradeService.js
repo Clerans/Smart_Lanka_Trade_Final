@@ -115,14 +115,14 @@ const executeBuyOrder = async (userId, symbol, amountLKR) => {
 
     // Fetch updated wallet details
     const updatedWallet = await walletModel.findWalletByUserId(userId);
-    const orderId = `ORD-BUY-${txId || Date.now()}`;
+    const orderId = `ORD-BUY-${txId}`;
 
     return {
       success: true,
       message: `Successfully purchased ${quantity.toFixed(6)} ${symbol.replace('USDT', '')}`,
       order: {
         orderId,
-        transactionId: txId || null,
+        transactionId: txId,
         symbol,
         side: 'BUY',
         orderType: 'MARKET',
@@ -233,14 +233,14 @@ const executeSellOrder = async (userId, symbol, quantity) => {
 
     // Fetch updated wallet details
     const updatedWallet = await walletModel.findWalletByUserId(userId);
-    const orderId = `ORD-SELL-${txId || Date.now()}`;
+    const orderId = `ORD-SELL-${txId}`;
 
     return {
       success: true,
       message: `Successfully sold ${numQty} ${symbol.replace('USDT', '')}`,
       order: {
         orderId,
-        transactionId: txId || null,
+        transactionId: txId,
         symbol,
         side: 'SELL',
         orderType: 'MARKET',

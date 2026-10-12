@@ -264,10 +264,13 @@ exports.getSecuritySettings = async (req, res) => {
       data: settings
     });
   } catch (err) {
+    const correlationId = 'SEC-' + Date.now().toString(36);
+    console.error(`[authController.getSecuritySettings] [${correlationId}]`, err);
     res.status(err.status || 500).json({
       success: false,
       code: err.code || 'SERVER_ERROR',
-      message: err.message
+      message: 'Unable to retrieve security settings from server at this time.',
+      correlationId
     });
   }
 };

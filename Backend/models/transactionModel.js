@@ -13,24 +13,13 @@ const createTransaction = async (connection, userId, symbol, type, quantity, pri
       }
     );
     const txId = result?.outBinds?.txId?.[0];
+    if (!txId) {
+      throw new Error('Database failed to return generated transaction ID for inserted order.');
+    }
     if (!connection) {
       await conn.commit();
     }
     return txId;
-  } catch (err) {
-    // Fallback if RETURNING clause is unsupported in certain table triggers
-    if (err.message && err.message.includes('ORA-')) {
-      await conn.execute(
-        `INSERT INTO TRANSACTIONS (USER_ID, SYMBOL, TRANSACTION_TYPE, QUANTITY, PRICE, TOTAL_AMOUNT, STATUS) 
-         VALUES (:userId, :symbol, :type, :quantity, :price, :totalAmount, :status)`,
-        { userId, symbol, type, quantity, price, totalAmount, status }
-      );
-      if (!connection) {
-        await conn.commit();
-      }
-      return null;
-    }
-    throw err;
   } finally {
     if (!connection) await conn.close();
   }
