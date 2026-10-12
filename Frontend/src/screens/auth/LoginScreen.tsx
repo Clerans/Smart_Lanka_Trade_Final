@@ -53,16 +53,18 @@ export const LoginScreen = () => {
 
   const googleAndroidClientId =
     process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID ||
-    '614054153944-t0flbk67jqulktrs8uf7gnghds8eeh15.apps.googleusercontent.com';
+    '614054153944-uipn34jn1loslr40qe15i99upspv4l7j.apps.googleusercontent.com';
 
   // Authorization Code Flow with PKCE
-  const androidRedirectUri = 'com.googleusercontent.apps.614054153944-t0flbk67jqulktrs8uf7gnghds8eeh15:/oauth2redirect';
+  const androidScheme = (googleAndroidClientId || '').replace('.apps.googleusercontent.com', '');
+  const androidRedirectUri = `com.googleusercontent.apps.${androidScheme}:/oauth2redirect`;
   const defaultRedirectUri = AuthSession.makeRedirectUri({ scheme: 'smartlankatrade' });
   const redirectUri = Platform.OS === 'android' ? androidRedirectUri : defaultRedirectUri;
 
   const [request, response, promptAsync] = Google.useAuthRequest({
     clientId: googleWebClientId,
     webClientId: googleWebClientId,
+    androidClientId: googleAndroidClientId,
     scopes: ['openid', 'profile', 'email'],
     redirectUri,
   });

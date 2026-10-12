@@ -84,6 +84,7 @@ async function main() {
   runTest('OAUTH: Wrong audience (aud) is rejected', () => {
     const allowedAudiences = [
       '614054153944-7figt10pghsbfsm7l30o76r98eou6pbb.apps.googleusercontent.com',
+      '614054153944-uipn34jn1loslr40qe15i99upspv4l7j.apps.googleusercontent.com',
       '614054153944-t0flbk67jqulktrs8uf7gnghds8eeh15.apps.googleusercontent.com'
     ];
     const maliciousAud = 'rogue-app-client-id.apps.googleusercontent.com';

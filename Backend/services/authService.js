@@ -350,11 +350,14 @@ exports.googleLoginUser = async (authInput) => {
       const googleAndroidClientId = process.env.GOOGLE_ANDROID_CLIENT_ID || googleWebClientId;
       const clientId = authInput.clientId || googleWebClientId || googleAndroidClientId;
 
+      const androidSchemeId = (googleAndroidClientId || '').replace('.apps.googleusercontent.com', '');
+      const defaultAndroidRedirect = `com.googleusercontent.apps.${androidSchemeId}:/oauth2redirect`;
+
       const tokenParams = {
         code: authInput.code.trim(),
         client_id: clientId,
         grant_type: 'authorization_code',
-        redirect_uri: authInput.redirectUri || 'com.googleusercontent.apps.614054153944-t0flbk67jqulktrs8uf7gnghds8eeh15:/oauth2redirect'
+        redirect_uri: authInput.redirectUri || defaultAndroidRedirect
       };
 
       if (authInput.codeVerifier) {
