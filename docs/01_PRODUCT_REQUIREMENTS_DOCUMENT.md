@@ -31,7 +31,7 @@
 | :--- | :--- | :--- | :--- |
 | **Auth & Security** | Email & Password Registration with Complexity Check | **Fully Implemented** | Express + bcrypt + Oracle DB (`SL_USERS`) |
 | **Auth & Security** | 6-Digit Email OTP Verification (HMAC-SHA256) | **Fully Implemented** | Resend / Brevo API (`EMAIL_OTPS`) |
-| **Auth & Security** | Google OAuth Single Sign-On | **Fully Implemented** | `expo-auth-session` + Firebase Admin |
+| **Auth & Security** | Google OAuth Single Sign-On | **Fully Implemented** | `expo-auth-session` + `google-auth-library` + Backend JWT |
 | **Auth & Security** | Biometric Authentication (Fingerprint / Face ID) | **Fully Implemented** | `expo-local-authentication` + SecureStore |
 | **Auth & Security** | Forgot & Reset Password via Email OTP | **Fully Implemented** | Oracle DB (`SL_PASSWORD_RESET`) |
 | **Market Data** | Live Multi-Asset Ticker Feed (BTC, ETH, SOL, BNB, etc.) | **Fully Implemented** | Binance REST API + CBSL LKR live conversion |
