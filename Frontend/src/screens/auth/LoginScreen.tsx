@@ -61,8 +61,11 @@ export const LoginScreen = () => {
   const defaultRedirectUri = AuthSession.makeRedirectUri({ scheme: 'smartlankatrade' });
   const redirectUri = Platform.OS === 'android' ? androidRedirectUri : defaultRedirectUri;
 
+  const effectiveClientId = Platform.OS === 'android' ? googleAndroidClientId : googleWebClientId;
+
   const [request, response, promptAsync] = Google.useAuthRequest({
-    clientId: googleWebClientId,
+    clientId: effectiveClientId,
+    androidClientId: googleAndroidClientId,
     webClientId: googleWebClientId,
     scopes: ['openid', 'profile', 'email'],
     redirectUri,
@@ -197,7 +200,7 @@ export const LoginScreen = () => {
           code,
           codeVerifier: request?.codeVerifier,
           redirectUri,
-          clientId: googleWebClientId
+          clientId: effectiveClientId
         });
       } else if (idToken) {
         handleGoogleLogin({ idToken });
@@ -376,6 +379,7 @@ export const LoginScreen = () => {
   const hasPromptedAutoBiometrics = useRef(false);
 
   useEffect(() => {
+    let autoBioTimer: NodeJS.Timeout | null = null;
     const triggerAutoBiometrics = async () => {
       if (hasPromptedAutoBiometrics.current) return;
       try {
@@ -384,7 +388,7 @@ export const LoginScreen = () => {
           const hasSession = await storageService.hasBiometricSession();
           if (hasSession) {
             hasPromptedAutoBiometrics.current = true;
-            setTimeout(() => {
+            autoBioTimer = setTimeout(() => {
               handleBiometricLogin();
             }, 350);
           }
@@ -395,6 +399,12 @@ export const LoginScreen = () => {
     };
 
     triggerAutoBiometrics();
+
+    return () => {
+      if (autoBioTimer) {
+        clearTimeout(autoBioTimer);
+      }
+    };
   }, []);
 
   return (

@@ -162,6 +162,65 @@ exports.markPasswordResetOTPUsed = async (resetId) => {
   }
 };
 
+/**
+ * Atomically consume a password reset record and update the user's password in a single Oracle transaction.
+ * Concurrency-safe: Only ONE concurrent request can successfully transition USED from 0 to 1.
+ * Ensures the reset record is strictly bound to userId, is unused (USED = 0), and is not expired (EXPIRES_AT > CURRENT_TIMESTAMP).
+ * Invalidates all other pending reset tokens for this user upon success.
+ */
+exports.consumePasswordResetAndSetPassword = async (resetId, userId, hashedPassword) => {
+  let connection;
+  try {
+    connection = await oracledb.getConnection();
+
+    // 1. Atomically consume the reset token ensuring it is unused, bound to user, and unexpired
+    const updateResetResult = await connection.execute(
+      `UPDATE SL_PASSWORD_RESET 
+       SET USED = 1 
+       WHERE ID = :resetId 
+         AND USER_ID = :userId 
+         AND USED = 0 
+         AND EXPIRES_AT > CURRENT_TIMESTAMP`,
+      { resetId, userId }
+    );
+
+    if (!updateResetResult || updateResetResult.rowsAffected !== 1) {
+      await connection.rollback();
+      return { success: false, reason: 'ALREADY_USED_OR_EXPIRED' };
+    }
+
+    // 2. In the same atomic transaction, update the user's password and reset security lockout
+    await connection.execute(
+      `UPDATE SL_USERS 
+       SET PASSWORD = :hashedPassword, 
+           FAILED_LOGIN_ATTEMPTS = 0, 
+           ACCOUNT_LOCKED = 0, 
+           LOCKED_UNTIL = NULL, 
+           UPDATED_AT = CURRENT_TIMESTAMP 
+       WHERE ID = :userId`,
+      { hashedPassword, userId }
+    );
+
+    // 3. Invalidate any other active reset tokens for this user to guarantee single-use lifecycle
+    await connection.execute(
+      `UPDATE SL_PASSWORD_RESET 
+       SET USED = -1 
+       WHERE USER_ID = :userId AND USED = 0`,
+      { userId }
+    );
+
+    await connection.commit();
+    return { success: true };
+  } catch (err) {
+    if (connection) {
+      try { await connection.rollback(); } catch (rbErr) {}
+    }
+    throw err;
+  } finally {
+    if (connection) await connection.close();
+  }
+};
+
 // Create a new email verification OTP (stores SHA-256 hash)
 exports.createEmailVerificationOTP = async (userId, otp, expiresAt) => {
   let connection;

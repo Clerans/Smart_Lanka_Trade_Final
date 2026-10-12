@@ -264,9 +264,9 @@ exports.getSecuritySettings = async (req, res) => {
       data: settings
     });
   } catch (err) {
-    res.status(500).json({
+    res.status(err.status || 500).json({
       success: false,
-      code: 'SERVER_ERROR',
+      code: err.code || 'SERVER_ERROR',
       message: err.message
     });
   }

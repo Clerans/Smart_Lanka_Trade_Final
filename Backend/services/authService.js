@@ -450,17 +450,24 @@ exports.resetPassword = async (email, otp, newPassword, resetToken) => {
     throw createError('MISSING_CREDENTIALS', 'Server-authorized reset token or OTP code is required.', 422);
   }
 
-  // Hash new password and update user record in Oracle SL_USERS
+  // Hash new password with salted bcrypt
   const hashedPassword = await bcrypt.hash(newPassword, 10);
-  await userModel.updatePassword(user.ID, hashedPassword);
 
-  // Invalidate the reset OTP record so it cannot be replayed
-  if (resetRecordId) {
-    await verificationModel.markPasswordResetOTPUsed(resetRecordId);
+  // Atomically consume reset authorization and update password in a single Oracle transaction
+  // Prevents replay attacks and concurrent execution races
+  const consumptionResult = await verificationModel.consumePasswordResetAndSetPassword(
+    resetRecordId,
+    user.ID,
+    hashedPassword
+  );
+
+  if (!consumptionResult || !consumptionResult.success) {
+    throw createError(
+      'RESET_TOKEN_ALREADY_USED',
+      'This password reset authorization has already been consumed or has expired. Please request a new verification code.',
+      403
+    );
   }
-
-  // Reset failed login attempts and unlock user account
-  await userModel.resetFailedAttemptsAndLogLogin(user.ID);
 
   return {
     success: true,

@@ -111,12 +111,19 @@ export const SecuritySettingsScreen = () => {
           setTwoFactorEnabled(!!secRes.data.twoFactorEnabled);
           setHasServerPin(!!secRes.data.hasPin);
           await AsyncStorage.setItem('@pref_2fa', String(secRes.data.twoFactorEnabled));
+        } else {
+          throw new Error(secRes?.message || 'Server returned invalid security configuration');
         }
-      } catch {
+      } catch (secErr: any) {
+        console.warn('Could not fetch authoritative security settings:', secErr.message);
         const tfa = await AsyncStorage.getItem('@pref_2fa');
         if (tfa !== null) {
           setTwoFactorEnabled(tfa === 'true');
         }
+        Alert.alert(
+          'Security Settings Notice',
+          'Unable to verify live security settings from the server. Using cached configuration.'
+        );
       }
     } catch {
       // ignore load errors

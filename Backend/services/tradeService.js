@@ -101,7 +101,7 @@ const executeBuyOrder = async (userId, symbol, amountLKR) => {
     );
 
     // 6. Log transaction
-    await transactionModel.createTransaction(
+    const txId = await transactionModel.createTransaction(
       connection,
       userId,
       symbol,
@@ -115,9 +115,24 @@ const executeBuyOrder = async (userId, symbol, amountLKR) => {
 
     // Fetch updated wallet details
     const updatedWallet = await walletModel.findWalletByUserId(userId);
+    const orderId = `ORD-BUY-${txId || Date.now()}`;
+
     return {
       success: true,
       message: `Successfully purchased ${quantity.toFixed(6)} ${symbol.replace('USDT', '')}`,
+      order: {
+        orderId,
+        transactionId: txId || null,
+        symbol,
+        side: 'BUY',
+        orderType: 'MARKET',
+        executionVenue: 'INTERNAL_PORTFOLIO',
+        executedPriceLKR: priceLKR,
+        executedQuantity: quantity,
+        totalAmountLKR: numAmount,
+        status: 'FILLED',
+        timestamp: new Date().toISOString()
+      },
       wallet: {
         balanceLKR: updatedWallet.BALANCE_LKR,
         availableBalance: updatedWallet.BALANCE_LKR
@@ -204,7 +219,7 @@ const executeSellOrder = async (userId, symbol, quantity) => {
     );
 
     // 5. Create transaction log
-    await transactionModel.createTransaction(
+    const txId = await transactionModel.createTransaction(
       connection,
       userId,
       symbol,
@@ -218,9 +233,24 @@ const executeSellOrder = async (userId, symbol, quantity) => {
 
     // Fetch updated wallet details
     const updatedWallet = await walletModel.findWalletByUserId(userId);
+    const orderId = `ORD-SELL-${txId || Date.now()}`;
+
     return {
       success: true,
       message: `Successfully sold ${numQty} ${symbol.replace('USDT', '')}`,
+      order: {
+        orderId,
+        transactionId: txId || null,
+        symbol,
+        side: 'SELL',
+        orderType: 'MARKET',
+        executionVenue: 'INTERNAL_PORTFOLIO',
+        executedPriceLKR: priceLKR,
+        executedQuantity: numQty,
+        totalAmountLKR: sellValue,
+        status: 'FILLED',
+        timestamp: new Date().toISOString()
+      },
       wallet: {
         balanceLKR: updatedWallet.BALANCE_LKR,
         availableBalance: updatedWallet.BALANCE_LKR
