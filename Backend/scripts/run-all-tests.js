@@ -16,6 +16,8 @@
 const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const fs = require('fs');
+const path = require('path');
 
 let totalTests = 0;
 let passedTests = 0;
