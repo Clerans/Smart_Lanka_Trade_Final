@@ -16,16 +16,41 @@ import { useNavigation } from '@react-navigation/native';
 import { MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as LocalAuthentication from 'expo-local-authentication';
-import * as WebBrowser from 'expo-web-browser';
-import * as Google from 'expo-auth-session/providers/google';
-import * as AuthSession from 'expo-auth-session';
+import Constants, { ExecutionEnvironment } from 'expo-constants';
 import { colors, typography, layout } from '../../theme';
 import { InputField, PrimaryButton, Toast, NetworkErrorScreen } from '../../components';
 import { authService } from '../../services/apiService';
 import { storageService } from '../../services/storageService';
 
-// Complete any pending auth sessions on web or native redirect
-WebBrowser.maybeCompleteAuthSession();
+// Configure Native Google Sign-In with Web Client ID for server authorization
+const GOOGLE_WEB_CLIENT_ID =
+  process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID ||
+  '614054153944-7figt10pghsb14tg764jj3hfnktkqnbt.apps.googleusercontent.com';
+
+// Expo Go sandbox does not include custom native modules like RNGoogleSignin.
+// We dynamically require GoogleSignin only in standalone / bare / dev builds to prevent runtime crashes in Expo Go.
+const isExpoGo =
+  Constants.appOwnership === 'expo' ||
+  Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
+
+let GoogleSignin: any = null;
+let statusCodes: any = null;
+
+if (!isExpoGo && Platform.OS !== 'web') {
+  try {
+    const googleModule = require('@react-native-google-signin/google-signin');
+    GoogleSignin = googleModule.GoogleSignin;
+    statusCodes = googleModule.statusCodes;
+    if (GoogleSignin) {
+      GoogleSignin.configure({
+        webClientId: GOOGLE_WEB_CLIENT_ID,
+        offlineAccess: true,
+      });
+    }
+  } catch (err) {
+    console.warn('Native GoogleSignin is not available in this environment:', err);
+  }
+}
 
 export const LoginScreen = () => {
   const navigation = useNavigation<any>();
@@ -45,28 +70,7 @@ export const LoginScreen = () => {
   const [toastType, setToastType] = useState<'success' | 'error' | 'warning'>('success');
   const [isNetworkError, setIsNetworkError] = useState(false);
 
-  // Google OAuth Configuration
-  // Web Client ID is used for browser-based authorization-code flow with PKCE (avoiding Error 400 on Android)
-  const googleWebClientId =
-    process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID ||
-    '614054153944-7figt10pghsb14tg764jj3hfnktkqnbt.apps.googleusercontent.com';
 
-  const googleAndroidClientId =
-    process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID ||
-    '614054153944-uipn34jn1loslr40qe15i99upspv4l7j.apps.googleusercontent.com';
-
-  // Authorization Code Flow with PKCE
-  const androidScheme = (googleAndroidClientId || '').replace('.apps.googleusercontent.com', '');
-  const androidRedirectUri = `com.googleusercontent.apps.${androidScheme}:/oauth2redirect`;
-  const defaultRedirectUri = AuthSession.makeRedirectUri({ scheme: 'smartlankatrade' });
-  const redirectUri = Platform.OS === 'android' ? androidRedirectUri : defaultRedirectUri;
-
-  const [request, response, promptAsync] = Google.useAuthRequest({
-    clientId: googleWebClientId,
-    webClientId: googleWebClientId,
-    scopes: ['openid', 'profile', 'email'],
-    redirectUri,
-  });
 
   // Load saved credentials on mount
   useEffect(() => {
@@ -181,64 +185,67 @@ export const LoginScreen = () => {
     }
   }, [navigation, showToast]);
 
-  // Handle Google OAuth response
-  useEffect(() => {
-    if (!response) return;
-
-    if (response.type === 'success') {
-      if (__DEV__) {
-        console.log('[OAuth Diagnostic] Stage: REDIRECT_CALLBACK received authorization success');
-      }
-      const code = response.params?.code;
-      const idToken = response.authentication?.idToken || response.params?.id_token;
-
-      if (code) {
-        handleGoogleLogin({
-          code,
-          codeVerifier: request?.codeVerifier,
-          redirectUri,
-          clientId: googleWebClientId
-        });
-      } else if (idToken) {
-        handleGoogleLogin({ idToken });
-      } else {
-        showToast('Google authentication could not be verified. Please try again.', 'error');
-        setGoogleLoading(false);
-      }
-    } else if (response.type === 'error') {
-      if (__DEV__) {
-        console.warn('[OAuth Diagnostic] Stage failed: REDIRECT_CALLBACK', response.error);
-      }
-      showToast(response.error?.message || 'Google sign-in failed. Please try again.', 'error');
-      setGoogleLoading(false);
-    } else if (response.type === 'cancel' || response.type === 'dismiss') {
-      if (__DEV__) {
-        console.log(`[OAuth Diagnostic] Stage: REDIRECT_CALLBACK user ${response.type}`);
-      }
-      setGoogleLoading(false);
-    }
-  }, [response, request, redirectUri, googleWebClientId, googleAndroidClientId, handleGoogleLogin, showToast]);
-
+  // Native Google Sign-In Handler
   const handleGooglePress = async () => {
-    if (loading || googleLoading || !request) return;
-    setGoogleLoading(true);
-    if (__DEV__) {
-      console.log('[OAuth Diagnostic] Stage: BROWSER_PROMPT initiating with Web Client ID');
+    if (loading || googleLoading) return;
+
+    if (isExpoGo) {
+      Alert.alert(
+        'Expo Go Notice',
+        'Native Google Sign-In uses custom native Android libraries (@react-native-google-signin/google-signin) which are not supported inside the Expo Go sandbox.\n\nPlease sign in with your email & password while in Expo Go, or test Google Sign-In in your standalone APK built with EAS.',
+        [{ text: 'OK' }]
+      );
+      return;
     }
+
+    // Google Play Services is a native Android framework and does not exist in desktop web browsers
+    if (Platform.OS === 'web') {
+      showToast('Native Google Sign-In requires an Android device with Google Play Services. For web preview, please log in with your email and password.', 'warning');
+      return;
+    }
+
+    if (!GoogleSignin) {
+      showToast('Native Google Sign-In module is not available in this build.', 'error');
+      return;
+    }
+
+    setGoogleLoading(true);
     try {
-      const result = await promptAsync();
-      if (__DEV__) {
-        console.log(`[OAuth Diagnostic] Stage: BROWSER_PROMPT returned result type: ${result?.type}`);
+      await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+      const response = await GoogleSignin.signIn();
+
+      let idToken: string | null | undefined = null;
+      if (response && response.type === 'success') {
+        idToken = response.data?.idToken;
+      } else if ((response as any)?.data?.idToken) {
+        idToken = (response as any).data.idToken;
+      } else if ((response as any)?.idToken) {
+        idToken = (response as any).idToken;
       }
-      if (result?.type !== 'success') {
+
+      if (idToken) {
+        await handleGoogleLogin({ idToken });
+      } else if (response && (response as any).type === 'cancelled') {
+        setGoogleLoading(false);
+      } else {
+        showToast('Could not retrieve Google ID token. Please try again.', 'error');
         setGoogleLoading(false);
       }
-    } catch (err) {
-      if (__DEV__) {
-        console.error('[OAuth Diagnostic] Stage failed: BROWSER_PROMPT', err);
+    } catch (err: any) {
+      if (statusCodes && err.code === statusCodes.SIGN_IN_CANCELLED) {
+        // User cancelled the sign-in modal
+        setGoogleLoading(false);
+      } else if (statusCodes && err.code === statusCodes.IN_PROGRESS) {
+        // Operation already in progress
+        setGoogleLoading(true);
+      } else if (statusCodes && err.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
+        showToast('Google Play Services is not available or needs updating on this device.', 'error');
+        setGoogleLoading(false);
+      } else {
+        console.warn('Native Google Sign-In Error:', err);
+        showToast(err.message || 'Google sign-in failed. Please try again.', 'error');
+        setGoogleLoading(false);
       }
-      showToast('Google sign-in failed. Please try again.', 'error');
-      setGoogleLoading(false);
     }
   };
 
@@ -376,6 +383,7 @@ export const LoginScreen = () => {
   const hasPromptedAutoBiometrics = useRef(false);
 
   useEffect(() => {
+    let autoBioTimer: NodeJS.Timeout | null = null;
     const triggerAutoBiometrics = async () => {
       if (hasPromptedAutoBiometrics.current) return;
       try {
@@ -384,7 +392,7 @@ export const LoginScreen = () => {
           const hasSession = await storageService.hasBiometricSession();
           if (hasSession) {
             hasPromptedAutoBiometrics.current = true;
-            setTimeout(() => {
+            autoBioTimer = setTimeout(() => {
               handleBiometricLogin();
             }, 350);
           }
@@ -395,6 +403,12 @@ export const LoginScreen = () => {
     };
 
     triggerAutoBiometrics();
+
+    return () => {
+      if (autoBioTimer) {
+        clearTimeout(autoBioTimer);
+      }
+    };
   }, []);
 
   return (

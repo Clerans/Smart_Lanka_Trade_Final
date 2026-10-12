@@ -116,7 +116,12 @@ export const TradingTerminalScreen = () => {
         result = await tradeService.sell(selectedSymbol, numQty);
       }
 
-      showToast(result.message || `${tradeType} order confirmed successfully!`, 'success');
+      if (!result || !result.success) {
+        throw new Error(result?.message || 'Server rejected order execution.');
+      }
+
+      const orderRef = result.order?.orderId ? ` [${result.order.orderId}]` : '';
+      showToast(result.message || `${tradeType} order filled successfully!${orderRef}`, 'success');
       await Promise.allSettled([
         fetchRecentTransactions(),
         fetchPriceAndAI()
@@ -210,7 +215,7 @@ export const TradingTerminalScreen = () => {
               style={[styles.modeToggleBtn, !isDemoMode && styles.modeToggleActive]}
               onPress={() => setIsDemoMode(false)}
             >
-              <Text style={[styles.modeText, !isDemoMode && styles.modeTextActive]}>Real Mode</Text>
+              <Text style={[styles.modeText, !isDemoMode && styles.modeTextActive]}>Portfolio Mode</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.modeToggleBtn, isDemoMode && styles.modeToggleActive]}
@@ -219,7 +224,7 @@ export const TradingTerminalScreen = () => {
                 navigation.navigate('DemoTrading');
               }}
             >
-              <Text style={[styles.modeText, isDemoMode && styles.modeTextActive]}>Demo Mode</Text>
+              <Text style={[styles.modeText, isDemoMode && styles.modeTextActive]}>Demo Sandbox</Text>
             </TouchableOpacity>
           </View>
 
@@ -335,7 +340,7 @@ export const TradingTerminalScreen = () => {
               </View>
               <View style={{ width: 16 }} />
               <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>LIMIT PRICE (LKR)</Text>
+                <Text style={styles.inputLabel}>MARKET PRICE (LKR)</Text>
                 <View style={styles.inputWrapper}>
                   <TextInput
                     style={[styles.input, { flex: 1 }]}

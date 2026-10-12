@@ -278,12 +278,11 @@ exports.getSecuritySettings = async (userId) => {
       pinLockMinutesRemaining: minutesRemaining
     };
   } catch (err) {
-    return {
-      twoFactorEnabled: false,
-      hasPin: false,
-      pinLocked: false,
-      pinLockMinutesRemaining: 0
-    };
+    console.error(`[userModel.getSecuritySettings] Database error fetching security settings for user ${userId}:`, err);
+    const dbErr = new Error('Database error retrieving user security settings');
+    dbErr.code = 'DATABASE_ERROR';
+    dbErr.status = 500;
+    throw dbErr;
   } finally {
     if (connection) await connection.close();
   }

@@ -2,6 +2,60 @@ const oracledb = require('oracledb');
 require('dotenv').config({ quiet: true });
 
 /**
+ * Helper to resolve table owner and qualified table name in Oracle,
+ * supporting direct table ownership, current schema, and synonyms.
+ */
+async function resolveTableOwner(connection, tableName) {
+  try {
+    const contextRes = await connection.execute(
+      `SELECT SYS_CONTEXT('USERENV', 'CURRENT_SCHEMA') AS CURR_SCHEMA, SYS_CONTEXT('USERENV', 'SESSION_USER') AS SESS_USER FROM DUAL`,
+      [],
+      { outFormat: oracledb.OUT_FORMAT_OBJECT }
+    );
+    const currSchema = (contextRes.rows?.[0]?.CURR_SCHEMA || '').toUpperCase();
+    const sessUser = (contextRes.rows?.[0]?.SESS_USER || '').toUpperCase();
+
+    // Check USER_TABLES
+    const userTab = await connection.execute(
+      `SELECT TABLE_NAME FROM USER_TABLES WHERE TABLE_NAME = :tName`,
+      [tableName],
+      { outFormat: oracledb.OUT_FORMAT_OBJECT }
+    );
+    if (userTab.rows && userTab.rows.length > 0) {
+      return { owner: currSchema || sessUser, qualifiedName: tableName };
+    }
+
+    // Check ALL_TABLES
+    const allTabs = await connection.execute(
+      `SELECT OWNER, TABLE_NAME FROM ALL_TABLES WHERE TABLE_NAME = :tName AND (OWNER = :currSchema OR OWNER = :sessUser)`,
+      [tableName, currSchema, sessUser],
+      { outFormat: oracledb.OUT_FORMAT_OBJECT }
+    );
+    if (allTabs.rows && allTabs.rows.length > 0) {
+      const owner = allTabs.rows[0].OWNER.toUpperCase();
+      return { owner, qualifiedName: `"${owner}"."${tableName}"` };
+    }
+
+    // Check ALL_SYNONYMS
+    const synRes = await connection.execute(
+      `SELECT TABLE_OWNER, TABLE_NAME FROM ALL_SYNONYMS WHERE SYNONYM_NAME = :tName AND (OWNER = :currSchema OR OWNER = 'PUBLIC')`,
+      [tableName, currSchema],
+      { outFormat: oracledb.OUT_FORMAT_OBJECT }
+    );
+    if (synRes.rows && synRes.rows.length > 0) {
+      const owner = synRes.rows[0].TABLE_OWNER.toUpperCase();
+      return { owner, qualifiedName: `"${owner}"."${tableName}"` };
+    }
+
+    return { owner: currSchema || sessUser, qualifiedName: tableName };
+  } catch (err) {
+    console.warn(`Could not resolve owner metadata for ${tableName}, falling back to current user:`, err.message);
+    const fallback = (process.env.DB_USER || '').toUpperCase();
+    return { owner: fallback, qualifiedName: tableName };
+  }
+}
+
+/**
  * Migration v7: Authoritative Security Settings, PIN Hashing, and Rate Limiting
  * Adds columns to SL_USERS:
  *  - PIN_HASH VARCHAR2(255)
@@ -13,53 +67,104 @@ async function migrate() {
   console.log('--- Oracle Database Schema Migration (v7 - Security PIN & Rate Limiting) ---');
   let connection;
   try {
-    connection = await oracledb.getConnection({
+    const dbConfig = {
       user: process.env.DB_USER,
       password: process.env.DB_PASSWORD,
-      connectString: process.env.DB_CONNECT,
-      configDir: process.env.DB_WALLET_PATH,
-      walletLocation: process.env.DB_WALLET_PATH,
-      walletPassword: process.env.DB_WALLET_PASSWORD
-    });
+      connectString: process.env.DB_CONNECT
+    };
+    if (process.env.DB_WALLET_PATH) {
+      dbConfig.configDir = process.env.DB_WALLET_PATH;
+      dbConfig.walletLocation = process.env.DB_WALLET_PATH;
+      dbConfig.walletPassword = process.env.DB_WALLET_PASSWORD;
+    }
 
+    connection = await oracledb.getConnection(dbConfig);
     console.log('✅ Connected to Oracle Database.');
 
-    const alterations = [
+    // 1. Resolve table owner and qualified name
+    const { owner, qualifiedName } = await resolveTableOwner(connection, 'SL_USERS');
+    console.log(`ℹ️ Resolved target table SL_USERS on owner: [${owner}] (target: ${qualifiedName})`);
+
+    // 2. Inspect existing columns in SL_USERS via owner-aware ALL_TAB_COLUMNS and USER_TAB_COLUMNS
+    const colRes = await connection.execute(
+      `SELECT COLUMN_NAME FROM ALL_TAB_COLUMNS WHERE OWNER = :owner AND TABLE_NAME = 'SL_USERS'
+       UNION
+       SELECT COLUMN_NAME FROM USER_TAB_COLUMNS WHERE TABLE_NAME = 'SL_USERS'`,
+      [owner],
+      { outFormat: oracledb.OUT_FORMAT_OBJECT }
+    );
+    const existingCols = new Set((colRes.rows || []).map(r => r.COLUMN_NAME.toUpperCase()));
+    console.log(`ℹ️ SL_USERS currently has ${existingCols.size} columns in schema [${owner}].`);
+
+    const requiredColumns = [
       {
-        sql: `ALTER TABLE SL_USERS ADD (PIN_HASH VARCHAR2(255))`,
+        name: 'PIN_HASH',
+        sql: `ALTER TABLE ${qualifiedName} ADD (PIN_HASH VARCHAR2(255))`,
         desc: 'Add PIN_HASH to SL_USERS'
       },
       {
-        sql: `ALTER TABLE SL_USERS ADD (TWO_FACTOR_ENABLED NUMBER(1) DEFAULT 0 NOT NULL)`,
+        name: 'TWO_FACTOR_ENABLED',
+        sql: `ALTER TABLE ${qualifiedName} ADD (TWO_FACTOR_ENABLED NUMBER(1) DEFAULT 0 NOT NULL)`,
         desc: 'Add TWO_FACTOR_ENABLED to SL_USERS'
       },
       {
-        sql: `ALTER TABLE SL_USERS ADD (PIN_FAILED_ATTEMPTS NUMBER DEFAULT 0 NOT NULL)`,
+        name: 'PIN_FAILED_ATTEMPTS',
+        sql: `ALTER TABLE ${qualifiedName} ADD (PIN_FAILED_ATTEMPTS NUMBER DEFAULT 0 NOT NULL)`,
         desc: 'Add PIN_FAILED_ATTEMPTS to SL_USERS'
       },
       {
-        sql: `ALTER TABLE SL_USERS ADD (PIN_LOCKED_UNTIL TIMESTAMP)`,
+        name: 'PIN_LOCKED_UNTIL',
+        sql: `ALTER TABLE ${qualifiedName} ADD (PIN_LOCKED_UNTIL TIMESTAMP)`,
         desc: 'Add PIN_LOCKED_UNTIL to SL_USERS'
       }
     ];
 
-    for (const alt of alterations) {
+    for (const col of requiredColumns) {
+      if (existingCols.has(col.name)) {
+        console.log(`   - [SKIPPED] ${col.desc} (${col.name} already exists in metadata)`);
+        continue;
+      }
+
       try {
-        await connection.execute(alt.sql);
-        console.log(`   - [SUCCESS] ${alt.desc}`);
+        await connection.execute(col.sql);
+        console.log(`   - [SUCCESS] ${col.desc}`);
       } catch (err) {
-        if (err.message.includes('ORA-01430') || err.message.includes('already exists')) {
-          console.log(`   - [SKIPPED] ${alt.desc} (already exists)`);
+        if (err.message && (err.message.includes('ORA-01430') || err.message.includes('already exists'))) {
+          console.log(`   - [SKIPPED] ${col.desc} (column already exists)`);
         } else {
-          console.warn(`   - [WARNING] Failed: ${alt.desc}:`, err.message);
+          console.error(`   - [FAILED] ${col.desc}:`, err.message);
+          throw new Error(`Migration v7 failed executing '${col.sql}': ${err.message}`);
         }
       }
     }
 
     await connection.commit();
-    console.log('✅ Migration v7 complete.');
+
+    // 3. Authoritative Post-Migration Verification
+    const verifyRes = await connection.execute(
+      `SELECT COLUMN_NAME FROM ALL_TAB_COLUMNS WHERE OWNER = :owner AND TABLE_NAME = 'SL_USERS'`,
+      [owner],
+      { outFormat: oracledb.OUT_FORMAT_OBJECT }
+    );
+    const postCols = new Set((verifyRes.rows || []).map(r => r.COLUMN_NAME.toUpperCase()));
+    const missing = requiredColumns.filter(c => !postCols.has(c.name));
+
+    if (missing.length > 0) {
+      const missingNames = missing.map(m => m.name).join(', ');
+      throw new Error(`Post-migration verification failed: Missing required columns in schema [${owner}].SL_USERS: ${missingNames}`);
+    }
+
+    console.log(`✅ Migration v7 complete and verified: All security PIN & 2FA columns confirmed present in [${owner}].SL_USERS.`);
+    return true;
   } catch (err) {
     console.error('❌ Migration v7 encountered an error:', err.message);
+    if (connection) {
+      try { await connection.rollback(); } catch (rbErr) {}
+    }
+    if (require.main === module) {
+      process.exit(1);
+    }
+    throw err;
   } finally {
     if (connection) {
       try {
@@ -72,7 +177,7 @@ async function migrate() {
 }
 
 if (require.main === module) {
-  migrate();
+  migrate().then(() => process.exit(0)).catch(() => process.exit(1));
 }
 
 module.exports = migrate;

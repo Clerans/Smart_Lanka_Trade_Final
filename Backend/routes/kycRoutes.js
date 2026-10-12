@@ -46,9 +46,12 @@ const upload = multer({
   fileFilter
 });
 
-// Error-handling wrapper for multer upload
+// Error-handling wrapper for multer upload (supports front 'document' and optional 'backDocument')
 const handleUpload = (req, res, next) => {
-  upload.single('document')(req, res, (err) => {
+  upload.fields([
+    { name: 'document', maxCount: 1 },
+    { name: 'backDocument', maxCount: 1 }
+  ])(req, res, (err) => {
     if (err instanceof multer.MulterError) {
       if (err.code === 'LIMIT_FILE_SIZE') {
         return res.status(400).json({

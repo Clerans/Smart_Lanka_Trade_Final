@@ -21,6 +21,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { useNavigation, useIsFocused } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
 import * as LocalAuthentication from 'expo-local-authentication';
+import * as Clipboard from 'expo-clipboard';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { colors, typography, layout, SCREEN_PADDING, TAB_BAR_BOTTOM_OFFSET } from '../../theme';
 import { Card } from '../../components';
@@ -100,12 +101,17 @@ export const UserProfileScreen = () => {
   };
 
   const getFullUid = () => {
-    return `SLT-${String(user?.id || 1).padStart(8, '0')}`;
+    return (user as any)?.accountUid || (user as any)?.ACCOUNT_UID || (user?.id ? `SLT-${String(user.id).padStart(8, '0')}` : 'SLT-00000001');
   };
 
-  const handleCopyUid = () => {
+  const handleCopyUid = async () => {
     const fullUid = getFullUid();
-    Alert.alert('Account UID Copied', `${fullUid} has been copied to your clipboard.`);
+    try {
+      await Clipboard.setStringAsync(fullUid);
+      Alert.alert('Account UID Copied', `${fullUid} has been copied to your clipboard.`);
+    } catch {
+      Alert.alert('Copy Notice', `${fullUid}`);
+    }
   };
 
   const formatMemberSince = (createdAt?: string | null) => {
@@ -507,15 +513,28 @@ export const UserProfileScreen = () => {
             <View style={styles.detailRow}>
               <Text style={styles.detailLabel}>Account UID</Text>
               <View style={styles.detailRight}>
-                <Text style={[styles.detailValue, { color: colors.accent }]}>
-                  {showUid ? getFullUid() : 'SLT-••••••••'}
-                </Text>
+                <TouchableOpacity onPress={() => setShowUid(!showUid)} activeOpacity={0.7}>
+                  <Text style={[styles.detailValue, { color: colors.accent }]}>
+                    {showUid ? getFullUid() : 'SLT-••••••••'}
+                  </Text>
+                </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.privacyIconBtn}
+                  onPress={() => setShowUid(!showUid)}
+                  activeOpacity={0.7}
+                >
+                  <MaterialIcons
+                    name={showUid ? 'visibility' : 'visibility-off'}
+                    size={16}
+                    color={colors.textSecondary}
+                  />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.privacyIconBtn, { marginLeft: 4 }]}
                   onPress={handleCopyUid}
                   activeOpacity={0.7}
                 >
-                  <MaterialIcons name="content-copy" size={16} color={colors.textSecondary} />
+                  <MaterialIcons name="content-copy" size={16} color={colors.accent} />
                 </TouchableOpacity>
               </View>
             </View>
