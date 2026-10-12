@@ -100,7 +100,7 @@ export const LoginScreen = () => {
         const isEnrolled = await LocalAuthentication.isEnrolledAsync().catch(() => false);
 
         if (hasHardware && isEnrolled) {
-          const types = await LocalAuthentication.supportedAuthenticationTypesAsync().catch(() => []);
+          const types: LocalAuthentication.AuthenticationType[] = await LocalAuthentication.supportedAuthenticationTypesAsync();
           const label = types.includes(LocalAuthentication.AuthenticationType.FACIAL_RECOGNITION)
             ? 'Fingerprint or Facial Recognition'
             : 'Fingerprint';

@@ -25,9 +25,22 @@ export const SecuritySettingsScreen = () => {
   const navigation = useNavigation<any>();
 
   // Security Preferences State
-  const [biometricEnabled, setBiometricEnabled] = useState(true);
-  const [twoFactorEnabled, setTwoFactorEnabled] = useState(true);
+  const [biometricEnabled, setBiometricEnabled] = useState(false);
+  const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
   const [faceIdEnabled, setFaceIdEnabled] = useState(false);
+  const [hasServerPin, setHasServerPin] = useState(false);
+
+  // Hardware Biometrics State
+  const [hasHardware, setHasHardware] = useState(false);
+  const [isEnrolled, setIsEnrolled] = useState(false);
+  const [supportsFaceId, setSupportsFaceId] = useState(false);
+  const [supportsFingerprint, setSupportsFingerprint] = useState(false);
+  const [hasBiometricSession, setHasBiometricSession] = useState(false);
+
+  // Loading States
+  const [isUpdating2FA, setIsUpdating2FA] = useState(false);
+  const [isSavingPin, setIsSavingPin] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   // Modal States
   const [pinModalVisible, setPinModalVisible] = useState(false);
@@ -35,10 +48,10 @@ export const SecuritySettingsScreen = () => {
   const [devicesModalVisible, setDevicesModalVisible] = useState(false);
 
   // PIN Form
+  const [currentPin, setCurrentPin] = useState('');
   const [pin, setPin] = useState('');
   const [confirmPin, setConfirmPin] = useState('');
   const [savedPin, setSavedPin] = useState<string | null>(null);
-  const [refreshing, setRefreshing] = useState(false);
 
   // Password Form
   const [currentPassword, setCurrentPassword] = useState('');
@@ -48,39 +61,75 @@ export const SecuritySettingsScreen = () => {
   const [showNewPw, setShowNewPw] = useState(false);
   const [isChangingPassword, setIsChangingPassword] = useState(false);
 
-  // Devices State (Real runtime active device)
+  // Active Devices State
   const [activeDevices, setActiveDevices] = useState<{ id: string; name: string; location: string; ip: string; activeNow: boolean; lastActive?: string; icon: string }[]>([
     { id: '1', name: 'Mobile App (This Device)', location: 'Current Session', ip: 'Encrypted Hardware Session', activeNow: true, lastActive: 'Active Now', icon: 'smartphone' }
   ]);
 
+  const detectBiometrics = useCallback(async () => {
+    try {
+      const hardware = await LocalAuthentication.hasHardwareAsync();
+      const enrolled = await LocalAuthentication.isEnrolledAsync();
+      setHasHardware(hardware);
+      setIsEnrolled(enrolled);
+
+      if (hardware) {
+        const types = await LocalAuthentication.supportedAuthenticationTypesAsync();
+        const hasFace = types.includes(LocalAuthentication.AuthenticationType.FACIAL_RECOGNITION);
+        const hasFinger = types.includes(LocalAuthentication.AuthenticationType.FINGERPRINT);
+        setSupportsFaceId(hasFace);
+        setSupportsFingerprint(hasFinger);
+      } else {
+        setSupportsFaceId(false);
+        setSupportsFingerprint(false);
+      }
+
+      const hasSession = await storageService.hasBiometricSession();
+      setHasBiometricSession(hasSession);
+    } catch (err) {
+      console.warn('Biometric capability detection error:', err);
+    }
+  }, []);
+
   const loadPreferences = useCallback(async () => {
     try {
-      const bio = await AsyncStorage.getItem('@pref_biometric');
-      if (bio !== null) setBiometricEnabled(bio === 'true');
+      await detectBiometrics();
 
-      // Sync authoritative 2FA from backend API
+      const bio = await AsyncStorage.getItem('@pref_biometric');
+      if (bio !== null) {
+        setBiometricEnabled(bio === 'true');
+      }
+
+      const face = await AsyncStorage.getItem('@pref_face_id');
+      if (face !== null) {
+        setFaceIdEnabled(face === 'true');
+      }
+
+      const storedPin = await storageService.getPin();
+      if (storedPin) {
+        setSavedPin(storedPin);
+      }
+
+      // Sync authoritative 2FA and transaction PIN status from backend
       try {
         const secRes = await authService.getSecuritySettings();
         if (secRes?.success && secRes?.data) {
-          setTwoFactorEnabled(secRes.data.twoFactorEnabled);
+          setTwoFactorEnabled(!!secRes.data.twoFactorEnabled);
+          setHasServerPin(!!secRes.data.hasPin);
           await AsyncStorage.setItem('@pref_2fa', String(secRes.data.twoFactorEnabled));
         }
       } catch {
         const tfa = await AsyncStorage.getItem('@pref_2fa');
-        if (tfa !== null) setTwoFactorEnabled(tfa === 'true');
+        if (tfa !== null) {
+          setTwoFactorEnabled(tfa === 'true');
+        }
       }
-
-      const face = await AsyncStorage.getItem('@pref_face_id');
-      if (face !== null) setFaceIdEnabled(face === 'true');
-
-      const storedPin = await storageService.getPin();
-      if (storedPin) setSavedPin(storedPin);
     } catch {
       // ignore load errors
     } finally {
       setRefreshing(false);
     }
-  }, []);
+  }, [detectBiometrics]);
 
   useEffect(() => {
     loadPreferences();
@@ -91,25 +140,40 @@ export const SecuritySettingsScreen = () => {
     loadPreferences();
   }, [loadPreferences]);
 
-  // Handlers for toggles
+  // Biometric Login Toggle Handler
   const handleBiometricToggle = async (val: boolean) => {
     if (val) {
+      if (!hasHardware) {
+        Alert.alert(
+          'Biometrics Unavailable',
+          'Biometric hardware sensor is not detected on this device. Password authentication will be used.'
+        );
+        setBiometricEnabled(false);
+        return;
+      }
+
+      if (!isEnrolled) {
+        Alert.alert(
+          'No Biometrics Enrolled',
+          'Please enroll your fingerprint or face in Android Device Settings first.'
+        );
+        setBiometricEnabled(false);
+        return;
+      }
+
+      const hasSession = await storageService.hasBiometricSession();
+      if (!hasSession) {
+        Alert.alert(
+          'Session Required',
+          'To enable biometric login, sign in once with your password or Google account so your session credentials can be securely registered on this device.'
+        );
+        setBiometricEnabled(false);
+        return;
+      }
+
       try {
-        const hasHardware = await LocalAuthentication.hasHardwareAsync();
-        const isEnrolled = await LocalAuthentication.isEnrolledAsync();
-
-        if (!hasHardware) {
-          Alert.alert('Biometrics Unavailable', 'Biometric hardware sensor was not detected on this device.');
-          return;
-        }
-
-        if (!isEnrolled) {
-          Alert.alert('No Biometrics Enrolled', 'Please enroll your fingerprint or Face ID in your device settings first.');
-          return;
-        }
-
         const result = await LocalAuthentication.authenticateAsync({
-          promptMessage: 'Authenticate with Fingerprint or Face ID to enable Biometric Login',
+          promptMessage: 'Confirm biometric identity to enable Biometric Login',
           fallbackLabel: 'Cancel',
           disableDeviceFallback: true,
         });
@@ -117,51 +181,45 @@ export const SecuritySettingsScreen = () => {
         if (result.success) {
           setBiometricEnabled(true);
           await AsyncStorage.setItem('@pref_biometric', 'true');
-          Alert.alert('Biometric Login Enabled', 'You can now use fingerprint and Face ID for instant sign-in.');
+          Alert.alert('Biometric Login Enabled', 'You can now use biometrics for instant sign-in.');
         } else {
           setBiometricEnabled(false);
           await AsyncStorage.setItem('@pref_biometric', 'false');
-          Alert.alert('Authentication Failed', 'Could not verify your identity. Biometric login remains disabled.');
+          Alert.alert('Authentication Cancelled', 'Biometric login remains disabled.');
         }
       } catch (err: any) {
         setBiometricEnabled(false);
-        Alert.alert('Error', err.message || 'Failed to authenticate biometrics.');
+        Alert.alert('Authentication Error', err.message || 'Failed to authenticate biometrics.');
       }
     } else {
       setBiometricEnabled(false);
       await AsyncStorage.setItem('@pref_biometric', 'false');
-      Alert.alert('Biometric Login Disabled', 'Standard password login is now required.');
+      Alert.alert('Biometric Login Disabled', 'Standard password or Google sign-in will now be required.');
     }
   };
 
-  const handle2FAToggle = async (val: boolean) => {
-    setTwoFactorEnabled(val);
-    await AsyncStorage.setItem('@pref_2fa', String(val));
-    try {
-      await authService.updateSecuritySettings({ twoFactorEnabled: val });
-    } catch (e) {
-      console.warn('Backend 2FA update notice:', e);
-    }
-    if (val) {
-      Alert.alert('2-Factor Authentication Active', 'OTP verification will be required for trades and withdrawals over LKR 100,000.');
-    } else {
-      Alert.alert('2FA Disabled', 'Two-factor protection has been disabled for standard transactions.');
-    }
-  };
-
+  // Face ID / Facial Recognition Toggle Handler
   const handleFaceIdToggle = async (val: boolean) => {
     if (val) {
+      if (!supportsFaceId) {
+        Alert.alert(
+          'Facial Recognition Unsupported',
+          'Your Android device hardware does not support biometric facial recognition. Please use fingerprint biometrics instead.'
+        );
+        setFaceIdEnabled(false);
+        await AsyncStorage.setItem('@pref_face_id', 'false');
+        return;
+      }
+
+      if (!isEnrolled) {
+        Alert.alert('No Face Enrolled', 'Please register your face in device Settings first.');
+        setFaceIdEnabled(false);
+        return;
+      }
+
       try {
-        const hasHardware = await LocalAuthentication.hasHardwareAsync();
-        const isEnrolled = await LocalAuthentication.isEnrolledAsync();
-
-        if (!hasHardware || !isEnrolled) {
-          Alert.alert('Face ID Unavailable', 'Face ID hardware or enrolled biometric was not detected.');
-          return;
-        }
-
         const result = await LocalAuthentication.authenticateAsync({
-          promptMessage: 'Authenticate with Face ID',
+          promptMessage: 'Authenticate with Face Recognition',
           fallbackLabel: 'Cancel',
           disableDeviceFallback: true,
         });
@@ -169,7 +227,7 @@ export const SecuritySettingsScreen = () => {
         if (result.success) {
           setFaceIdEnabled(true);
           await AsyncStorage.setItem('@pref_face_id', 'true');
-          Alert.alert('Face ID Enabled', 'Facial recognition authentication is enabled for high-security transactions.');
+          Alert.alert('Face Recognition Enabled', 'Facial recognition authentication is enabled.');
         } else {
           setFaceIdEnabled(false);
           await AsyncStorage.setItem('@pref_face_id', 'false');
@@ -180,34 +238,87 @@ export const SecuritySettingsScreen = () => {
     } else {
       setFaceIdEnabled(false);
       await AsyncStorage.setItem('@pref_face_id', 'false');
-      Alert.alert('Face ID Disabled', 'Standard authentication will be used.');
+      Alert.alert('Face Recognition Disabled', 'Standard authentication will be used.');
     }
   };
 
-  // Change PIN Submit (Hardware SecureStore Encrypted)
-  const handleSavePin = async () => {
-    if (!pin || pin.length < 4) {
-      Alert.alert('Invalid PIN', 'Please enter a 4-digit numeric security PIN.');
-      return;
-    }
-    if (pin !== confirmPin) {
-      Alert.alert('PIN Mismatch', 'The confirmation PIN does not match. Please re-enter.');
-      return;
-    }
+  // Authoritative Server-Enforced 2FA Toggle
+  const handle2FAToggle = async (val: boolean) => {
+    setIsUpdating2FA(true);
     try {
-      await storageService.setPin(pin);
-      try {
-        await authService.updateSecuritySettings({ pin });
-      } catch (backendErr) {
-        console.warn('Backend PIN sync note:', backendErr);
+      const res = await authService.updateSecuritySettings({ twoFactorEnabled: val });
+      if (res?.success) {
+        setTwoFactorEnabled(val);
+        await AsyncStorage.setItem('@pref_2fa', String(val));
+        if (val) {
+          Alert.alert(
+            'Two-Factor Authentication Active',
+            'OTP verification will be required for trades and withdrawals over LKR 100,000.'
+          );
+        } else {
+          Alert.alert('2FA Disabled', 'Two-factor protection has been disabled for transactions.');
+        }
+      } else {
+        throw new Error(res?.message || 'Server rejected 2FA update');
       }
-      setSavedPin(pin);
-      setPinModalVisible(false);
-      setPin('');
-      setConfirmPin('');
-      Alert.alert('Success', 'Your 4-digit security PIN has been updated and synchronized with server authorization.');
-    } catch {
-      Alert.alert('Error', 'Failed to save security PIN.');
+    } catch (err: any) {
+      // Revert state if backend update failed
+      setTwoFactorEnabled(!val);
+      Alert.alert('Update Failed', err?.response?.data?.message || err?.message || 'Could not update 2FA on server.');
+    } finally {
+      setIsUpdating2FA(false);
+    }
+  };
+
+  // Backend Transaction PIN Submit (Enforced on Oracle backend with bcrypt & lockout)
+  const handleSavePin = async () => {
+    const cleanPin = pin.trim();
+    const cleanConfirm = confirmPin.trim();
+    const cleanCurrent = currentPin.trim();
+
+    if (hasServerPin && !cleanCurrent) {
+      Alert.alert('Current PIN Required', 'Please enter your current security PIN to authorize this change.');
+      return;
+    }
+
+    if (!cleanPin || cleanPin.length < 4 || cleanPin.length > 6 || !/^\d{4,6}$/.test(cleanPin)) {
+      Alert.alert('Invalid PIN Format', 'Security PIN must be exactly 4 to 6 numeric digits.');
+      return;
+    }
+
+    if (cleanPin !== cleanConfirm) {
+      Alert.alert('PIN Mismatch', 'New PIN and confirmation PIN do not match.');
+      return;
+    }
+
+    setIsSavingPin(true);
+    try {
+      const payload: { pin: string; currentPin?: string } = { pin: cleanPin };
+      if (hasServerPin && cleanCurrent) {
+        payload.currentPin = cleanCurrent;
+      }
+
+      const res = await authService.updateSecuritySettings(payload);
+      if (res?.success) {
+        await storageService.setPin(cleanPin);
+        setSavedPin(cleanPin);
+        setHasServerPin(true);
+        setPinModalVisible(false);
+        setPin('');
+        setConfirmPin('');
+        setCurrentPin('');
+        Alert.alert(
+          'PIN Configured Successfully',
+          'Your transaction PIN is encrypted with salted bcrypt and enforced authoritatively on the server for withdrawals and high-value transfers.'
+        );
+      } else {
+        throw new Error(res?.message || 'Server rejected PIN update');
+      }
+    } catch (err: any) {
+      const errMsg = err?.response?.data?.message || err?.message || 'Failed to save security PIN.';
+      Alert.alert('PIN Update Failed', errMsg);
+    } finally {
+      setIsSavingPin(false);
     }
   };
 
@@ -235,7 +346,7 @@ export const SecuritySettingsScreen = () => {
       setConfirmNewPassword('');
       Alert.alert('Success', 'Your account password has been changed successfully.');
     } catch (err: any) {
-      Alert.alert('Error', err.message || 'Failed to change password. Please verify current password.');
+      Alert.alert('Error', err.response?.data?.message || err.message || 'Failed to change password. Please verify current password.');
     } finally {
       setIsChangingPassword(false);
     }
@@ -284,18 +395,39 @@ export const SecuritySettingsScreen = () => {
           <View style={{ width: 24 }} />
         </View>
 
-        <Text style={styles.sectionHeading}>AUTHENTICATION</Text>
+        {/* Security Architecture Overview Info Box */}
+        <View style={styles.infoBanner}>
+          <MaterialIcons name="security" size={20} color={colors.accent} style={{ marginRight: 10, marginTop: 2 }} />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.infoBannerTitle}>Multilayer Security Active</Text>
+            <Text style={styles.infoBannerText}>
+              • Biometrics: Encrypted local device session unlock.{'\n'}
+              • Transaction PIN: Backend-enforced authorization for withdrawals & transfers ≥ LKR 100,000.{'\n'}
+              • 2FA: Email OTP verification for sensitive operations.
+            </Text>
+          </View>
+        </View>
+
+        <Text style={styles.sectionHeading}>DEVICE & BIOMETRICS</Text>
 
         {/* Toggles Container */}
         <View style={styles.settingsGroup}>
           <View style={styles.settingRow}>
             <View style={styles.settingLeft}>
-              <View style={styles.iconBg}>
-                <MaterialIcons name="fingerprint" size={20} color={colors.accent} />
+              <View style={[styles.iconBg, !hasHardware && styles.iconBgDisabled]}>
+                <MaterialIcons name="fingerprint" size={20} color={hasHardware ? colors.accent : colors.textSecondary} />
               </View>
-              <View>
+              <View style={{ flex: 1, paddingRight: 8 }}>
                 <Text style={styles.settingText}>Biometric Login</Text>
-                <Text style={styles.subSettingText}>Use fingerprint for quick access</Text>
+                <Text style={styles.subSettingText}>
+                  {!hasHardware
+                    ? 'Sensor not detected on device'
+                    : !isEnrolled
+                    ? 'No fingerprint enrolled in device'
+                    : !hasBiometricSession
+                    ? 'Sign in once with password to enable'
+                    : 'Use fingerprint for instant sign-in'}
+                </Text>
               </View>
             </View>
             <Switch
@@ -303,7 +435,38 @@ export const SecuritySettingsScreen = () => {
               thumbColor={'#FFF'}
               ios_backgroundColor="#3e3e3e"
               value={biometricEnabled}
+              disabled={!hasHardware}
               onValueChange={handleBiometricToggle}
+            />
+          </View>
+
+          <View style={styles.divider} />
+
+          <View style={styles.settingRow}>
+            <View style={styles.settingLeft}>
+              <View style={[styles.iconBg, !supportsFaceId && styles.iconBgDisabled]}>
+                <MaterialIcons
+                  name="face"
+                  size={20}
+                  color={supportsFaceId && faceIdEnabled ? colors.accent : colors.textSecondary}
+                />
+              </View>
+              <View style={{ flex: 1, paddingRight: 8 }}>
+                <Text style={styles.settingText}>Facial Recognition</Text>
+                <Text style={styles.subSettingText}>
+                  {supportsFaceId
+                    ? 'Facial unlock for device access'
+                    : 'Hardware sensor not available on this device'}
+                </Text>
+              </View>
+            </View>
+            <Switch
+              trackColor={{ false: colors.bgInput, true: colors.accent }}
+              thumbColor={'#FFF'}
+              ios_backgroundColor="#3e3e3e"
+              value={faceIdEnabled && supportsFaceId}
+              disabled={!supportsFaceId}
+              onValueChange={handleFaceIdToggle}
             />
           </View>
 
@@ -314,58 +477,49 @@ export const SecuritySettingsScreen = () => {
               <View style={styles.iconBg}>
                 <MaterialIcons name="phonelink-lock" size={20} color={colors.accent} />
               </View>
-              <View>
+              <View style={{ flex: 1, paddingRight: 8 }}>
                 <Text style={styles.settingText}>Two-Factor Auth (2FA)</Text>
-                <Text style={styles.subSettingText}>Email / SMS OTP verification</Text>
+                <Text style={styles.subSettingText}>Server-verified OTP for high-value actions</Text>
               </View>
             </View>
-            <Switch
-              trackColor={{ false: colors.bgInput, true: colors.accent }}
-              thumbColor={'#FFF'}
-              ios_backgroundColor="#3e3e3e"
-              value={twoFactorEnabled}
-              onValueChange={handle2FAToggle}
-            />
-          </View>
-
-          <View style={styles.divider} />
-
-          <View style={styles.settingRow}>
-            <View style={styles.settingLeft}>
-              <View style={[styles.iconBg, !faceIdEnabled && styles.iconBgDisabled]}>
-                <MaterialIcons
-                  name="face"
-                  size={20}
-                  color={faceIdEnabled ? colors.accent : colors.textSecondary}
-                />
-              </View>
-              <View>
-                <Text style={styles.settingText}>Face ID Verification</Text>
-                <Text style={styles.subSettingText}>Facial unlock for high security</Text>
-              </View>
-            </View>
-            <Switch
-              trackColor={{ false: colors.bgInput, true: colors.accent }}
-              thumbColor={'#FFF'}
-              ios_backgroundColor="#3e3e3e"
-              value={faceIdEnabled}
-              onValueChange={handleFaceIdToggle}
-            />
+            {isUpdating2FA ? (
+              <ActivityIndicator size="small" color={colors.accent} style={{ marginRight: 10 }} />
+            ) : (
+              <Switch
+                trackColor={{ false: colors.bgInput, true: colors.accent }}
+                thumbColor={'#FFF'}
+                ios_backgroundColor="#3e3e3e"
+                value={twoFactorEnabled}
+                onValueChange={handle2FAToggle}
+              />
+            )}
           </View>
         </View>
 
-        <Text style={styles.sectionHeading}>CREDENTIALS & DEVICES</Text>
+        <Text style={styles.sectionHeading}>SERVER AUTHORIZATION & CREDENTIALS</Text>
 
         {/* Action Rows */}
         <View style={styles.settingsGroup}>
-          <TouchableOpacity style={styles.actionRow} onPress={() => setPinModalVisible(true)}>
+          <TouchableOpacity
+            style={styles.actionRow}
+            onPress={() => {
+              setCurrentPin('');
+              setPin('');
+              setConfirmPin('');
+              setPinModalVisible(true);
+            }}
+          >
             <View style={styles.actionLeft}>
               <View style={styles.iconBgDisabled}>
-                <MaterialIcons name="dialpad" size={20} color={colors.textPrimary} />
+                <MaterialIcons name="dialpad" size={20} color={hasServerPin ? colors.accent : colors.textPrimary} />
               </View>
               <View>
-                <Text style={styles.actionText}>Change PIN</Text>
-                <Text style={styles.actionSubtext}>{savedPin ? '4-Digit PIN Configured' : 'Set Quick Access PIN'}</Text>
+                <Text style={styles.actionText}>
+                  {hasServerPin ? 'Change Transaction PIN' : 'Set Transaction PIN'}
+                </Text>
+                <Text style={[styles.actionSubtext, hasServerPin && { color: colors.accent }]}>
+                  {hasServerPin ? 'Server-Enforced PIN Configured' : 'Setup Required for ≥ 100K LKR'}
+                </Text>
               </View>
             </View>
             <MaterialIcons name="chevron-right" size={24} color={colors.textSecondary} />
@@ -407,53 +561,81 @@ export const SecuritySettingsScreen = () => {
         <View style={styles.footerContainer}>
           <MaterialIcons name="info-outline" size={16} color={colors.textSecondary} />
           <Text style={styles.footerText}>
-            Last login: Today from Colombo, LK (Active Session)
+            SmartLanka Trade v2.4 • Active Secure Session
           </Text>
         </View>
 
       </ScrollView>
 
-      {/* 1. CHANGE PIN MODAL */}
+      {/* 1. TRANSACTION PIN MODAL */}
       <Modal visible={pinModalVisible} transparent animationType="slide">
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Set Quick Access PIN</Text>
+              <Text style={styles.modalTitle}>
+                {hasServerPin ? 'Change Transaction PIN' : 'Set Transaction PIN'}
+              </Text>
               <TouchableOpacity onPress={() => setPinModalVisible(false)}>
                 <MaterialIcons name="close" size={24} color={colors.textSecondary} />
               </TouchableOpacity>
             </View>
 
             <Text style={styles.modalDesc}>
-              Enter a 4-digit security PIN to quickly unlock and authorize demo transactions.
+              A 4 to 6 digit security PIN enforced by the backend server to authorize withdrawals and transfers of LKR 100,000 or greater.
             </Text>
 
-            <Text style={styles.inputLabel}>New 4-Digit PIN</Text>
+            {hasServerPin && (
+              <>
+                <Text style={styles.inputLabel}>Current Security PIN</Text>
+                <TextInput
+                  style={styles.modalInput}
+                  placeholder="••••"
+                  placeholderTextColor={colors.textSecondary}
+                  secureTextEntry
+                  keyboardType="numeric"
+                  maxLength={6}
+                  value={currentPin}
+                  onChangeText={setCurrentPin}
+                />
+              </>
+            )}
+
+            <Text style={styles.inputLabel}>New 4-6 Digit PIN</Text>
             <TextInput
               style={styles.modalInput}
               placeholder="••••"
               placeholderTextColor={colors.textSecondary}
               secureTextEntry
               keyboardType="numeric"
-              maxLength={4}
+              maxLength={6}
               value={pin}
               onChangeText={setPin}
             />
 
-            <Text style={styles.inputLabel}>Confirm 4-Digit PIN</Text>
+            <Text style={styles.inputLabel}>Confirm New PIN</Text>
             <TextInput
               style={styles.modalInput}
               placeholder="••••"
               placeholderTextColor={colors.textSecondary}
               secureTextEntry
               keyboardType="numeric"
-              maxLength={4}
+              maxLength={6}
               value={confirmPin}
               onChangeText={setConfirmPin}
             />
 
-            <TouchableOpacity style={styles.modalButton} onPress={handleSavePin}>
-              <Text style={styles.modalButtonText}>Save Security PIN</Text>
+            <TouchableOpacity
+              style={[styles.modalButton, isSavingPin && { opacity: 0.7 }]}
+              onPress={handleSavePin}
+              disabled={isSavingPin}
+            >
+              {isSavingPin ? (
+                <ActivityIndicator size="small" color="#000" />
+              ) : (
+                <Text style={styles.modalButtonText}>
+                  {hasServerPin ? 'Update Transaction PIN' : 'Activate Transaction PIN'}
+                </Text>
+              )}
             </TouchableOpacity>
           </View>
         </View>
@@ -594,7 +776,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: SCREEN_PADDING,
     paddingTop: 16,
-    marginBottom: 20,
+    marginBottom: 16,
   },
   backButton: {
     padding: 8,
@@ -605,6 +787,29 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#FFF',
     fontSize: 18,
+  },
+  infoBanner: {
+    flexDirection: 'row',
+    backgroundColor: 'rgba(0, 200, 83, 0.08)',
+    borderRadius: layout.borderRadius,
+    marginHorizontal: SCREEN_PADDING,
+    marginBottom: 20,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 200, 83, 0.25)',
+  },
+  infoBannerTitle: {
+    ...typography.body,
+    fontWeight: '700',
+    color: colors.accent,
+    fontSize: 13,
+    marginBottom: 4,
+  },
+  infoBannerText: {
+    ...typography.bodySmall,
+    color: colors.textSecondary,
+    fontSize: 11,
+    lineHeight: 16,
   },
   sectionHeading: {
     ...typography.label,
@@ -695,7 +900,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 20,
+    marginTop: 10,
     paddingHorizontal: 20,
   },
   footerText: {
