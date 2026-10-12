@@ -221,11 +221,13 @@ function evaluateKYCDecision({ nicNumber, ocrConfidence, nameSimilarity, hasExtr
 
 /**
  * Processes KYC Document upload and runs end-to-end verification
+ * Supports both single-side capture and dual-side capture (front & back, critical for Old NIC format)
  * @param {number} userId - Authenticated user ID (from JWT req.user.id)
- * @param {string} imagePath - Filepath of uploaded image
+ * @param {string} imagePath - Filepath of front document image
  * @param {string|null} manualNIC - Optional NIC provided in form
+ * @param {string|null} backImagePath - Optional filepath of back document image
  */
-async function processKYCVerification(userId, imagePath, manualNIC = null) {
+async function processKYCVerification(userId, imagePath, manualNIC = null, backImagePath = null) {
   // 1. Fetch authenticated user record directly by ID (No full user table scanning)
   const currentUser = await userModel.findById(userId);
   if (!currentUser) {
@@ -234,12 +236,25 @@ async function processKYCVerification(userId, imagePath, manualNIC = null) {
 
   const registeredName = currentUser.NAME || '';
 
-  // 2. Perform OCR Text Recognition
+  // 2. Perform OCR Text Recognition on Front Side
   const ocrResult = await ocrService.recognizeText(imagePath);
-  const rawText = ocrResult.text;
-  const ocrConfidence = ocrResult.confidence;
+  let rawText = ocrResult.text || '';
+  let ocrConfidence = ocrResult.confidence || 0;
 
-  // 3. Extract structured document details via Sri Lankan NIC parser
+  // 2b. If Back Side image is provided (essential for Old NICs where name/DOB are on the back), run OCR and merge
+  if (backImagePath) {
+    try {
+      const backOcrResult = await ocrService.recognizeText(backImagePath);
+      if (backOcrResult && backOcrResult.text) {
+        rawText = `${rawText}\n--- BACK SIDE ---\n${backOcrResult.text}`;
+        ocrConfidence = Math.max(ocrConfidence, backOcrResult.confidence || 0);
+      }
+    } catch (backErr) {
+      console.warn('OCR note for back side image:', backErr.message);
+    }
+  }
+
+  // 3. Extract structured document details via Sri Lankan NIC parser from merged multi-side text
   let extraction = nicParser.extractFromOCRText(rawText);
 
   // If OCR missed the NIC but user provided manual NIC that validates, verify format
@@ -278,7 +293,8 @@ async function processKYCVerification(userId, imagePath, manualNIC = null) {
 
   const { verificationStatus, rejectionReason } = decision;
 
-  // 5. Store Verification Document in Oracle Database
+  // 5. Store Verification Document in Oracle Database (recording both image paths if dual-sided)
+  const storedDocPath = backImagePath ? `${imagePath}|${backImagePath}` : imagePath;
   const documentId = await kycModel.createKYCDocument({
     userId,
     documentType: extraction.documentType || 'NIC',
@@ -290,7 +306,7 @@ async function processKYCVerification(userId, imagePath, manualNIC = null) {
     ocrConfidence,
     verificationStatus,
     rejectionReason,
-    documentPath: imagePath
+    documentPath: storedDocPath
   });
 
   // 6. Update user's KYC status on SL_USERS table

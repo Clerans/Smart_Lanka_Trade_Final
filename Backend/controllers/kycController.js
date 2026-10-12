@@ -15,18 +15,22 @@ exports.uploadAndVerify = async (req, res) => {
       });
     }
 
-    if (!req.file) {
+    const frontFile = req.files?.document?.[0] || req.file;
+    const backFile = req.files?.backDocument?.[0];
+
+    if (!frontFile && !backFile) {
       return res.status(400).json({
         success: false,
         code: 'NO_FILE_UPLOADED',
-        message: 'Please upload an identity document image (NIC / Passport).'
+        message: 'Please upload an identity document image (NIC front and/or back).'
       });
     }
 
-    const imagePath = req.file.path;
+    const imagePath = frontFile ? frontFile.path : backFile.path;
+    const backImagePath = (frontFile && backFile) ? backFile.path : null;
     const manualNIC = req.body.manualNIC || null;
 
-    const result = await kycService.processKYCVerification(userId, imagePath, manualNIC);
+    const result = await kycService.processKYCVerification(userId, imagePath, manualNIC, backImagePath);
 
     return res.status(200).json({
       success: true,

@@ -16,7 +16,7 @@ import { useNavigation } from '@react-navigation/native';
 import { MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as LocalAuthentication from 'expo-local-authentication';
-import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
+import Constants, { ExecutionEnvironment } from 'expo-constants';
 import { colors, typography, layout } from '../../theme';
 import { InputField, PrimaryButton, Toast, NetworkErrorScreen } from '../../components';
 import { authService } from '../../services/apiService';
@@ -27,10 +27,30 @@ const GOOGLE_WEB_CLIENT_ID =
   process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID ||
   '614054153944-7figt10pghsb14tg764jj3hfnktkqnbt.apps.googleusercontent.com';
 
-GoogleSignin.configure({
-  webClientId: GOOGLE_WEB_CLIENT_ID,
-  offlineAccess: true,
-});
+// Expo Go sandbox does not include custom native modules like RNGoogleSignin.
+// We dynamically require GoogleSignin only in standalone / bare / dev builds to prevent runtime crashes in Expo Go.
+const isExpoGo =
+  Constants.appOwnership === 'expo' ||
+  Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
+
+let GoogleSignin: any = null;
+let statusCodes: any = null;
+
+if (!isExpoGo && Platform.OS !== 'web') {
+  try {
+    const googleModule = require('@react-native-google-signin/google-signin');
+    GoogleSignin = googleModule.GoogleSignin;
+    statusCodes = googleModule.statusCodes;
+    if (GoogleSignin) {
+      GoogleSignin.configure({
+        webClientId: GOOGLE_WEB_CLIENT_ID,
+        offlineAccess: true,
+      });
+    }
+  } catch (err) {
+    console.warn('Native GoogleSignin is not available in this environment:', err);
+  }
+}
 
 export const LoginScreen = () => {
   const navigation = useNavigation<any>();
@@ -168,6 +188,27 @@ export const LoginScreen = () => {
   // Native Google Sign-In Handler
   const handleGooglePress = async () => {
     if (loading || googleLoading) return;
+
+    if (isExpoGo) {
+      Alert.alert(
+        'Expo Go Notice',
+        'Native Google Sign-In uses custom native Android libraries (@react-native-google-signin/google-signin) which are not supported inside the Expo Go sandbox.\n\nPlease sign in with your email & password while in Expo Go, or test Google Sign-In in your standalone APK built with EAS.',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+
+    // Google Play Services is a native Android framework and does not exist in desktop web browsers
+    if (Platform.OS === 'web') {
+      showToast('Native Google Sign-In requires an Android device with Google Play Services. For web preview, please log in with your email and password.', 'warning');
+      return;
+    }
+
+    if (!GoogleSignin) {
+      showToast('Native Google Sign-In module is not available in this build.', 'error');
+      return;
+    }
+
     setGoogleLoading(true);
     try {
       await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
@@ -191,14 +232,14 @@ export const LoginScreen = () => {
         setGoogleLoading(false);
       }
     } catch (err: any) {
-      if (err.code === statusCodes.SIGN_IN_CANCELLED) {
+      if (statusCodes && err.code === statusCodes.SIGN_IN_CANCELLED) {
         // User cancelled the sign-in modal
         setGoogleLoading(false);
-      } else if (err.code === statusCodes.IN_PROGRESS) {
+      } else if (statusCodes && err.code === statusCodes.IN_PROGRESS) {
         // Operation already in progress
         setGoogleLoading(true);
-      } else if (err.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
-        showToast('Google Play Services is not available or outdated.', 'error');
+      } else if (statusCodes && err.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
+        showToast('Google Play Services is not available or needs updating on this device.', 'error');
         setGoogleLoading(false);
       } else {
         console.warn('Native Google Sign-In Error:', err);
