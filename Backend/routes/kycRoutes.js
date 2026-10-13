@@ -77,7 +77,15 @@ const handleUpload = (req, res, next) => {
 };
 
 // KYC User Routes (Protected with authentication before file upload)
+// Stage B: OCR extraction without automatic verification
+router.post('/extract', protect, handleUpload, kycController.extractOCR);
+
+// Stage E & F: Review confirmation and authoritative backend verification
+router.post('/confirm', protect, kycController.confirmAndVerify);
+
+// Legacy single-step upload and verify route (preserved for backward compatibility)
 router.post('/verify', protect, handleUpload, kycController.uploadAndVerify);
+
 router.get('/status', protect, kycController.getKYCStatus);
 router.get('/history', protect, kycController.getKYCHistory);
 
