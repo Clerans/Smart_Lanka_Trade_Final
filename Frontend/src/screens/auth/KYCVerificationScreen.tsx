@@ -244,7 +244,24 @@ export const KYCVerificationScreen = () => {
       setFlowStep('CAPTURE');
       Alert.alert(
         'Document Extraction Notice',
-        err.message || 'Could not extract text from document. Please ensure good lighting and no glare, then try again.'
+        err.message || 'Could not extract text from document. Please ensure good lighting and no glare, or proceed to fill in the details manually.',
+        [
+          { text: 'Retry', style: 'cancel' },
+          {
+            text: 'Enter Details Manually',
+            onPress: () => {
+              setExtractedInfo({
+                documentId: 0,
+                documentType: selectedDocType,
+                ocrConfidence: '0%',
+                rawOcrText: '',
+                fieldSources: {},
+                hasBackSide: !!backImage,
+              });
+              setFlowStep('REVIEW');
+            }
+          }
+        ]
       );
     }
   };
