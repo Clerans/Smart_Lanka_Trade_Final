@@ -56,6 +56,9 @@ async function runReviewFlowTests() {
     otherUserId = otherUser.ID;
   }
 
+  // Reset test user status to NOT_SUBMITTED for clean test baseline
+  await kycModel.updateUserKYCStatus(testUserId, 'NOT_SUBMITTED', null);
+
   const token = jwt.sign(
     { id: testUserId, email: 'kyc_review_user@smartlanka.com', role: 'USER' },
     process.env.JWT_SECRET || 'smartlanka_super_secret_key_2024',
