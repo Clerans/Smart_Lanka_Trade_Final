@@ -338,7 +338,11 @@ async function confirmAndVerifyKYC(userId, documentId, documentType = 'NIC', con
 
   // 3. Server-side validation of confirmed data
   const confirmedFullName = (confirmedData.fullName || '').trim();
-  const confirmedNumber = (confirmedData.documentNumber || confirmedData.nicNumber || doc.DOCUMENT_NUMBER || '').trim();
+  const confirmedNumber = (
+    confirmedData.documentNumber !== undefined
+      ? confirmedData.documentNumber
+      : (confirmedData.nicNumber !== undefined ? confirmedData.nicNumber : doc.DOCUMENT_NUMBER) || ''
+  ).trim();
 
   if (!confirmedFullName || confirmedFullName.length < 3) {
     throw {
