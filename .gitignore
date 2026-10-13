@@ -60,7 +60,11 @@ dist/
 # Environment variables
 .env
 .env.*
+env*
+*env (*)*
+*.env
 !.env.example
+!*.env.example
 
 # User uploads and sensitive files
 Backend/uploads/

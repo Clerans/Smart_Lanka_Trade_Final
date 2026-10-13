@@ -11,3 +11,4 @@ export { SetAlertModal } from './SetAlertModal';
 export { WithdrawModal } from './WithdrawModal';
 export { TransferModal } from './TransferModal';
 export { TransactionDetailsModal } from './TransactionDetailsModal';
+export { CurrencySwapCard } from './CurrencySwapCard';

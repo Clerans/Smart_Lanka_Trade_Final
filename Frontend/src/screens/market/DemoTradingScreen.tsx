@@ -17,7 +17,7 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import { MaterialIcons } from '@expo/vector-icons';
 import Svg, { Path } from 'react-native-svg';
 import { colors, typography, layout, SCREEN_PADDING, TAB_BAR_BOTTOM_OFFSET, spacing } from '../../theme';
-import { PrimaryButton, Card, Toast, NetworkErrorScreen } from '../../components';
+import { PrimaryButton, Card, Toast, NetworkErrorScreen, CurrencySwapCard } from '../../components';
 import {
   marketService,
   walletService,
@@ -610,6 +610,15 @@ export const DemoTradingScreen = () => {
                   />
                 )}
               </Card>
+
+              {/* Currency Swap Card (Demo Sandbox Mode) */}
+              <CurrencySwapCard
+                isDemoMode={true}
+                onShowToast={showToast}
+                onSwapExecuted={() => {
+                  fetchTradingData();
+                }}
+              />
 
               {/* Virtual History */}
               <View style={styles.historySection}>

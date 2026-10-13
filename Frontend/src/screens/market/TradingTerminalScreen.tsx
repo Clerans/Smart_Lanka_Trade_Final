@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { colors, typography, layout, SCREEN_PADDING, TAB_BAR_BOTTOM_OFFSET } from '../../theme';
-import { PrimaryButton, Card, Toast } from '../../components';
+import { PrimaryButton, Card, Toast, CurrencySwapCard } from '../../components';
 import { marketService, aiService, tradeService, transactionService } from '../../services/apiService';
 import { formatLKR } from '../../utils/formatters';
 const { useState, useEffect, useCallback } = React;
@@ -385,11 +385,20 @@ export const TradingTerminalScreen = () => {
             />
           </View>
 
+          {/* Currency Swap Card */}
+          <CurrencySwapCard
+            isDemoMode={isDemoMode}
+            onShowToast={showToast}
+            onSwapExecuted={() => {
+              fetchRecentTransactions();
+            }}
+          />
+
           {/* Recent Transactions */}
           <View style={styles.recentSection}>
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>Recent Transactions</Text>
-              <TouchableOpacity onPress={() => navigation.navigate('WalletTab')}>
+              <TouchableOpacity onPress={() => navigation.navigate('Wallet')}>
                 <Text style={styles.seeAllText}>View All</Text>
               </TouchableOpacity>
             </View>

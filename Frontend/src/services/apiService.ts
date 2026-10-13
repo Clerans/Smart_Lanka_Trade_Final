@@ -560,8 +560,8 @@ export const tradeService = {
     try {
       const response = await api.post('/trade/buy', { symbol, amountLKR });
       return response.data;
-    } catch (error) {
-      console.error('Error executing buy trade:', error);
+    } catch (error: any) {
+      console.warn('⚠️ tradeService.buy note:', error?.message || error);
       throw error;
     }
   },
@@ -569,8 +569,8 @@ export const tradeService = {
     try {
       const response = await api.post('/trade/sell', { symbol, quantity });
       return response.data;
-    } catch (error) {
-      console.error('Error executing sell trade:', error);
+    } catch (error: any) {
+      console.warn('⚠️ tradeService.sell note:', error?.message || error);
       throw error;
     }
   }

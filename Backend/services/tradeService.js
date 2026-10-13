@@ -12,12 +12,23 @@ const createError = (code, message, status) => {
   return err;
 };
 
-const TRADEABLE_CRYPTO_SYMBOLS = ['BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'SOLUSDT', 'XRPUSDT', 'ADAUSDT', 'DOGEUSDT'];
+const TRADEABLE_CRYPTO_SYMBOLS = ['BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'SOLUSDT', 'XRPUSDT', 'ADAUSDT', 'DOGEUSDT', 'USDT', 'USDTUSDT'];
 
 /**
  * Resolves symbol, asset type ('CRYPTO' | 'STOCK'), and current execution price in LKR
  */
 async function resolveAssetPrice(symbol) {
+  if (symbol === 'USDT' || symbol === 'USDTUSDT') {
+    const { getUSDToLKRDetails } = require('./marketService');
+    const fx = await getUSDToLKRDetails();
+    return {
+      symbol: 'USDT',
+      assetType: 'CRYPTO',
+      priceLKR: fx.rate,
+      displayName: 'USDT'
+    };
+  }
+
   if (cseMarketService.isCseSymbol(symbol)) {
     const normCse = cseMarketService.normalizeCseSymbol(symbol);
     if (!normCse || !cseMarketService.isValidCseSymbol(normCse)) {
