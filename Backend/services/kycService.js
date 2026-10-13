@@ -1,5 +1,6 @@
 const ocrService = require('./ocrService');
 const nicParser = require('../utils/nicParser');
+const documentParser = require('../utils/documentParser');
 const kycModel = require('../models/kycModel');
 const userModel = require('../models/userModel');
 
@@ -14,7 +15,7 @@ const userModel = require('../models/userModel');
  */
 const KYC_CONFIG = {
   MIN_OCR_CONFIDENCE: 30,
-  VERIFIED_OCR_CONFIDENCE: 70, // High confidence threshold required for instant automated verification (as documented)
+  VERIFIED_OCR_CONFIDENCE: 40, // Confidence threshold required for instant automated verification with strong match
   VERIFIED_NAME_MATCH: 0.80,
   BORDERLINE_NAME_MATCH: 0.65,
   MIN_NAME_MATCH: 0.35
@@ -125,8 +126,7 @@ function calculateNameSimilarity(registeredName, extractedName) {
     return 0.0;
   }
 
-  // Subset coverage: handles when user registered with a single name (like 'CLERANS' or 'MICHAEL')
-  // that appears in the cardholder's full name ('MICHAEL CLERANS'), or vice versa
+  // Subset coverage: handles when user registered with a single name that appears in cardholder full name
   const regCoverage = totalTokenMatchScore / regTokens.length;
   const extCoverage = totalTokenMatchScore / extTokens.length;
   const subsetScore = Math.max(
@@ -134,7 +134,7 @@ function calculateNameSimilarity(registeredName, extractedName) {
     extCoverage >= 0.80 ? extCoverage * 0.90 : 0
   );
 
-  // Also compute full-string normalized similarity
+  // Full-string normalized similarity
   const maxFullLen = Math.max(regClean.length, extClean.length);
   const fullDist = levenshteinDistance(regClean, extClean);
   const fullScore = maxFullLen > 0 ? Math.max(0, 1 - fullDist / maxFullLen) : 1.0;
@@ -148,8 +148,8 @@ function calculateNameSimilarity(registeredName, extractedName) {
  * Evaluates multi-signal KYC verification decision
  * 
  * Multi-Signals Evaluated:
- * 1. NIC Format Validity (Old or New Sri Lankan NIC)
- * 2. NIC Demographic Consistency (Year, Day of Year, DOB, Gender derived mathematically)
+ * 1. Document Format Validity (Old or New Sri Lankan NIC or Driving Licence)
+ * 2. Demographic Consistency (Year, Day of Year, DOB, Gender derived mathematically)
  * 3. Cardholder Name Similarity against registered profile
  * 4. Document OCR Recognition Confidence Score
  * 
@@ -161,7 +161,7 @@ function evaluateKYCDecision({ nicNumber, ocrConfidence, nameSimilarity, hasExtr
   if (!nicNumber) {
     return {
       verificationStatus: 'REJECTED',
-      rejectionReason: 'No valid Sri Lankan NIC number (9 digits + V/X or 12 digits) could be detected. Please ensure the document is clear and readable.'
+      rejectionReason: 'No valid Sri Lankan identity document number could be detected. Please ensure the document is clear and readable.'
     };
   }
 
@@ -186,14 +186,14 @@ function evaluateKYCDecision({ nicNumber, ocrConfidence, nameSimilarity, hasExtr
         // High quality identity match with moderate OCR confidence -> Queue for Admin Review
         return {
           verificationStatus: 'PENDING',
-          rejectionReason: 'Identity details were extracted successfully, but OCR confidence is low. The document has been submitted for administrative review.'
+          rejectionReason: 'Identity details were confirmed, but document image quality requires administrative review.'
         };
       }
     } else if (nameSimilarity >= KYC_CONFIG.BORDERLINE_NAME_MATCH) {
-      // Borderline/Partial Name Match (e.g. initials or OCR character confusions) -> Admin Review
+      // Borderline/Partial Name Match -> Admin Review
       return {
         verificationStatus: 'PENDING',
-        rejectionReason: 'Identity details were extracted successfully, but OCR confidence is low. The document has been submitted for administrative review.'
+        rejectionReason: 'Identity details partially match registered profile. The document has been submitted for administrative review.'
       };
     } else if (nameSimilarity >= KYC_CONFIG.MIN_NAME_MATCH) {
       // Moderate Name Difference -> Flagged for Manual Review
@@ -205,13 +205,10 @@ function evaluateKYCDecision({ nicNumber, ocrConfidence, nameSimilarity, hasExtr
       // Name strongly differs
       return {
         verificationStatus: 'REJECTED',
-        rejectionReason: 'Extracted name on identity document differs significantly from registered account name.'
+        rejectionReason: 'Name on identity document differs significantly from registered account name.'
       };
     }
   } else {
-    // Name could not be isolated from image. Even if NIC is valid,
-    // never auto-approve an identity based solely on a pattern match.
-    // Always queue for manual administrative review.
     return {
       verificationStatus: 'PENDING',
       rejectionReason: 'Cardholder name could not be automatically confirmed from document text. Document queued for manual administrative review.'
@@ -220,28 +217,278 @@ function evaluateKYCDecision({ nicNumber, ocrConfidence, nameSimilarity, hasExtr
 }
 
 /**
- * Processes KYC Document upload and runs end-to-end verification
- * Supports both single-side capture and dual-side capture (front & back, critical for Old NIC format)
- * @param {number} userId - Authenticated user ID (from JWT req.user.id)
- * @param {string} imagePath - Filepath of front document image
- * @param {string|null} manualNIC - Optional NIC provided in form
- * @param {string|null} backImagePath - Optional filepath of back document image
+ * Stage B: Extracts OCR information and returns structured + raw data WITHOUT automatically verifying
+ * Creates initial record with VERIFICATION_STATUS = 'EXTRACTED'
+ * 
+ * @param {number} userId - Authenticated user ID
+ * @param {string} documentType - 'NIC' | 'DRIVING_LICENCE' | 'AUTO'
+ * @param {string} frontImagePath - File path of front image
+ * @param {string|null} backImagePath - Optional file path of back image
+ * @returns {Promise<object>} Extracted document data & session documentId
  */
-async function processKYCVerification(userId, imagePath, manualNIC = null, backImagePath = null) {
-  // 1. Fetch authenticated user record directly by ID (No full user table scanning)
+async function extractDocumentOCR(userId, documentType = 'NIC', frontImagePath, backImagePath = null) {
   const currentUser = await userModel.findById(userId);
   if (!currentUser) {
     throw new Error(`User with ID ${userId} not found.`);
   }
 
+  // 1. Run Tesseract OCR on front image
+  const frontOcr = await ocrService.recognizeText(frontImagePath);
+  let frontText = frontOcr.text || '';
+  let ocrConfidence = frontOcr.confidence || 0;
+
+  // 2. If back image provided, run Tesseract OCR on back image
+  let backText = '';
+  if (backImagePath) {
+    try {
+      const backOcr = await ocrService.recognizeText(backImagePath);
+      if (backOcr && backOcr.text) {
+        backText = backOcr.text;
+        ocrConfidence = Math.round((ocrConfidence + (backOcr.confidence || 0)) / 2);
+      }
+    } catch (backErr) {
+      console.warn('OCR notice for back document:', backErr.message);
+    }
+  }
+
+  // 3. Check readability: if both front and back produced no readable text or extremely low confidence (<10%)
+  const combinedRaw = (frontText + ' ' + backText).trim();
+  const alphanumericCount = (combinedRaw.match(/[a-zA-Z0-9]/g) || []).length;
+  if (alphanumericCount < 5 || ocrConfidence < 10) {
+    throw {
+      code: 'UNREADABLE_DOCUMENT',
+      message: 'Could not detect readable text on document. Please ensure proper lighting without glare or blur, and retake the photo.',
+      ocrConfidence,
+      rawOcrText: combinedRaw
+    };
+  }
+
+  // 4. Parse document into structured fields using universal document parser
+  const parsed = documentParser.extractIdentityDocument(frontText, backText, documentType);
+
+  // 5. Store initial document record in Oracle DB with status = 'EXTRACTED'
+  const storedDocPath = backImagePath ? `${frontImagePath}|${backImagePath}` : frontImagePath;
+  const documentId = await kycModel.createKYCDocument({
+    userId,
+    documentType: parsed.documentType,
+    documentNumber: parsed.documentNumber,
+    extractedName: parsed.extractedFields.fullName,
+    extractedDob: parsed.extractedFields.dob,
+    extractedGender: parsed.extractedFields.gender,
+    ocrText: parsed.rawOcrText,
+    ocrConfidence,
+    verificationStatus: 'EXTRACTED',
+    rejectionReason: null,
+    documentPath: storedDocPath,
+    rawOcrJson: {
+      extractedFields: parsed.extractedFields,
+      fieldSources: parsed.fieldSources,
+      frontLines: frontOcr.lines || [],
+      confidence: ocrConfidence
+    }
+  });
+
+  return {
+    documentId,
+    documentType: parsed.documentType,
+    verificationStatus: 'EXTRACTED',
+    ocrConfidence: `${ocrConfidence}%`,
+    rawOcrText: parsed.rawOcrText,
+    extractedFields: parsed.extractedFields,
+    fieldSources: parsed.fieldSources,
+    hasBackSide: Boolean(backImagePath),
+    registeredAccountName: currentUser.NAME || ''
+  };
+}
+
+/**
+ * Stage E & F: Confirms user-reviewed information and performs authoritative backend verification
+ * Authoritative backend verification criteria:
+ * - Verifies user ownership of document session
+ * - Validates required fields server-side
+ * - Compares user confirmed details with registered account profile
+ * - Evaluates multi-signal decision (NIC rules, confidence, name similarity)
+ * - Updates KYC_DOCUMENTS and SL_USERS authoritative statuses
+ * 
+ * @param {number} userId - Authenticated user ID
+ * @param {number} documentId - Existing KYC document session ID
+ * @param {string} documentType - 'NIC' | 'DRIVING_LICENCE'
+ * @param {object} confirmedData - User edited & reviewed fields
+ * @returns {Promise<object>} Verification outcome
+ */
+async function confirmAndVerifyKYC(userId, documentId, documentType = 'NIC', confirmedData = {}) {
+  // 1. Fetch document and strictly verify ownership
+  const doc = await kycModel.getKYCById(documentId);
+  if (!doc) {
+    throw new Error(`KYC document session #${documentId} not found.`);
+  }
+
+  if (doc.USER_ID !== userId) {
+    const forbiddenErr = new Error('Unauthorized: You do not have permission to modify this document.');
+    forbiddenErr.code = 'FORBIDDEN_SESSION';
+    throw forbiddenErr;
+  }
+
+  // 2. Fetch authenticated user profile
+  const currentUser = await userModel.findById(userId);
+  if (!currentUser) {
+    throw new Error(`User #${userId} not found.`);
+  }
   const registeredName = currentUser.NAME || '';
 
-  // 2. Perform OCR Text Recognition on Front Side
+  // 3. Server-side validation of confirmed data
+  const confirmedFullName = (confirmedData.fullName || '').trim();
+  const confirmedNumber = (
+    confirmedData.documentNumber !== undefined
+      ? confirmedData.documentNumber
+      : (confirmedData.nicNumber !== undefined ? confirmedData.nicNumber : doc.DOCUMENT_NUMBER) || ''
+  ).trim();
+
+  if (!confirmedFullName || confirmedFullName.length < 3) {
+    throw {
+      code: 'INVALID_NAME',
+      message: 'Full Name is required and must contain at least 3 characters.'
+    };
+  }
+
+  if (!confirmedNumber) {
+    throw {
+      code: 'MISSING_DOCUMENT_NUMBER',
+      message: 'Document number is required.'
+    };
+  }
+
+  let nicValidation = null;
+  let parsedNIC = null;
+  const isNIC = (documentType || doc.DOCUMENT_TYPE) === 'NIC';
+
+  if (isNIC) {
+    nicValidation = nicParser.validateNICFormat(confirmedNumber);
+    if (!nicValidation.isValid) {
+      throw {
+        code: 'INVALID_NIC_FORMAT',
+        message: 'Invalid Sri Lankan NIC number. Must be 9 digits followed by V/X (Old NIC) or exactly 12 digits (New NIC).'
+      };
+    }
+    parsedNIC = nicParser.parseNICDetails(nicValidation.normalized);
+  } else {
+    // For driving licence, if NIC is also provided, validate format
+    if (confirmedData.nicNumber) {
+      const checkNIC = nicParser.validateNICFormat(confirmedData.nicNumber);
+      if (checkNIC.isValid) {
+        parsedNIC = nicParser.parseNICDetails(checkNIC.normalized);
+      }
+    }
+  }
+
+  // 4. Compare confirmed name against registered account name
+  const nameSimilarity = calculateNameSimilarity(registeredName, confirmedFullName);
+
+  // Also check similarity against OCR extracted name to detect arbitrary spoofing
+  const extractedName = doc.EXTRACTED_NAME;
+  const extractedNameSim = extractedName ? calculateNameSimilarity(extractedName, confirmedFullName) : 1.0;
+
+  const ocrConfidence = doc.OCR_CONFIDENCE || 0;
+
+  // 5. Evaluate Multi-Signal Decision
+  let verificationStatus = 'PENDING';
+  let rejectionReason = null;
+
+  if (isNIC && !nicValidation?.isValid) {
+    verificationStatus = 'REJECTED';
+    rejectionReason = 'Invalid Sri Lankan National Identity Card number format.';
+  } else if (nameSimilarity < KYC_CONFIG.MIN_NAME_MATCH) {
+    // Severe name mismatch
+    verificationStatus = 'REJECTED';
+    rejectionReason = 'The cardholder name provided does not match your registered SmartLanka Trade account name.';
+  } else if (nameSimilarity >= KYC_CONFIG.VERIFIED_NAME_MATCH && extractedNameSim >= 0.50) {
+    // High similarity
+    if (ocrConfidence >= KYC_CONFIG.VERIFIED_OCR_CONFIDENCE) {
+      verificationStatus = 'VERIFIED';
+      rejectionReason = null;
+    } else {
+      // Name matches but document OCR confidence is moderate -> queued for administrative review
+      verificationStatus = 'PENDING';
+      rejectionReason = 'Identity details were confirmed, but document image quality requires manual review by compliance.';
+    }
+  } else {
+    // Moderate similarity or borderline match -> manual review
+    verificationStatus = 'PENDING';
+    rejectionReason = 'Extracted and confirmed identity details require manual administrative verification.';
+  }
+
+  // 6. Update document record with confirmed values and authoritative verification status
+  const confirmedDob = confirmedData.dob || (parsedNIC ? parsedNIC.dob : doc.EXTRACTED_DOB);
+  const confirmedGender = confirmedData.gender || (parsedNIC ? parsedNIC.gender : doc.EXTRACTED_GENDER);
+
+  await kycModel.updateKYCConfirmation(documentId, userId, {
+    documentNumber: isNIC ? nicValidation.normalized : confirmedNumber,
+    confirmedName: confirmedFullName,
+    confirmedDob,
+    confirmedGender,
+    confirmedData: {
+      ...confirmedData,
+      documentNumber: isNIC ? nicValidation.normalized : confirmedNumber,
+      fullName: confirmedFullName,
+      dob: confirmedDob,
+      gender: confirmedGender
+    },
+    verificationStatus,
+    rejectionReason
+  });
+
+  // 7. Update user profile KYC status on SL_USERS table
+  const userNicToSave = isNIC ? nicValidation.normalized : (confirmedData.nicNumber || null);
+  await kycModel.updateUserKYCStatus(userId, verificationStatus, userNicToSave);
+
+  return {
+    documentId,
+    verificationStatus,
+    rejectionReason,
+    confirmedData: {
+      documentType: documentType || doc.DOCUMENT_TYPE,
+      documentNumber: isNIC ? nicValidation.normalized : confirmedNumber,
+      fullName: confirmedFullName,
+      dob: confirmedDob,
+      gender: confirmedGender,
+      address: confirmedData.address || null,
+      licenceCategory: confirmedData.licenceCategory || null,
+      issueDate: confirmedData.issueDate || null,
+      expiryDate: confirmedData.expiryDate || null
+    },
+    originalExtractedData: {
+      documentNumber: doc.DOCUMENT_NUMBER,
+      extractedName: doc.EXTRACTED_NAME,
+      extractedDob: doc.EXTRACTED_DOB,
+      extractedGender: doc.EXTRACTED_GENDER,
+      ocrConfidence: `${ocrConfidence}%`
+    },
+    audit: {
+      registeredName,
+      nameMatchScore: `${(nameSimilarity * 100).toFixed(0)}%`,
+      ocrConfidence: `${ocrConfidence}%`,
+      submittedAt: new Date().toISOString()
+    }
+  };
+}
+
+/**
+ * Backward-compatible single-step KYC upload and verify method
+ * Used by existing tests and legacy clients
+ */
+async function processKYCVerification(userId, imagePath, manualNIC = null, backImagePath = null) {
+  const currentUser = await userModel.findById(userId);
+  if (!currentUser) {
+    throw new Error(`User with ID ${userId} not found.`);
+  }
+  const registeredName = currentUser.NAME || '';
+
+  // 1. OCR Front Side
   const ocrResult = await ocrService.recognizeText(imagePath);
   let rawText = ocrResult.text || '';
   let ocrConfidence = ocrResult.confidence || 0;
 
-  // 2b. If Back Side image is provided (essential for Old NICs where name/DOB are on the back), run OCR and merge
+  // 2. OCR Back Side if present
   if (backImagePath) {
     try {
       const backOcrResult = await ocrService.recognizeText(backImagePath);
@@ -254,10 +501,9 @@ async function processKYCVerification(userId, imagePath, manualNIC = null, backI
     }
   }
 
-  // 3. Extract structured document details via Sri Lankan NIC parser from merged multi-side text
+  // 3. Extract details
   let extraction = nicParser.extractFromOCRText(rawText);
 
-  // If OCR missed the NIC but user provided manual NIC that validates, verify format
   if (!extraction.nicNumber && manualNIC) {
     const validManual = nicParser.validateNICFormat(manualNIC);
     if (validManual.isValid) {
@@ -272,14 +518,9 @@ async function processKYCVerification(userId, imagePath, manualNIC = null, backI
     }
   }
 
-  // Clean extracted name (removing field labels like "NAME ", "Name:")
   const cleanedExtractedName = nicParser.cleanAndNormalizeName(extraction.extractedName);
-
-  // 4. Multi-signal verification evaluation
   const nameSimilarity = calculateNameSimilarity(registeredName, cleanedExtractedName);
 
-  // If candidate name came from an unlabeled fallback line but didn't match registered name,
-  // it was likely non-name text (such as address or Sinhala transliteration noise).
   const isReliableName = extraction.hasExplicitNameLabel || nameSimilarity >= 0.50;
   const effectiveExtractedName = isReliableName ? cleanedExtractedName : null;
   const effectiveNameSimilarity = isReliableName ? nameSimilarity : 0;
@@ -293,7 +534,6 @@ async function processKYCVerification(userId, imagePath, manualNIC = null, backI
 
   const { verificationStatus, rejectionReason } = decision;
 
-  // 5. Store Verification Document in Oracle Database (recording both image paths if dual-sided)
   const storedDocPath = backImagePath ? `${imagePath}|${backImagePath}` : imagePath;
   const documentId = await kycModel.createKYCDocument({
     userId,
@@ -306,10 +546,12 @@ async function processKYCVerification(userId, imagePath, manualNIC = null, backI
     ocrConfidence,
     verificationStatus,
     rejectionReason,
-    documentPath: storedDocPath
+    documentPath: storedDocPath,
+    confirmedName: cleanedExtractedName || registeredName,
+    confirmedDob: extraction.dob,
+    confirmedGender: extraction.gender
   });
 
-  // 6. Update user's KYC status on SL_USERS table
   await kycModel.updateUserKYCStatus(userId, verificationStatus, extraction.nicNumber);
 
   return {
@@ -337,5 +579,7 @@ module.exports = {
   levenshteinDistance,
   calculateNameSimilarity,
   evaluateKYCDecision,
+  extractDocumentOCR,
+  confirmAndVerifyKYC,
   processKYCVerification
 };

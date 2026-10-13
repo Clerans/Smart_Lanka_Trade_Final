@@ -649,6 +649,63 @@ export const aiService = {
 };
 
 export const kycService = {
+  extractDocument: async (formData: FormData) => {
+    try {
+      const token = await storageService.getToken();
+      const url = `${BASE_URL}/kyc/extract`;
+      
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+        },
+        body: formData,
+      });
+
+      const contentType = response.headers.get('content-type') || '';
+      if (!contentType.includes('application/json')) {
+        const rawText = await response.text();
+        if (response.status === 404) {
+          throw {
+            code: 'ENDPOINT_NOT_DEPLOYED',
+            message: `Backend endpoint '/kyc/extract' not found (404). If connecting to remote Render (${BASE_URL}), please deploy the latest backend commit or set EXPO_PUBLIC_API_URL to your local machine IP (e.g. http://192.168.x.x:5000/api).`,
+            success: false,
+            data: null
+          };
+        }
+        throw {
+          code: 'SERVER_HTML_ERROR',
+          message: `Server returned non-JSON response (${response.status}). The backend may be starting up or experiencing an issue.`,
+          success: false,
+          data: null
+        };
+      }
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw {
+          code: data.code || 'OCR_EXTRACTION_ERROR',
+          message: data.message || 'Failed to extract text from document.',
+          success: false,
+          data: data.data || null
+        };
+      }
+      return data;
+    } catch (error: any) {
+      console.error('Error extracting KYC document text:', error);
+      throw error;
+    }
+  },
+  confirmKYC: async (payload: { documentId: number; documentType: string; confirmedData: any }) => {
+    try {
+      const response = await api.post('/kyc/confirm', payload);
+      return response.data;
+    } catch (error: any) {
+      console.error('Error confirming KYC information:', error);
+      throw error.response?.data || error;
+    }
+  },
   submitKYC: async (formData: FormData) => {
     try {
       const token = await storageService.getToken();
@@ -662,6 +719,16 @@ export const kycService = {
         },
         body: formData,
       });
+
+      const contentType = response.headers.get('content-type') || '';
+      if (!contentType.includes('application/json')) {
+        throw {
+          code: 'SERVER_HTML_ERROR',
+          message: `Server returned non-JSON response (${response.status}).`,
+          success: false,
+          data: null
+        };
+      }
 
       const data = await response.json();
       if (!response.ok) {
