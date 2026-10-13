@@ -215,16 +215,23 @@ function cleanAndNormalizeName(rawName) {
   // Strip leading non-alphanumeric noise/bullets (e.g. '; - ', '- ', '* ', '> ', '~ ')
   cleaned = cleaned.replace(/^[^A-Z0-9]+/, '');
 
-  // Strip leading labels and prefixes (case-insensitive)
-  const labelPatterns = [
-    /^\s*(?:FULL\s*NAME|NAME\s*IN\s*FULL|GIVEN\s*NAME|SAMPURNA\s*NAMA|NAM\s*E|NAME|NAMA)\s*[:\-\.]*\s*/i,
-    /^\s*(?:NIC\s*NO|NIC\s*NUMBER|IDENTITY\s*NO|CARD\s*NO|DOC\s*NO|NO)\s*[:\-\.]*\s*/i,
-    /^\s*(?:DATE\s*OF\s*BIRTH|DOB|BIRTH\s*DATE)\s*[:\-\.]*\s*/i,
-    /^\s*(?:SEX|GENDER)\s*[:\-\.]*\s*/i
-  ];
+  // 1. If line contains an explicit English or romanized name marker (NAME, FULL NAME, GIVEN NAME, NAMA),
+  // strip EVERYTHING before and including that marker (strips Sinhala/Tamil OCR noise like "BE NAME", "OE NAME", etc.)
+  const midLabelMatch = cleaned.match(/^.*?\b(?:FULL\s*NAME|NAME\s*IN\s*FULL|GIVEN\s*NAME|SAMPURNA\s*NAMA|NAM\s*E|NAME|NAMA)\s*[:\-\.]*\s*(.*)$/i);
+  if (midLabelMatch && midLabelMatch[1]) {
+    cleaned = midLabelMatch[1];
+  } else {
+    // Strip leading labels and prefixes if no mid-label matched
+    const labelPatterns = [
+      /^\s*(?:FULL\s*NAME|NAME\s*IN\s*FULL|GIVEN\s*NAME|SAMPURNA\s*NAMA|NAM\s*E|NAME|NAMA)\s*[:\-\.]*\s*/i,
+      /^\s*(?:NIC\s*NO|NIC\s*NUMBER|IDENTITY\s*NO|CARD\s*NO|DOC\s*NO|NO)\s*[:\-\.]*\s*/i,
+      /^\s*(?:DATE\s*OF\s*BIRTH|DOB|BIRTH\s*DATE)\s*[:\-\.]*\s*/i,
+      /^\s*(?:SEX|GENDER)\s*[:\-\.]*\s*/i
+    ];
 
-  for (const pattern of labelPatterns) {
-    cleaned = cleaned.replace(pattern, '');
+    for (const pattern of labelPatterns) {
+      cleaned = cleaned.replace(pattern, '');
+    }
   }
 
   // Remove trailing field labels if stuck to name (e.g. "MICHAEL CLERANS NIC NO 2000...")
@@ -236,8 +243,8 @@ function cleanAndNormalizeName(rawName) {
   // Collapse multiple spaces
   cleaned = cleaned.replace(/\s+/g, ' ').trim();
 
-  // Strip trailing single isolated letters (e.g. from stray punctuation, brackets, or bullets)
-  cleaned = cleaned.replace(/\s+[A-Z]\b$/i, '').trim();
+  // Strip trailing short noise tokens (1 or 2 letter artifacts at end of name line, e.g. " F BB", " SI", " SL", " I")
+  cleaned = cleaned.replace(/(?:\s+[A-Z]{1,2})+\s*$/i, '').trim();
 
   // Filter out system header keywords and phrases
   const ignoredPhrases = [

@@ -50,7 +50,7 @@ function extractAddressFromLines(lines) {
     if (strongAddressKeywords.some(kw => kw.test(upper))) {
       if (!upper.includes('DEPARTMENT') && !upper.includes('REPUBLIC') && !upper.includes('MINISTRY') && !upper.includes('COMMISSIONER')) {
         let cleaned = line.replace(/^[^A-Za-z0-9/]+/, '').trim();
-        cleaned = cleaned.replace(/^(?:8\.\s*|8\s+)/i, '');
+        cleaned = cleaned.replace(/^(?:ADDRESS\s*[:\-\.]*\s*|ADDR\s*[:\-\.]*\s*|LIPINAYA\s*[:\-\.]*\s*|8\.\s*|8\s+)/i, '');
         cleaned = cleaned.replace(/NUWARAELIYAROAD/i, 'NUWARAELIYA ROAD');
 
         // Check if the next line is a city (e.g. PUSSELLAWA) or continuation of address
@@ -60,6 +60,18 @@ function extractAddressFromLines(lines) {
           const nextUpper = nextLine.toUpperCase();
           if (!nextUpper.includes('BLOOD') && !nextUpper.includes('SIGNATURE') && !nextUpper.includes('OFFICIAL') && !nextUpper.includes('COMMISSIONER')) {
             cleaned += ', ' + nextLine;
+          }
+        }
+
+        // Strip vertical card margin artifact (e.g. "1374/2" -> "374/2")
+        cleaned = cleaned.replace(/^[1|I!](?=[1-9]\d{2}\/)/, '');
+
+        // Cut off trailing noise after city name (e.g. "PUSSELLAWA oo" -> "PUSSELLAWA")
+        const cityMatch = cleaned.match(/\b(PUSSELLAWA|COLOMBO|KANDY|GALLE|GAMPAHA|KURUNEGALA|MATARA|NEGOMBO|JAFFNA|KALUTARA|BATTICALOA|TRINCOMALEE|RATNAPURA|BADULLA|ANURADHAPURA|POLONNARUWA|NUWARA\s*ELIYA)(?!\s+(?:ROAD|RD|STREET|ST|MAWATHA|MW|LANE|AVENUE|GARDENS))\b(.*)$/i);
+        if (cityMatch && cityMatch[2]) {
+          const postCity = cityMatch[2].trim();
+          if (!/^[0-9]{5}$/.test(postCity)) {
+            cleaned = cleaned.substring(0, cityMatch.index + cityMatch[1].length).trim();
           }
         }
 
@@ -87,6 +99,18 @@ function extractAddressFromLines(lines) {
           }
         }
         cleaned = cleaned.replace(/^[^A-Za-z0-9/]+/, '').trim();
+        cleaned = cleaned.replace(/^(?:8\.\s*|8\s+)/i, '');
+        cleaned = cleaned.replace(/NUWARAELIYAROAD/i, 'NUWARAELIYA ROAD');
+        cleaned = cleaned.replace(/^[1|I!](?=[1-9]\d{2}\/)/, '');
+
+        const cityMatch2 = cleaned.match(/\b(PUSSELLAWA|COLOMBO|KANDY|GALLE|GAMPAHA|KURUNEGALA|MATARA|NEGOMBO|JAFFNA|KALUTARA|BATTICALOA|TRINCOMALEE|RATNAPURA|BADULLA|ANURADHAPURA|POLONNARUWA|NUWARA\s*ELIYA)(?!\s+(?:ROAD|RD|STREET|ST|MAWATHA|MW|LANE|AVENUE|GARDENS))\b(.*)$/i);
+        if (cityMatch2 && cityMatch2[2]) {
+          const postCity = cityMatch2[2].trim();
+          if (!/^[0-9]{5}$/.test(postCity)) {
+            cleaned = cleaned.substring(0, cityMatch2.index + cityMatch2[1].length).trim();
+          }
+        }
+
         if (cleaned.length >= 5) {
           return cleaned;
         }
