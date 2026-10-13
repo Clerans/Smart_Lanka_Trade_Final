@@ -50,7 +50,7 @@ function extractAddressFromLines(lines) {
     if (strongAddressKeywords.some(kw => kw.test(upper))) {
       if (!upper.includes('DEPARTMENT') && !upper.includes('REPUBLIC') && !upper.includes('MINISTRY') && !upper.includes('COMMISSIONER')) {
         let cleaned = line.replace(/^[^A-Za-z0-9/]+/, '').trim();
-        cleaned = cleaned.replace(/^(?:8\.\s*|8\s+)/i, '');
+        cleaned = cleaned.replace(/^(?:ADDRESS\s*[:\-\.]*\s*|ADDR\s*[:\-\.]*\s*|LIPINAYA\s*[:\-\.]*\s*|8\.\s*|8\s+)/i, '');
         cleaned = cleaned.replace(/NUWARAELIYAROAD/i, 'NUWARAELIYA ROAD');
 
         // Check if the next line is a city (e.g. PUSSELLAWA) or continuation of address
