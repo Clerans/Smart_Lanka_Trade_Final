@@ -236,6 +236,9 @@ function cleanAndNormalizeName(rawName) {
   // Collapse multiple spaces
   cleaned = cleaned.replace(/\s+/g, ' ').trim();
 
+  // Strip trailing single isolated letters (e.g. from stray punctuation, brackets, or bullets)
+  cleaned = cleaned.replace(/\s+[A-Z]\b$/i, '').trim();
+
   // Filter out system header keywords and phrases
   const ignoredPhrases = [
     'SRI LANKA', 'NATIONAL IDENTITY', 'IDENTITY CARD', 'REPUBLIC',

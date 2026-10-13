@@ -39,6 +39,38 @@ function normalizeDateString(rawDate) {
 function extractAddressFromLines(lines) {
   if (!Array.isArray(lines) || lines.length === 0) return null;
 
+  // 1. Priority 1: Lines containing explicit Sri Lankan address road/city keywords
+  const strongAddressKeywords = [
+    /\b(?:ROAD|RD|STREET|ST|MAWATHA|MW|LANE|GARDENS|AVENUE|COLOMBO|KANDY|GALLE|GAMPAHA|KURUNEGALA|MATARA|NEGOMBO|JAFFNA|KALUTARA|PUSSELLAWA|NUWARAELIYA)\b/i
+  ];
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const upper = line.toUpperCase();
+    if (strongAddressKeywords.some(kw => kw.test(upper))) {
+      if (!upper.includes('DEPARTMENT') && !upper.includes('REPUBLIC') && !upper.includes('MINISTRY') && !upper.includes('COMMISSIONER')) {
+        let cleaned = line.replace(/^[^A-Za-z0-9/]+/, '').trim();
+        cleaned = cleaned.replace(/^(?:8\.\s*|8\s+)/i, '');
+        cleaned = cleaned.replace(/NUWARAELIYAROAD/i, 'NUWARAELIYA ROAD');
+
+        // Check if the next line is a city (e.g. PUSSELLAWA) or continuation of address
+        const hasCity = /\b(?:PUSSELLAWA|COLOMBO|KANDY|GALLE|GAMPAHA|KURUNEGALA|MATARA|NEGOMBO|JAFFNA|KALUTARA)\b/i.test(cleaned);
+        if (!hasCity && i + 1 < lines.length && !lines[i + 1].match(/^[0-9]\./) && lines[i + 1].length > 3) {
+          const nextLine = lines[i + 1].trim();
+          const nextUpper = nextLine.toUpperCase();
+          if (!nextUpper.includes('BLOOD') && !nextUpper.includes('SIGNATURE') && !nextUpper.includes('OFFICIAL') && !nextUpper.includes('COMMISSIONER')) {
+            cleaned += ', ' + nextLine;
+          }
+        }
+
+        if (cleaned.length >= 8 && cleaned.length <= 120) {
+          return cleaned;
+        }
+      }
+    }
+  }
+
+  // 2. Priority 2: Lines preceded by Address: header
   const addressHeaders = [
     /^\s*(?:8\.\s*|ADDRESS\s*[:\-\.]*|ADDR\s*[:\-\.]*|RESIDENCE\s*[:\-\.]*|LIPINAYA\s*[:\-\.]*)/i
   ];
@@ -48,33 +80,14 @@ function extractAddressFromLines(lines) {
     for (const header of addressHeaders) {
       if (header.test(line)) {
         let cleaned = line.replace(header, '').trim();
-        // If the address continues onto the next line
         if (i + 1 < lines.length && !lines[i + 1].match(/^[0-9]\./) && lines[i + 1].length > 3) {
           const nextLine = lines[i + 1].trim();
           if (!nextLine.toUpperCase().includes('SIGNATURE') && !nextLine.toUpperCase().includes('OFFICIAL')) {
             cleaned += ', ' + nextLine;
           }
         }
-        cleaned = cleaned.replace(/^[^A-Za-z0-9]+/, '').trim();
+        cleaned = cleaned.replace(/^[^A-Za-z0-9/]+/, '').trim();
         if (cleaned.length >= 5) {
-          return cleaned;
-        }
-      }
-    }
-  }
-
-  // Fallback heuristic: lines containing typical Sri Lankan address tokens
-  const addressKeywords = [
-    /\b(?:ROAD|RD|STREET|ST|MAWATHA|MW|LANE|GARDENS|AVENUE|COLOMBO|KANDY|GALLE|GAMPAHA|KURUNEGALA|MATARA|NEGOMBO|JAFFNA|KALUTARA)\b/i
-  ];
-
-  for (const line of lines) {
-    const upper = line.toUpperCase();
-    if (addressKeywords.some(kw => kw.test(upper))) {
-      // Must not be a title header like 'DEPARTMENT OF REGISTRATION OF PERSONS, COLOMBO'
-      if (!upper.includes('DEPARTMENT') && !upper.includes('REPUBLIC') && !upper.includes('MINISTRY')) {
-        const cleaned = line.replace(/^[^A-Za-z0-9]+/, '').trim();
-        if (cleaned.length >= 8 && cleaned.length <= 120) {
           return cleaned;
         }
       }
@@ -181,6 +194,7 @@ function extractDrivingLicenceDetails(ocrText) {
 
   // Clean full name if found
   if (fullName) {
+    fullName = fullName.replace(/\s+(?:SL|SI|S1|IS)\b/gi, '').trim();
     fullName = nicParser.cleanAndNormalizeName(fullName) || fullName.toUpperCase().replace(/\s+/g, ' ').trim();
   }
 

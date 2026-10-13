@@ -663,6 +663,25 @@ export const kycService = {
         body: formData,
       });
 
+      const contentType = response.headers.get('content-type') || '';
+      if (!contentType.includes('application/json')) {
+        const rawText = await response.text();
+        if (response.status === 404) {
+          throw {
+            code: 'ENDPOINT_NOT_DEPLOYED',
+            message: `Backend endpoint '/kyc/extract' not found (404). If connecting to remote Render (${BASE_URL}), please deploy the latest backend commit or set EXPO_PUBLIC_API_URL to your local machine IP (e.g. http://192.168.x.x:5000/api).`,
+            success: false,
+            data: null
+          };
+        }
+        throw {
+          code: 'SERVER_HTML_ERROR',
+          message: `Server returned non-JSON response (${response.status}). The backend may be starting up or experiencing an issue.`,
+          success: false,
+          data: null
+        };
+      }
+
       const data = await response.json();
       if (!response.ok) {
         throw {
@@ -700,6 +719,16 @@ export const kycService = {
         },
         body: formData,
       });
+
+      const contentType = response.headers.get('content-type') || '';
+      if (!contentType.includes('application/json')) {
+        throw {
+          code: 'SERVER_HTML_ERROR',
+          message: `Server returned non-JSON response (${response.status}).`,
+          success: false,
+          data: null
+        };
+      }
 
       const data = await response.json();
       if (!response.ok) {
