@@ -649,6 +649,44 @@ export const aiService = {
 };
 
 export const kycService = {
+  extractDocument: async (formData: FormData) => {
+    try {
+      const token = await storageService.getToken();
+      const url = `${BASE_URL}/kyc/extract`;
+      
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+        },
+        body: formData,
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw {
+          code: data.code || 'OCR_EXTRACTION_ERROR',
+          message: data.message || 'Failed to extract text from document.',
+          success: false,
+          data: data.data || null
+        };
+      }
+      return data;
+    } catch (error: any) {
+      console.error('Error extracting KYC document text:', error);
+      throw error;
+    }
+  },
+  confirmKYC: async (payload: { documentId: number; documentType: string; confirmedData: any }) => {
+    try {
+      const response = await api.post('/kyc/confirm', payload);
+      return response.data;
+    } catch (error: any) {
+      console.error('Error confirming KYC information:', error);
+      throw error.response?.data || error;
+    }
+  },
   submitKYC: async (formData: FormData) => {
     try {
       const token = await storageService.getToken();
