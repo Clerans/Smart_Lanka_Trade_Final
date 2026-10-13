@@ -21,7 +21,12 @@ async function createKYCDocument(docData) {
         OCR_CONFIDENCE,
         VERIFICATION_STATUS,
         REJECTION_REASON,
-        DOCUMENT_PATH
+        DOCUMENT_PATH,
+        CONFIRMED_NAME,
+        CONFIRMED_DOB,
+        CONFIRMED_GENDER,
+        CONFIRMED_DATA,
+        RAW_OCR_JSON
       ) VALUES (
         :userId,
         :documentType,
@@ -33,7 +38,12 @@ async function createKYCDocument(docData) {
         :ocrConfidence,
         :verificationStatus,
         :rejectionReason,
-        :documentPath
+        :documentPath,
+        :confirmedName,
+        :confirmedDob,
+        :confirmedGender,
+        :confirmedData,
+        :rawOcrJson
       ) RETURNING ID INTO :id
     `;
 
@@ -49,6 +59,11 @@ async function createKYCDocument(docData) {
       verificationStatus: docData.verificationStatus || 'PENDING',
       rejectionReason: docData.rejectionReason || null,
       documentPath: docData.documentPath || null,
+      confirmedName: docData.confirmedName || null,
+      confirmedDob: docData.confirmedDob || null,
+      confirmedGender: docData.confirmedGender || null,
+      confirmedData: docData.confirmedData ? JSON.stringify(docData.confirmedData).substring(0, 3999) : null,
+      rawOcrJson: docData.rawOcrJson ? JSON.stringify(docData.rawOcrJson).substring(0, 3999) : null,
       id: { type: oracledb.NUMBER, dir: oracledb.BIND_OUT }
     };
 
@@ -74,6 +89,7 @@ async function getKYCByUser(userId) {
       SELECT 
         ID, USER_ID, DOCUMENT_TYPE, DOCUMENT_NUMBER,
         EXTRACTED_NAME, EXTRACTED_DOB, EXTRACTED_GENDER,
+        CONFIRMED_NAME, CONFIRMED_DOB, CONFIRMED_GENDER, CONFIRMED_DATA, RAW_OCR_JSON,
         OCR_CONFIDENCE, VERIFICATION_STATUS, REJECTION_REASON,
         DOCUMENT_PATH, SUBMITTED_AT, VERIFIED_AT, VERIFIED_BY
       FROM KYC_DOCUMENTS
@@ -103,6 +119,7 @@ async function getKYCHistory(userId) {
       SELECT 
         ID, USER_ID, DOCUMENT_TYPE, DOCUMENT_NUMBER,
         EXTRACTED_NAME, EXTRACTED_DOB, EXTRACTED_GENDER,
+        CONFIRMED_NAME, CONFIRMED_DOB, CONFIRMED_GENDER, CONFIRMED_DATA, RAW_OCR_JSON,
         OCR_CONFIDENCE, VERIFICATION_STATUS, REJECTION_REASON,
         SUBMITTED_AT, VERIFIED_AT
       FROM KYC_DOCUMENTS
@@ -131,6 +148,7 @@ async function getKYCById(id) {
       SELECT 
         ID, USER_ID, DOCUMENT_TYPE, DOCUMENT_NUMBER,
         EXTRACTED_NAME, EXTRACTED_DOB, EXTRACTED_GENDER,
+        CONFIRMED_NAME, CONFIRMED_DOB, CONFIRMED_GENDER, CONFIRMED_DATA, RAW_OCR_JSON,
         OCR_TEXT, OCR_CONFIDENCE, VERIFICATION_STATUS, REJECTION_REASON,
         DOCUMENT_PATH, SUBMITTED_AT, VERIFIED_AT, VERIFIED_BY
       FROM KYC_DOCUMENTS
@@ -139,6 +157,57 @@ async function getKYCById(id) {
 
     const result = await connection.execute(sql, [id], { outFormat: oracledb.OUT_FORMAT_OBJECT });
     return result.rows[0] || null;
+  } finally {
+    if (connection) {
+      try { await connection.close(); } catch (e) {}
+    }
+  }
+}
+
+/**
+ * Updates KYC document with user-reviewed & confirmed data, and sets the verification status
+ * Strictly checks user ownership via USER_ID = :userId
+ * @param {number} docId 
+ * @param {number} userId 
+ * @param {object} updateData 
+ */
+async function updateKYCConfirmation(docId, userId, updateData) {
+  let connection;
+  try {
+    connection = await oracledb.getConnection();
+    const sql = `
+      UPDATE KYC_DOCUMENTS
+      SET DOCUMENT_NUMBER = COALESCE(:documentNumber, DOCUMENT_NUMBER),
+          CONFIRMED_NAME = :confirmedName,
+          CONFIRMED_DOB = :confirmedDob,
+          CONFIRMED_GENDER = :confirmedGender,
+          CONFIRMED_DATA = :confirmedData,
+          VERIFICATION_STATUS = :verificationStatus,
+          REJECTION_REASON = :rejectionReason,
+          VERIFIED_AT = CASE WHEN :verificationStatus = 'VERIFIED' THEN CURRENT_TIMESTAMP ELSE NULL END
+      WHERE ID = :docId AND USER_ID = :userId
+    `;
+
+    const binds = {
+      documentNumber: updateData.documentNumber || null,
+      confirmedName: updateData.confirmedName || null,
+      confirmedDob: updateData.confirmedDob || null,
+      confirmedGender: updateData.confirmedGender || null,
+      confirmedData: updateData.confirmedData ? JSON.stringify(updateData.confirmedData).substring(0, 3999) : null,
+      verificationStatus: updateData.verificationStatus,
+      rejectionReason: updateData.rejectionReason || null,
+      docId,
+      userId
+    };
+
+    const result = await connection.execute(sql, binds);
+    await connection.commit();
+    return result.rowsAffected > 0;
+  } catch (error) {
+    if (connection) {
+      try { await connection.rollback(); } catch (rErr) {}
+    }
+    throw error;
   } finally {
     if (connection) {
       try { await connection.close(); } catch (e) {}
@@ -215,6 +284,7 @@ async function getPendingKYC(limit = 20) {
         k.ID, k.USER_ID, u.NAME AS USER_NAME, u.EMAIL AS USER_EMAIL,
         k.DOCUMENT_TYPE, k.DOCUMENT_NUMBER, k.EXTRACTED_NAME,
         k.EXTRACTED_DOB, k.EXTRACTED_GENDER, k.OCR_CONFIDENCE,
+        k.CONFIRMED_NAME, k.CONFIRMED_DOB, k.CONFIRMED_GENDER, k.CONFIRMED_DATA,
         k.VERIFICATION_STATUS, k.DOCUMENT_PATH, k.SUBMITTED_AT
       FROM KYC_DOCUMENTS k
       JOIN SL_USERS u ON k.USER_ID = u.ID
@@ -286,6 +356,7 @@ module.exports = {
   getKYCByUser,
   getKYCHistory,
   getKYCById,
+  updateKYCConfirmation,
   updateKYCStatus,
   updateUserKYCStatus,
   updateAdminKYCDecision,
